@@ -14,23 +14,6 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<script>
-/* A/B variant — runs before first paint to avoid a flash of the wrong copy.
-   ?v=full | ?v=instant forces a variant (and remembers it). Otherwise: 50/50 when AB_ENABLED,
-   remembered in localStorage; or DEFAULT_VARIANT when AB is off (to "hide" one workflow). */
-(function(){
-  var AB_ENABLED = true, DEFAULT_VARIANT = 'full', v = null;
-  try {
-    var q = new URLSearchParams(location.search).get('v');
-    if (q === 'full' || q === 'instant') { v = q; localStorage.setItem('wa_variant', v); }
-    else if (AB_ENABLED) {
-      v = localStorage.getItem('wa_variant');
-      if (v !== 'full' && v !== 'instant') { v = Math.random() < 0.5 ? 'full' : 'instant'; localStorage.setItem('wa_variant', v); }
-    } else { v = DEFAULT_VARIANT; }
-  } catch (e) { v = v || DEFAULT_VARIANT; }
-  document.documentElement.classList.add('v-' + v);
-})();
-</script>
 <style>
 /* ---------- Tokens ---------- */
 :root{
@@ -275,10 +258,6 @@ footer ul{list-style:none;margin:0;padding:0;display:flex;gap:1.2rem}
 footer a{text-decoration:none}
 footer a:hover{color:var(--paper)}
 
-/* ---------- A/B variants: elements tagged data-v="full" / data-v="instant" ---------- */
-html:not(.v-instant) [data-v="instant"]{display:none!important}
-html.v-instant [data-v="full"]{display:none!important}
-
 /* ---------- Reveal ---------- */
 .js .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
 .js .reveal.in{opacity:1;transform:none}
@@ -314,14 +293,12 @@ html.v-instant [data-v="full"]{display:none!important}
     <div class="hero-copy">
       <span class="eyebrow">Your AI negotiator for subscriptions</span>
       <h1>Every subscription has a <em class="hl">walkaway price.</em></h1>
-      <p class="lead" data-v="full">Walkaway walks the cancellation flow of each of your subscriptions — just far enough to surface the loyalty discount they only show people about to leave. Then it accepts the deal and keeps everything exactly as it was. <strong>Nothing gets cancelled. You only pay when you save.</strong></p>
-      <p class="lead" data-v="instant">Install the extension and click once. Walkaway finds the subscription services you're already signed into, walks each cancellation flow just far enough to surface the loyalty discount they only show people about to leave — then accepts it and keeps everything exactly as it was. <strong>Nothing gets cancelled. You only pay when you save.</strong></p>
+      <p class="lead">Install the extension and click once. Walkaway finds the subscription services you're signed into, walks each cancellation flow just far enough to surface the loyalty discount they only show people about to leave — then accepts it and keeps everything exactly as it was. <strong>Nothing gets cancelled. You only pay when you save.</strong></p>
 
       <div class="hero-actions">
         <form name="waitlist" method="POST" data-netlify="true" data-netlify-honeypot="bot-field" class="js-form" action="/">
           <input type="hidden" name="form-name" value="waitlist">
           <input type="hidden" name="source" value="hero">
-          <input type="hidden" name="variant" value="full" class="js-variant">
           <p class="sr-only"><label>Don't fill this out if you're human: <input name="bot-field"></label></p>
           <div class="form-row">
             <label class="sr-only" for="email-hero">Email address</label>
@@ -379,35 +356,24 @@ html.v-instant [data-v="full"]{display:none!important}
   <div class="container">
     <div class="sec-head reveal">
       <span class="eyebrow">How it works</span>
-      <h2 data-v="full">Connect once. Click once. Keep the difference.</h2>
-      <h2 data-v="instant">Install once. Click once. Keep the difference.</h2>
+      <h2>Install once. Click once. Keep the difference.</h2>
       <p class="lead">You see what you could save before anything runs. Nothing changes until you say so.</p>
     </div>
     <div class="steps">
-      <article class="step reveal" data-v="full">
-        <div class="num">1</div>
-        <h3>Connect</h3>
-        <p>Link your bank (best — it catches every recurring charge) or your email (works too). Read-only. We find your subscriptions in about a minute.</p>
-      </article>
-      <article class="step reveal" data-v="instant">
+      <article class="step reveal">
         <div class="num">1</div>
         <h3>Install</h3>
-        <p>Add the extension. It spots the subscription services you're already signed into — right in your browser. Your browsing history never leaves your machine.</p>
+        <p>Add the extension and click <strong>Scan</strong>. It finds the subscription services you're currently signed into — right in your browser. Nothing about your browsing is uploaded.</p>
       </article>
-      <article class="step reveal" data-v="full">
-        <div class="num">2</div>
-        <h3>We size the prize</h3>
-        <p>For each subscription we know whether that service makes loyalty offers, and roughly how big. You get an estimate up front — free.</p>
-      </article>
-      <article class="step reveal" data-v="instant">
+      <article class="step reveal">
         <div class="num">2</div>
         <h3>We check your plans</h3>
-        <p>It quietly opens each account you're signed into and reads your current plan and price. You get an estimate of what you could save — free, before anything runs.</p>
+        <p>It quietly opens each account in the background and reads your current plan and price. You get an estimate of what you could save — free, before anything runs.</p>
       </article>
       <article class="step reveal">
         <div class="num">3</div>
         <h3>One click</h3>
-        <p>Unlock the hunt. It runs in your own browser, using the accounts you're already signed into. Watch it work, screen by screen.</p>
+        <p>Unlock the hunt. It runs in your own browser, in a background tab, using the accounts you're already signed into. Watch it work — or let it run while you do other things.</p>
       </article>
       <article class="step reveal">
         <div class="num">4</div>
@@ -522,15 +488,10 @@ html.v-instant [data-v="full"]{display:none!important}
         <h3>Every step recorded</h3>
         <p>A screenshot of every screen, every run. Review exactly what happened, any time.</p>
       </div>
-      <div class="safe reveal" data-v="full">
+      <div class="safe reveal">
         <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></div>
-        <h3>Read-only connections</h3>
-        <p>Bank and email access is read-only and used only to find recurring charges. Disconnect in one click.</p>
-      </div>
-      <div class="safe reveal" data-v="instant">
-        <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></div>
-        <h3>History stays on your machine</h3>
-        <p>To spot the services you're signed into, the extension checks your history and cookies locally against our list of known services. Raw history is never uploaded.</p>
+        <h3>Only sites you're signed into</h3>
+        <p>To find your subscriptions, the extension checks — locally, in your browser — which of our known services you're currently signed into. Nothing about your browsing is uploaded.</p>
       </div>
     </div>
   </div>
@@ -567,7 +528,11 @@ html.v-instant [data-v="full"]{display:none!important}
       </details>
       <details class="reveal">
         <summary>What does the extension actually look at?</summary>
-        <p>During a hunt: only the tab of the service it's working on. To find your subscriptions, it can check your browsing history and cookies <em>locally</em> against our list of known subscription services — the matching happens in your browser, and your raw history is never uploaded. You can also skip that and connect a bank or email instead.</p>
+        <p>To find your subscriptions, it checks — locally, in your browser — which of our known subscription services you're currently signed into, then reads your plan and price from each account page. During a hunt, it only touches the tab of the service it's working on. Nothing about your browsing is uploaded.</p>
+      </details>
+      <details class="reveal">
+        <summary>Do I have to sit and watch it?</summary>
+        <p>No. It works in a background tab while you keep doing whatever you were doing. Open the side panel to follow along, or bring the tab to the front any time to watch it click through.</p>
       </details>
       <details class="reveal">
         <summary>Does it run while my computer is off?</summary>
@@ -590,7 +555,6 @@ html.v-instant [data-v="full"]{display:none!important}
     <form name="waitlist-bottom" method="POST" data-netlify="true" data-netlify-honeypot="bot-field" class="js-form" action="/">
       <input type="hidden" name="form-name" value="waitlist-bottom">
       <input type="hidden" name="source" value="bottom">
-      <input type="hidden" name="variant" value="full" class="js-variant">
       <p class="sr-only"><label>Don't fill this out if you're human: <input name="bot-field"></label></p>
       <div class="form-row">
         <label class="sr-only" for="email-bottom">Email address</label>
@@ -628,10 +592,6 @@ html.v-instant [data-v="full"]{display:none!important}
 (function(){
   document.documentElement.classList.replace('no-js','js');
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  /* Record which A/B variant this visitor saw (set in <head>) on every waitlist submission */
-  var variant = document.documentElement.classList.contains('v-instant') ? 'instant' : 'full';
-  document.querySelectorAll('.js-variant').forEach(function(i){ i.value = variant; });
 
   /* Footer year */
   var yr = document.getElementById('yr'); if (yr) yr.textContent = new Date().getFullYear();

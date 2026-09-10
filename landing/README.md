@@ -50,31 +50,10 @@ records) or transfer nameservers to Netlify DNS. HTTPS is automatic (Let's Encry
 
 ## Waitlist submissions
 Netlify site → **Forms.** Two forms are registered — `waitlist` (hero) and `waitlist-bottom`
-(footer CTA); each row includes a `source` field. Under **Forms → Form notifications** you can get an
+(footer CTA); each row includes a `source` field (`hero` / `bottom`). Under **Forms → Form notifications** you can get an
 email or Slack ping per signup, or export CSV.
 
 Free tier: 100 submissions/month. Spam is filtered by the honeypot field + Netlify's Akismet.
-
-## A/B variants (two onboarding workflows)
-
-The page ships two variants of the hero copy, "How it works" steps 1–2, and one safety card:
-
-| Variant | Story |
-|---|---|
-| `full` | Connect your bank/email → we crawl and estimate → you unlock → the extension hunts. |
-| `instant` | Install the extension → it spots services you're already signed into (locally) → estimate → hunt. |
-
-- **Preview / force:** `?v=full` or `?v=instant` (remembered in `localStorage` as `wa_variant`).
-- **Default behavior:** 50/50 random on first visit, then sticky per browser.
-- **Measure:** every waitlist submission carries a hidden `variant` field → in Netlify **Forms**, export
-  CSV or filter by `variant` to compare signup conversion.
-- **Hide one workflow:** in the small `<script>` in `<head>`, set `AB_ENABLED = false` and
-  `DEFAULT_VARIANT = 'full'` (or `'instant'`). `?v=` still works for previews.
-- **Alternative:** Netlify **Split Testing** (branch-based) if you'd rather test two entirely different
-  pages — but the in-page approach above needs no extra setup and keeps one file.
-
-Elements are tagged `data-v="full"` / `data-v="instant"`; CSS hides the non-active one. Variant
-selection runs in `<head>` before first paint, so there's no flash of the wrong copy.
 
 ## Editing
 - **Brand name** — "Walkaway" is a placeholder. Find/replace `Walkaway` in `index.html` (title, nav,
