@@ -1,4 +1,4 @@
-# Walkaway — Implementation Plan (v4, simplified)
+# Walkaway — Implementation Plan (v5)
 
 > **Working name: "Walkaway"** (placeholder). *Every subscription has a walkaway price.* A Chrome
 > extension (+ thin backend) — **one button**: it finds the subscription services you're signed into,
@@ -6,7 +6,7 @@
 > discount, accepts it, and never actually cancels.** 10% of verified savings, $1 minimum, $0 otherwise.
 
 _Last updated: 2026-09-09 · Scope: personal / a few users · Autonomy: hands-off · One workflow, no A/B_
-_**v4:** extension-only; detection = "sites you're signed into" (cookies → account page), no history; email/bank deferred._
+_**v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
 
 ---
 
@@ -33,38 +33,42 @@ and retreats if not. "Confirm cancellation" is never a correct action.
 
 | Decision | Choice | Notes |
 |---|---|---|
-| **Workflow** | **One:** install → Scan → estimate → Unlock → Hunt | No A/B. Email/bank intake = later features. |
+| **Workflow** | **One:** install → Scan → *services + total* → Checkout → Hunt → emailed summary | No A/B. Email/bank intake = later features. |
+| **Account** | **Not required.** Anonymous session by default; email collected at checkout; password optional | Supabase anonymous sign-in, upgradeable to a real account later. |
+| **Reveal rule** | Before paying: show **which** services make offers and the **total** estimated savings — **never per-service amounts** | Per-service before/after appears only in the post-run summary. |
 | **Detection** | **Cookies → account page** ("sites you're signed into") | No `history` permission (scary warning, creepy). Cookies add **no** install warning of their own. |
 | **Messaging rule** | Say *"the services you're currently signed into."* **Never** say "browsing history." | Accurate: we check sign-in state, never where they've been. |
 | **Navigation** | Extension drives the merchant pages itself in a **background tab**; user can watch | Side panel shows progress; "Watch" brings the tab forward. |
 | **Autonomy** | Hands-off | No confirmation prompts. Agent *cannot* finalize a cancel. |
-| **Business model** | 10% of **verified** savings, $1 min, $0 otherwise | Charged only after the discount is verified on the billing page. |
+| **Business model** | 10% of **verified** savings per run, $1 min, $0 otherwise | Checkout **saves the card + authorizes**; the charge happens only after verification. Never charge on the estimate. |
 | **Scale** | Personal / a few users | Extension loaded unpacked / unlisted; no store review yet. |
 
 ---
 
-## 3. The user flow
+## 3. The user flow (no account needed)
 
-1. **Install** the extension (unpacked/unlisted for now). Sign in (Supabase magic link) inside the side panel.
+1. **Install** the extension. First open creates an **anonymous session** (Supabase `signInAnonymously`)
+   — a real user id for the backend, zero sign-up for the person.
 2. **Scan** (one click):
-   - Chrome asks once for access to our known-services domains (`optional_host_permissions`,
-     requested at this moment — contextual, not at install).
-   - **Cookie check (instant, local):** for each domain in the playbook list, `chrome.cookies.getAll`
-     → do the known *session cookie names* exist? (Presence only. Values are never read into app
-     memory beyond the boolean, never sent anywhere.)
-   - **Account-page verification:** for each candidate, open its account/billing page in a
-     **background tab**, snapshot the DOM, classify `signed_in_with_plan{plan, price, renewal} |
-     login_wall | no_paid_plan`, close the tab. The billing page is the ground truth.
-   - Side panel shows the list + estimated savings (playbook offer patterns × current price).
-3. **Unlock** — *"We estimate ~$X/mo. You pay 10% of what we actually save, $1 min, $0 if nothing."*
-   Stripe saves a card; no charge yet.
-4. **Hunt** — for each subscription with a playbook, the extension opens the merchant in a background
-   tab and the backend brain drives allowlisted actions. Progress + step log in the side panel;
-   **Watch** brings the tab to the front.
-5. **Verify → charge** — re-read the billing page: discount applied *and* subscription still active →
-   record verified savings → charge `max($1, 10% × verified savings over the offer term)`.
-
----
+   - Chrome asks once for access to our known-services domains (`optional_host_permissions`).
+   - **Cookie check (instant, local):** for each playbook domain, do the known *session cookie names*
+     exist? Presence only — values never leave the browser.
+   - **Account-page check:** for each candidate, open its account page in a **background tab**,
+     snapshot the DOM, classify `signed_in_with_plan{plan, price} | login_wall | no_paid_plan`, close.
+3. **The reveal** (side panel): *"5 subscriptions found · 4 make loyalty offers"* — a list of service
+   names with **Makes offers / No offers · kept** labels, and **one number: the total estimated
+   savings.** No per-service amounts (keeps the offer simple and avoids cherry-picking).
+   Button: **Get these discounts →**
+4. **Checkout** — Stripe Checkout (**setup mode**): card + email; consent text *"You authorize
+   Walkaway to charge 10% of verified savings ($1 min) after the run. $0 if nothing is saved."*
+   No charge yet. Return page offers an **optional password** → upgrades the anonymous session to a
+   real account (`updateUser({email, password})`). Email is stored either way, for the summary.
+5. **Hunt** — for each offer-eligible subscription, background tab + backend brain; progress in the
+   side panel; **Watch** brings the tab forward.
+6. **Verify → charge → email** — re-read each billing page (discount applied *and* sub still active)
+   → verified savings → one off-session PaymentIntent `max($1, 10% × Σ verified savings over offer
+   terms)` → **one email** (Resend) with the per-service before/after, screenshots, total saved, fee,
+   and the Stripe receipt link. If nothing verified: no charge, a "nothing saved, nothing owed" email.
 
 ## 4. Architecture
 
@@ -81,12 +85,13 @@ and retreats if not. "Confirm cancellation" is never a correct action.
   └──────────────┬──────────────────────────────────────────────────────────────────┘
                  │ HTTPS  snapshot (+ screenshot only when the tab is visible) ──► next action
                  ▼
-  BACKEND — Netlify Functions  ◄──►  SUPABASE (Postgres · Auth · Storage)
+  BACKEND — Netlify Functions  ◄──►  SUPABASE (Postgres · Auth incl. anonymous · Storage)
    /playbooks        known-services list (domains, session-cookie names, account URLs, steps)
    /agent/classify   account-page snapshot → {plan, price, renewal} | login_wall | no_paid_plan
    /agent/step       Claude (tool use) with the allowlisted tool set;
                      server-side guardrail: `confirm_cancellation` is NOT a tool
-   /billing          Stripe: SetupIntent at Unlock; PaymentIntent only on verified savings
+   /checkout         Stripe Checkout (setup mode) → saves card + email, no charge
+   /runs/:id/settle  verify → PaymentIntent (off-session) only on verified savings → email (Resend)
 
   LANDING PAGE — static, Netlify, auto-deploys from `main` (`/landing`)              ← live
   LATER — email / bank discovery adapters; scheduled re-hunts
@@ -139,9 +144,13 @@ siriusxm.com, nytimes.com, …"). **No `history`.** No `<all_urls>`.
   blocked_needs_you | error`. **End-state verification** by re-reading the billing page.
 - **Exit:** one real subscription of yours → offer found and accepted (or correctly skipped).
 
-### Phase 4 — Billing + results _(~1 week)_
-- Stripe SetupIntent at Unlock; PaymentIntent `max($1, 0.10 × verified_savings_over_term)` per win.
-- Results/savings view; `run_events` audit trail; idempotency/retries.
+### Phase 4 — Checkout, settlement, email _(~1 week)_
+- Stripe Checkout in **setup mode** (card + email + consent text); return page with optional password
+  (anonymous → permanent account upgrade).
+- Settlement: verify each win → one off-session PaymentIntent `max($1, 0.10 × Σ verified savings)`;
+  idempotent per run; refund path if a verification was wrong.
+- **One summary email** (Resend): per-service before/after, screenshots, total, fee, Stripe receipt
+  link. Results view in the side panel; `run_events` audit trail.
 
 ### Later (not now)
 - **Email / bank discovery** (Gmail read-only; Plaid recurring) as optional "find more" features.
@@ -173,7 +182,8 @@ Playbooks skip known offenders; ambiguity backs out; not reducible to zero witho
 
 ## 7. Data model (Supabase)
 
-- `profiles` — user, Stripe customer id.
+- `profiles` — Supabase user (anonymous or upgraded), email (from checkout), Stripe customer id.
+- `orders` — `user_id, stripe_checkout_session, payment_method, consent_text, created_at`.
 - `merchant_playbooks` — §5 Phase 1.
 - `subscriptions` — `vendor, domain, plan, amount, currency, cadence, renewal_date, status,
   source(browser), confidence, playbook_id`.
@@ -181,7 +191,8 @@ Playbooks skip known offenders; ambiguity backs out; not reducible to zero witho
 - `discount_runs` — `subscription_id, status, terminal_state, before_price, after_price,
   term_months, verified_savings, screenshots[]`.
 - `run_events` — `run_id, step_index, screen_state, action, element_ref, screenshot_url, ts`.
-- `charges` — `run_id, amount, stripe_payment_intent, status`.
+- `charges` — `run_id, amount, stripe_payment_intent, status, receipt_url`.
+- `emails` — `run_id, to, type(summary|nothing_saved), sent_at`.
 
 ---
 
@@ -211,7 +222,11 @@ Playbooks skip known offenders; ambiguity backs out; not reducible to zero witho
 2. **Scan** on your own Chrome → finds your real signed-in services, reads correct plan/price; confirm
    via DevTools that only `{domain, signed_in}` + snapshots hit the network.
 3. **Hunt, detect-only** on one real account → classifications + step log, no accept.
-4. **Enable accept** → billing page shows the discount, sub still active → Stripe charge correct.
+4. **Enable accept** → billing page shows the discount, sub still active → one Stripe charge for the
+   run with the right amount → summary email arrives with the receipt link.
+4b. **Reveal rule:** the pre-checkout screen shows service names + one total, never per-service amounts.
+4c. **No-account path:** full Scan → Checkout → Hunt → email works without ever setting a password;
+   setting one afterwards upgrades the same user (history preserved).
 5. **Safety test:** a merchant with no in-flow offer → ends `no_offer_backed_out`, never
    `cancellation_completed`.
 

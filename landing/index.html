@@ -111,16 +111,12 @@ input[type=email]:invalid{box-shadow:none}
 .mock-head .dot:nth-child(1){background:#FF6B5B}.mock-head .dot:nth-child(2){background:#FFC24A}.mock-head .dot:nth-child(3){background:#37D27A}
 .mock-title{margin-left:.6rem;font-size:.85rem;font-weight:600;color:var(--muted)}
 .mock-rows{list-style:none;margin:0;padding:.4rem 0}
-.row{display:grid;grid-template-columns:1fr auto auto;align-items:center;gap:.9rem;padding:.8rem 1.1rem;border-bottom:1px solid var(--line);font-size:.95rem}
+.row{display:grid;grid-template-columns:1fr auto;align-items:center;gap:.9rem;padding:.85rem 1.1rem;border-bottom:1px solid var(--line);font-size:.95rem}
 .row:last-child{border-bottom:0}
 .js .row{opacity:0;transform:translateY(6px);transition:opacity .45s ease,transform .45s ease}
 .js .row.in{opacity:1;transform:none}
 .row .brand{font-weight:600}
-.row .price{font-variant-numeric:tabular-nums;white-space:nowrap}
-.row .price s{color:var(--muted-2);margin-right:.35rem}
-.row .price b{color:var(--save);font-weight:700}
-.row .price em{font-style:normal;color:var(--muted-2);font-size:.8rem}
-.row.skip .price b{color:var(--muted)}
+.row.skip .brand{color:var(--muted)}
 .tag{font-size:.72rem;font-weight:700;letter-spacing:.04em;text-transform:uppercase;padding:.3rem .55rem;border-radius:999px;white-space:nowrap}
 .tag.ok{background:var(--save-soft);color:#177F55}
 .tag.skip{background:rgba(14,17,22,.06);color:var(--muted)}
@@ -137,8 +133,7 @@ input[type=email]:invalid{box-shadow:none}
 @media (prefers-reduced-motion:reduce){.pulse{animation:none}.js .row{opacity:1;transform:none;transition:none}}
 @media (max-width:480px){
   .mock{border-radius:18px}
-  .row{grid-template-columns:1fr auto;gap:.35rem .8rem;font-size:.9rem;padding:.7rem .9rem}
-  .row .tag{grid-column:1 / -1;justify-self:start}
+  .row{gap:.6rem;font-size:.9rem;padding:.75rem .9rem}
   .mock-foot{padding:.9rem .9rem;gap:.35rem}
   .mock-foot strong{font-size:1.05rem}
   .mock-foot small{font-size:.64rem}
@@ -319,21 +314,21 @@ footer a:hover{color:var(--paper)}
 
     <div class="hero-visual">
       <div class="mock" aria-hidden="true">
-        <div class="mock-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="mock-title">Your subscriptions</span></div>
+        <div class="mock-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="mock-title">5 subscriptions found · 4 make offers</span></div>
         <ul class="mock-rows">
-          <li class="row"><span class="brand">SiriusXM</span><span class="price"><s>$23.99</s><b>$6.99</b><em>/mo</em></span><span class="tag ok">Offer found</span></li>
-          <li class="row"><span class="brand">The New York Times</span><span class="price"><s>$25.00</s><b>$4.00</b><em>/mo</em></span><span class="tag ok">Offer found</span></li>
-          <li class="row skip"><span class="brand">Spotify</span><span class="price"><b>$11.99</b><em>/mo</em></span><span class="tag skip">No offer · kept</span></li>
-          <li class="row"><span class="brand">Hulu</span><span class="price"><s>$17.99</s><b>$9.99</b><em>/mo</em></span><span class="tag ok">Offer found</span></li>
-          <li class="row"><span class="brand">Adobe Creative Cloud</span><span class="price"><s>$59.99</s><b>$39.99</b><em>/mo</em></span><span class="tag ok">Offer found</span></li>
+          <li class="row"><span class="brand">SiriusXM</span><span class="tag ok">Makes offers</span></li>
+          <li class="row"><span class="brand">The New York Times</span><span class="tag ok">Makes offers</span></li>
+          <li class="row skip"><span class="brand">Spotify</span><span class="tag skip">No offers · kept</span></li>
+          <li class="row"><span class="brand">Hulu</span><span class="tag ok">Makes offers</span></li>
+          <li class="row"><span class="brand">Adobe Creative Cloud</span><span class="tag ok">Makes offers</span></li>
         </ul>
         <div class="mock-foot">
-          <div><small>Est. savings</small><strong class="save">$66.00/mo</strong></div>
-          <div><small>Your fee (10%)</small><strong>$6.60</strong></div>
-          <div><small>You keep</small><strong>$59.40</strong></div>
+          <div><small>Est. savings</small><strong class="save">~$66/mo</strong></div>
+          <div><small>Your fee (10%)</small><strong>~$6.60</strong></div>
+          <div><small>Account</small><strong>Not needed</strong></div>
         </div>
-        <div class="mock-cta">Run the hunt →</div>
-        <div class="ticker"><span class="pulse"></span><span id="tick">Scanning 14 recurring charges…</span></div>
+        <div class="mock-cta">Get these discounts →</div>
+        <div class="ticker"><span class="pulse"></span><span id="tick">Checking which services you're signed into…</span></div>
       </div>
     </div>
   </div>
@@ -368,17 +363,17 @@ footer a:hover{color:var(--paper)}
       <article class="step reveal">
         <div class="num">2</div>
         <h3>We check your plans</h3>
-        <p>It quietly opens each account in the background and reads your current plan and price. You get an estimate of what you could save — free, before anything runs.</p>
+        <p>It quietly opens each account in the background and checks your plan. You see which services make loyalty offers and the total you'd save — free, before anything runs.</p>
       </article>
       <article class="step reveal">
         <div class="num">3</div>
         <h3>One click</h3>
-        <p>Unlock the hunt. It runs in your own browser, in a background tab, using the accounts you're already signed into. Watch it work — or let it run while you do other things.</p>
+        <p>Enter a card and an email — no account needed. It runs in your own browser, in a background tab, using the accounts you're already signed into. Watch it, or let it run.</p>
       </article>
       <article class="step reveal">
         <div class="num">4</div>
         <h3>Pay only on results</h3>
-        <p>We verify the new price on your billing page. Then — and only then — you pay 10% of what we saved. $1 minimum. Nothing saved, nothing owed.</p>
+        <p>We verify the new price on your billing page. Then — and only then — you're charged 10% of what we saved ($1 minimum), and we email you a summary and receipt. Nothing saved, nothing owed.</p>
       </article>
     </div>
   </div>
@@ -432,7 +427,7 @@ footer a:hover{color:var(--paper)}
       </div>
       <div class="tile reveal">
         <div class="big">$1</div>
-        <div class="lab">minimum per win</div>
+        <div class="lab">minimum per run</div>
         <div class="sub">Covers the AI running the hunt. Only when it finds you a deal.</div>
       </div>
       <div class="tile reveal">
@@ -520,7 +515,7 @@ footer a:hover{color:var(--paper)}
       </details>
       <details class="reveal">
         <summary>How is the fee calculated?</summary>
-        <p>10% of the verified savings over the term of the offer, with a $1 minimum. Example: a service drops you from $24 to $7 a month for six months — that's $102 saved, so the fee is $10.20. Charged once, after we've confirmed the new price.</p>
+        <p>10% of the verified savings over the term of each offer, added up across the run, with a $1 minimum. Example: one service drops you from $24 to $7 a month for six months — that's $102 saved, so the fee is $10.20. Charged once, after we've confirmed the new prices, with a summary and receipt emailed to you.</p>
       </details>
       <details class="reveal">
         <summary>Do you store my passwords?</summary>
@@ -533,6 +528,10 @@ footer a:hover{color:var(--paper)}
       <details class="reveal">
         <summary>Do I have to sit and watch it?</summary>
         <p>No. It works in a background tab while you keep doing whatever you were doing. Open the side panel to follow along, or bring the tab to the front any time to watch it click through.</p>
+      </details>
+      <details class="reveal">
+        <summary>Do I need an account?</summary>
+        <p>No. At checkout you enter a card and an email so we can send your summary and receipt. Add a password only if you'd like to log in later and see your past runs.</p>
       </details>
       <details class="reveal">
         <summary>Does it run while my computer is off?</summary>
@@ -602,12 +601,13 @@ footer a:hover{color:var(--paper)}
 
   /* Hero ticker */
   var lines = [
-    'Scanning 14 recurring charges…',
-    'Opening SiriusXM in your browser…',
-    'Reached the loyalty-offer screen',
-    'Accepted: 70% off for 6 months',
-    'Verified on your billing page ✓',
-    'Nothing cancelled. Ever.'
+    "Checking which services you're signed into…",
+    "Found 5 subscriptions · 4 make offers",
+    "Opening SiriusXM in a background tab…",
+    "Reached the loyalty-offer screen",
+    "Accepted: 70% off for 6 months",
+    "Verified on your billing page ✓",
+    "Summary and receipt sent. Nothing cancelled."
   ];
   var tick = document.getElementById('tick'), li = 0;
   if (tick && !reduce) {
