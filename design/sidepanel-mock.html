@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Walkaway — side panel mock</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0E1116;--paper:#F6F3EC;--white:#fff;--accent:#FF5C39;--accent-deep:#E8492A;--save:#1FA971;--save-soft:rgba(31,169,113,.12);--muted:#5F6672;--muted-2:#8B919C;--line:rgba(14,17,22,.10);
+--display:"Fraunces",Georgia,serif;--body:"Inter",system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:#8A8F98;font-family:var(--body);color:var(--ink);padding:28px;display:flex;gap:28px;align-items:flex-start;flex-wrap:wrap}
+.frame{width:380px;flex:none}
+.cap{font:600 12px/1 var(--body);color:#fff;letter-spacing:.08em;text-transform:uppercase;margin:0 0 10px 4px}
+.panel{background:var(--paper);height:640px;border-radius:14px;box-shadow:0 20px 50px -20px rgba(0,0,0,.6);display:flex;flex-direction:column;overflow:hidden;border:1px solid rgba(0,0,0,.15)}
+.top{display:flex;align-items:center;gap:8px;padding:12px 16px;background:var(--white);border-bottom:1px solid var(--line);font-family:var(--display);font-weight:600;font-size:17px}
+.mark{width:22px;height:22px;border-radius:6px;background:var(--accent);display:grid;place-items:center}
+.mark svg{width:13px;height:13px}
+.top .r{margin-left:auto;font:500 12px var(--body);color:var(--muted)}
+.body{padding:18px 16px;flex:1;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+h1{font-family:var(--display);font-weight:500;font-size:26px;line-height:1.08;letter-spacing:-.02em;margin:6px 0 2px}
+h1 em{font-style:italic;color:var(--accent)}
+p{margin:0;font-size:14px;line-height:1.55;color:var(--muted)}
+.btn{display:block;width:100%;border:0;border-radius:999px;padding:14px;font:700 15px var(--body);background:var(--accent);color:var(--ink);text-align:center;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid rgba(14,17,22,.25);font-weight:600}
+.fine{font-size:12px;color:var(--muted-2);text-align:center;line-height:1.5}
+.spacer{flex:1}
+.card{background:var(--white);border:1px solid var(--line);border-radius:12px;overflow:hidden}
+.row{display:flex;align-items:center;justify-content:space-between;gap:10px;padding:11px 13px;border-bottom:1px solid var(--line);font-size:14px;font-weight:600}
+.row:last-child{border-bottom:0}
+.row.skip{color:var(--muted);font-weight:500}
+.tag{font-size:10.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;padding:4px 8px;border-radius:999px;white-space:nowrap}
+.tag.ok{background:var(--save-soft);color:#177F55}.tag.skip{background:rgba(14,17,22,.06);color:var(--muted)}
+.total{background:var(--ink);color:var(--paper);border-radius:12px;padding:14px 16px}
+.total small{display:block;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:rgba(246,243,236,.6);font-weight:600}
+.total b{display:block;font-family:var(--display);font-weight:500;font-size:34px;letter-spacing:-.02em;color:#5FD6A4;line-height:1.1;margin-top:4px}
+.total span{font-size:12px;color:rgba(246,243,236,.65)}
+.count{font-size:13px;font-weight:600;color:var(--muted)}
+.prog{height:6px;border-radius:999px;background:rgba(14,17,22,.1);overflow:hidden}
+.prog i{display:block;height:100%;width:42%;background:var(--accent)}
+.log{display:flex;flex-direction:column;gap:8px}
+.step{display:flex;gap:10px;align-items:flex-start;font-size:13.5px;line-height:1.4}
+.step .dot{width:18px;height:18px;border-radius:50%;flex:none;display:grid;place-items:center;font-size:11px;font-weight:800;margin-top:1px}
+.step.done .dot{background:var(--save);color:#fff}.step.now .dot{background:var(--accent);color:var(--ink);box-shadow:0 0 0 4px rgba(255,92,57,.2)}.step.todo .dot{background:rgba(14,17,22,.08);color:var(--muted)}
+.step b{display:block;font-weight:600}.step span{color:var(--muted);font-size:12.5px}
+.stat{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.stat div{background:var(--white);border:1px solid var(--line);border-radius:10px;padding:10px 12px}
+.stat small{display:block;font-size:10.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);font-weight:700}
+.stat b{display:block;font-family:var(--display);font-weight:500;font-size:22px;margin-top:2px}
+.stat b.save{color:var(--save)}
+.sub{font-size:12.5px;color:var(--muted)}
+.note{font-size:12px;color:var(--muted-2);line-height:1.45}
+</style></head><body>
+
+<div class="frame"><p class="cap">1 · Scan (first open)</p>
+<div class="panel">
+  <div class="top"><span class="mark"><svg viewBox="0 0 64 64" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 32h24M32 20l12 12-12 12"/></svg></span>Walkaway<span class="r">No account needed</span></div>
+  <div class="body">
+    <h1>Find your <em>loyalty discounts.</em></h1>
+    <p>We'll check which subscription services you're signed into — locally, in your browser — and show you what you could save.</p>
+    <div class="spacer"></div>
+    <button class="btn">Scan my subscriptions</button>
+    <p class="fine">Takes about a minute. Nothing about your browsing is uploaded. Nothing gets cancelled — ever.</p>
+  </div>
+</div></div>
+
+<div class="frame"><p class="cap">2 · Reveal</p>
+<div class="panel">
+  <div class="top"><span class="mark"><svg viewBox="0 0 64 64" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 32h24M32 20l12 12-12 12"/></svg></span>Walkaway<span class="r">Scan complete</span></div>
+  <div class="body">
+    <div class="count">5 subscriptions found · 4 make loyalty offers</div>
+    <div class="card">
+      <div class="row">SiriusXM<span class="tag ok">Makes offers</span></div>
+      <div class="row">The New York Times<span class="tag ok">Makes offers</span></div>
+      <div class="row skip">Spotify<span class="tag skip">No offers · kept</span></div>
+      <div class="row">Hulu<span class="tag ok">Makes offers</span></div>
+      <div class="row">Adobe Creative Cloud<span class="tag ok">Makes offers</span></div>
+    </div>
+    <div class="total"><small>You could save about</small><b>~$66 / mo</b><span>Estimate. Exact amounts appear in your summary after the run.</span></div>
+    <div class="spacer"></div>
+    <button class="btn">Get these discounts →</button>
+    <p class="fine">You pay 10% of what we actually save · $1 min · $0 if nothing.<br>We hold ~$6.60 now and charge only what we verify.</p>
+  </div>
+</div></div>
+
+<div class="frame"><p class="cap">3 · Hunting (background tab)</p>
+<div class="panel">
+  <div class="top"><span class="mark"><svg viewBox="0 0 64 64" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 32h24M32 20l12 12-12 12"/></svg></span>Walkaway<span class="r">Hunting 2 of 4</span></div>
+  <div class="body">
+    <div class="prog"><i></i></div>
+    <div class="log">
+      <div class="step done"><div class="dot">✓</div><div><b>SiriusXM</b><span>Accepted 70% off for 6 months · verified on billing page</span></div></div>
+      <div class="step now"><div class="dot">●</div><div><b>The New York Times</b><span>Reached the loyalty-offer screen…</span></div></div>
+      <div class="step todo"><div class="dot">3</div><div><b>Hulu</b><span>Queued</span></div></div>
+      <div class="step todo"><div class="dot">4</div><div><b>Adobe Creative Cloud</b><span>Queued</span></div></div>
+    </div>
+    <div class="spacer"></div>
+    <button class="btn ghost">Watch this tab</button>
+    <p class="note">Runs in a background tab — keep doing what you were doing. It can't press "confirm cancellation": that button isn't in its toolset. On anything ambiguous, it backs out.</p>
+  </div>
+</div></div>
+
+<div class="frame"><p class="cap">4 · Done</p>
+<div class="panel">
+  <div class="top"><span class="mark"><svg viewBox="0 0 64 64" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 32h24M32 20l12 12-12 12"/></svg></span>Walkaway<span class="r">Done</span></div>
+  <div class="body">
+    <h1>You're paying <em>$62 less</em> a month.</h1>
+    <div class="stat">
+      <div><small>Verified savings</small><b class="save">$62/mo</b></div>
+      <div><small>Your fee</small><b>$6.20</b></div>
+    </div>
+    <div class="card">
+      <div class="row">SiriusXM<span class="tag ok">$23.99 → $6.99</span></div>
+      <div class="row">The New York Times<span class="tag ok">$25 → $4</span></div>
+      <div class="row">Hulu<span class="tag ok">$17.99 → $9.99</span></div>
+      <div class="row skip">Adobe Creative Cloud<span class="tag skip">No offer today</span></div>
+    </div>
+    <p class="sub">Summary and receipt sent to <b>you@example.com</b>. Nothing was cancelled.</p>
+    <div class="spacer"></div>
+    <button class="btn ghost">Set a password to keep your history (optional)</button>
+  </div>
+</div></div>
+
+</body></html>
