@@ -1,4 +1,4 @@
-# Walkaway — Implementation Plan (v7)
+# Walkaway — Implementation Plan (v8)
 
 > **Working name: "Walkaway"** (placeholder). *Every subscription has a walkaway price.* A Chrome
 > extension (+ thin backend) — **one button**: it finds the subscription services you're signed into,
@@ -6,7 +6,7 @@
 > discount, accepts it, and never actually cancels.** 10% of verified savings, $1 minimum, $0 otherwise.
 
 _Last updated: 2026-09-09 · Scope: personal / a few users · Autonomy: hands-off · One workflow, no A/B_
-_**v7:** $1 card-check hold + one charge; **one-time narrative** ("save ~$X on your upcoming renewals"); no accounts (the card is the spam gate); Phase 2 extension **built** in `extension/`. **v6:** hold (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
+_**v8:** AI discovery over **all** signed-in sites (not a fixed list); the **hunt engine** (Claude decides each step; deterministic guardrails server- and extension-side); a **Streamly testbed** with a 3-step cancel flow + retention offer; extension **test mode**; a **mock brain** + puppeteer e2e harness (3 scenarios pass). **v7:** $1 card-check hold + one charge; **one-time narrative** ("save ~$X on your upcoming renewals"); no accounts (the card is the spam gate); Phase 2 extension **built** in `extension/`. **v6:** hold (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
 
 ---
 
@@ -36,7 +36,8 @@ and retreats if not. "Confirm cancellation" is never a correct action.
 | **Workflow** | **One:** install → Scan → *services + total* → Checkout → Hunt → emailed summary | No A/B. Email/bank intake = later features. |
 | **Account** | **Not required.** Anonymous session by default; email collected at checkout; password optional | Supabase anonymous sign-in, upgradeable to a real account later. |
 | **Reveal rule** | Before paying: show **which** services make offers and the **total** estimated savings — **never per-service amounts** | Per-service before/after appears only in the post-run summary. |
-| **Detection** | **Cookies → account page** ("sites you're signed into") | No `history` permission (scary warning, creepy). Cookies add **no** install warning of their own. |
+| **Detection** | **All signed-in sites → AI filter → account page** | Cookie *names/flags* (never values) → registrable domains with session-like cookies → domain **names** sent to `/api/discover` (Claude decides which are subscription services and where the account page is; curated playbooks win) → background-tab account page → `/api/classify`. No `history` permission. |
+| **Privacy wording** | "Only the names of sites you're signed into are sent — never cookies, passwords, or history." | Landing page, FAQ, and panel all say this now. |
 | **Messaging rule** | Say *"the services you're currently signed into."* **Never** say "browsing history." | Accurate: we check sign-in state, never where they've been. |
 | **Navigation** | Extension drives the merchant pages itself in a **background tab**; user can watch | Side panel shows progress; "Watch" brings the tab forward. |
 | **Autonomy** | Hands-off | No confirmation prompts. Agent *cannot* finalize a cancel. |
@@ -133,7 +134,7 @@ siriusxm.com, nytimes.com, …"). **No `history`.** No `<all_urls>`.
   Xfinity, Paramount+, LinkedIn Premium, NordVPN, Headspace). Mark Netflix / Prime / Disney+
   `has_inflow_offer=false` → skip. **This list is also the Scan's domain filter.**
 
-### Phase 2 — Extension: Scan ← **built** (`extension/`, see its README to load it)
+### Phase 2 — Extension: Scan ← **built** (v8: AI discovery over all signed-in sites; test mode)
 **Stack:** WXT (MV3, TypeScript, React) · plain CSS with the landing-page tokens · no backend needed
 for 2a.
 **Layout (`extension/`):**
@@ -154,7 +155,24 @@ for 2a.
 plan/price → the Reveal shows service names + labels + one total. Hunt/Done screens are wired but
 stubbed until Phase 3.
 
-### Phase 3 — Hunt runner + brain _(~2–3 weeks; the core)_
+### Phase 3 — Hunt runner + brain ← **built** (needs `ANTHROPIC_API_KEY` on the backend to run with Claude)
+- **Backend** (`netlify/functions/`): `/api/discover`, `/api/classify`, `/api/agent-step` — Claude Opus 5
+  via structured outputs (`messages.parse` + zod schemas), adaptive thinking, effort `high`, prompt
+  caching. `WALKAWAY_BRAIN=mock` swaps in the rule-based brain (`shared/brain-mock.js`).
+- **Guardrails** (`shared/guardrails.js`), applied server-side and again in the extension: no
+  finalize/decline click ever (`FINALIZE_RE`), after an offer only `accept_offer`/`back_out`, no
+  interaction on `about_to_finalize_cancel`, same-site `navigate` only, no sensitive fields, loop
+  detection, step budget, and a click-time re-read of the live button text.
+- **Extension hunt** (`extension/src/hunt.ts`): background tab → snapshot (numbered elements + text)
+  → step → execute → repeat; then re-reads the billing page to **verify** the new price and computes
+  savings = (before − after) × term.
+- **Testbed** (`testbed/`): "Streamly" — login (any email / `walkaway`), Settings → Subscription →
+  *Cancel subscription* → reason survey → **50% off for 3 months** offer → *Are you sure?* → cancelled.
+  Dev bar: Reset state · Retention offer ON/OFF · Sign out (invisible to the agent via `data-wa-ignore`).
+- **E2E harness** (`npm run e2e:testbed`, or `:mock`): three scenarios — offer on from the billing page,
+  offer OFF (called bluff → must back out), offer on from the home page (must navigate). **All pass in
+  mock mode**; run with a key to exercise Claude.
+- _Original plan for reference:_
 - `/agent/step`: Claude Messages API + custom tools `classify_state, click(id), fill(id,text),
   scroll, navigate(allowlisted_url), request_screenshot, accept_offer(id), back_out,
   finish(terminal)`. Opus 4.8/5 for decisions; Sonnet 5 / Haiku 4.5 for cheap classification.
@@ -277,3 +295,20 @@ Playbooks skip known offenders; ambiguity backs out; not reducible to zero witho
    `usewalkaway.com`, `walkawaydeal.com`, `thewalkawayprice.com`, `walkawayapp.com`, and
    `walkaway.so` / `.club` / `.deals` / `.cash` / `.fyi`. Suggested: **trywalkaway.com** now (cheap,
    conventional for a waitlist), upgrade later if the name sticks.
+
+---
+
+## 12. Deploy & run the current build
+
+1. **Backend (brain):** it lives in the same Netlify site as the landing page (`netlify/functions/`).
+   In Netlify → Site configuration → Environment variables set `ANTHROPIC_API_KEY` (and optionally
+   `AGENT_MODEL`, `AGENT_EFFORT`, `WALKAWAY_CLIENT_KEY`). Redeploy. Endpoints:
+   `https://<site>.netlify.app/api/discover|classify|agent-step`. Local: `npm run api:dev` (port 8787).
+2. **Testbed:** a second Netlify site → Import from Git → **Base directory `testbed`** (or drag the
+   folder onto Netlify Drop). Sign in there with any email / password `walkaway`.
+3. **Extension:** `cd extension && npm install && npm run build` → `chrome://extensions` → Load
+   unpacked → `extension/.output/chrome-mv3`. In the panel's ⚙ Settings: API URL = your Netlify site;
+   **Test mode ON**, test domain = the testbed host, account URL = `https://<host>/settings/subscription`.
+   Scan → Get these discounts. Toggle the testbed's retention offer OFF and rerun to see the back-out.
+4. **Verify without spending:** `npm run e2e:testbed:mock` runs the three scenarios headlessly.
+   With a key: `ANTHROPIC_API_KEY=… npm run e2e:testbed`.

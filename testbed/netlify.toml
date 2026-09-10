@@ -1,0 +1,3 @@
+# Streamly testbed — deploy as its OWN Netlify site with Base directory = testbed
+[build]
+  publish = "."

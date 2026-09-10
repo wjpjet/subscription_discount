@@ -1,3 +1,2 @@
-export function money(n: number): string {
-  return '$' + Math.round(n).toLocaleString('en-US');
-}
+export function money(n: number | null | undefined): string { if (n == null || isNaN(n)) return '–'; return '$' + (Math.round(n * 100) / 100).toLocaleString('en-US', { minimumFractionDigits: n % 1 ? 2 : 0, maximumFractionDigits: 2 }); }
+export function outcomeLabel(o: string): string { return ({ discount_applied: 'Discount applied', no_offer_backed_out: 'No offer — backed out', blocked_needs_you: 'Needs you (login)', error: 'Could not complete' } as Record<string, string>)[o] || o; }

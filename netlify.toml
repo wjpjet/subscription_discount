@@ -5,6 +5,12 @@
 [build]
   publish = "landing"
 
+# Backend brain: Netlify Functions v2 (routes declared in each function via `config.path`)
+[functions]
+  directory = "netlify/functions"
+  node_bundler = "esbuild"
+  included_files = ["shared/**"]
+
 # Security headers (cheap wins for a static page)
 [[headers]]
   for = "/*"

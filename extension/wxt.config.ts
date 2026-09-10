@@ -1,15 +1,14 @@
 import { defineConfig } from 'wxt';
-import { ORIGINS } from './src/playbooks';
 
 export default defineConfig({
   modules: ['@wxt-dev/module-react'],
+  vite: () => ({ server: { fs: { allow: ['..'] } } }),
   manifest: {
     name: 'Walkaway',
-    description:
-      "Finds the subscription services you're signed into and gets you their loyalty discounts — without cancelling anything.",
+    description: "Finds the subscription services you're signed into and gets you their loyalty discounts — without cancelling anything.",
     permissions: ['cookies', 'tabs', 'scripting', 'sidePanel', 'storage'],
-    // Requested at first Scan (contextual), not at install. No `history`, no <all_urls>.
-    optional_host_permissions: ORIGINS,
+    // Requested at first Scan (contextual), never at install. Test mode requests only the test domain.
+    optional_host_permissions: ['<all_urls>'],
     action: { default_title: 'Walkaway' },
   },
 });

@@ -1,0 +1,17 @@
+{
+  "name": "walkaway",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "api:dev": "node scripts/dev-api.mjs",
+    "e2e:testbed": "node scripts/e2e-testbed.mjs",
+    "e2e:testbed:mock": "WALKAWAY_BRAIN=mock node scripts/e2e-testbed.mjs"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.110.0",
+    "zod": "^3.25.0"
+  },
+  "devDependencies": {
+    "puppeteer-core": "^24.0.0"
+  }
+}

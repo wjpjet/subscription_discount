@@ -1,0 +1,7 @@
+export interface PageClass { signedIn: boolean; hasPaidPlan: boolean | null; planName: string | null; monthlyPriceUsd: number | null; cadence: string; renewalDate: string | null; offerApplied: boolean; offerText: string | null; confidence: number; notes: string }
+export interface Offer { description: string; newMonthlyPriceUsd: number | null; discountPct: number | null; termMonths: number | null; freeMonths: number | null }
+export interface FinishDetails { beforeMonthlyPriceUsd: number | null; afterMonthlyPriceUsd: number | null; termMonths: number | null; savingsUsd: number | null; summary: string }
+export interface AgentAction { type: string; id?: number | null; text?: string | null; value?: string | null; url?: string | null; direction?: 'up' | 'down' | null; reason?: string | null; offer?: Offer | null; outcome?: string | null; details?: FinishDetails | null }
+export interface Decision { state: string; reasoning: string; action: AgentAction }
+export interface StepResponse { brain: string; model: string; proposed: AgentAction; decision: Decision; guardrails: string[] }
+export interface DiscoveredService { domain: string; isSubscription: boolean; name: string; category: string; accountUrl: string | null; typicalMonthlyPriceUsd: number | null; makesRetentionOffers: 'likely' | 'unlikely' | 'unknown'; confidence: number; notes: string }

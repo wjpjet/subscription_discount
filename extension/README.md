@@ -1,46 +1,38 @@
-# Walkaway — browser extension (Phase 2: the Scan)
+# Walkaway — browser extension
 
-One button. It finds the subscription services you're **signed into** (a local cookie-presence check
-against our known-services list, then a quiet look at each account page in a background tab), and shows
-which ones make loyalty offers plus one total: what you could save on your upcoming renewals.
-
-Nothing about your browsing leaves the browser in this build: **no `history` permission**, no cookie
-values read, no page content sent anywhere.
+**Scan** finds the subscription services you're signed into; **Get these discounts** hunts each one's
+loyalty offer by walking the cancellation flow — and can never press the final cancel.
 
 ## Run it
-
 ```bash
-cd extension
-npm install          # also runs `wxt prepare` (generates types)
-npm run build        # → .output/chrome-mv3/
+cd extension && npm install && npm run build      # → .output/chrome-mv3/
 ```
+`chrome://extensions` → Developer mode → **Load unpacked** → `extension/.output/chrome-mv3`.
+Click the toolbar icon to open the side panel.
 
-Load it in Chrome: `chrome://extensions` → **Developer mode** on → **Load unpacked** →
-pick `extension/.output/chrome-mv3`. Click the toolbar icon to open the side panel → **Scan my subscriptions**.
-The first Scan asks once for access to the known-services sites (that's the only permission prompt).
-
-Dev loop with hot reload: `npm run dev` (opens a Chrome profile with the extension loaded).
-
-## What's here
-
-| Path | Role |
+## Settings (⚙ in the panel)
+| Setting | What it does |
 |---|---|
-| `src/playbooks.ts` | The known-services list: domains, account URL, session-cookie *names*, signed-in text hints, typical price / discount / term, `hasInflowOffer`. **This is where to add or fix a service.** |
-| `src/scan.ts` | The Scan: cookie presence → background-tab account page → classify (`signed_in` / `login_wall` / `no_paid_plan` / `unknown`) → estimate. |
-| `entrypoints/background.ts` | Service worker: runs the scan, streams progress to the panel. |
-| `entrypoints/sidepanel/` | React side panel: Scan → Reveal → (Hunting stub). |
-| `wxt.config.ts` | Manifest: `cookies, tabs, scripting, sidePanel, storage` + `optional_host_permissions` for playbook domains. |
+| **API URL** | Your Netlify site that hosts the functions (`/api/discover`, `/api/classify`, `/api/agent-step`). Without it, Scan falls back to the curated list only and Hunt is disabled. Local dev: `npm run api:dev` at the repo root → `http://127.0.0.1:8787`. |
+| **Client key** | Only if `WALKAWAY_CLIENT_KEY` is set on the backend. |
+| **Test mode** | Scan + Hunt touch **only** the test domain below. Use with the Streamly testbed (`testbed/`). |
+| **Watch mode** | Opens the hunt tab in front (screenshots/vision possible) and leaves it open afterwards. |
+| **Max steps** | Step budget per service (default 25). |
 
-## Tuning a playbook
+## How discovery works (normal mode)
+1. First Scan asks once for access to all sites (needed to see which sites have session cookies).
+2. Every cookie → registrable domain; only domains with session-like cookies are kept; cookie
+   **values are never read**, only names/flags.
+3. The domain **names** go to `/api/discover`, where the brain decides which are subscription
+   services and where the account page is. Curated playbooks (`shared/playbooks.js`) win on conflicts.
+4. Each candidate's account page opens briefly in a background tab; `/api/classify` reads plan/price.
 
-Open the side panel → after a scan, **Show details** lists every service with its status, whether a
-cookie was found, the monthly price we read, and the estimate. Hover a row for the URL we landed on.
+## How the hunt works
+Per service: open the account page (background tab) → snapshot the page (numbered interactive
+elements + text) → `/api/agent-step` returns one action → guardrails (server **and** here) →
+execute → repeat. Terminal actions: `accept_offer` → `finish(discount_applied)`, or `back_out`.
+Then it re-reads the billing page to verify the new price. See `shared/guardrails.js`.
 
-- `login_wall` on a service you *are* signed into → the `accountUrl` redirects to login; find the
-  right account page URL, or add the redirect fragment to `loginUrlPatterns` if it's a false positive.
-- `unknown` → add a text fragment that only appears when signed in to `signedInHints`.
-- Price `–` → the page doesn't print "$X/month" in plain text; the estimate falls back to `typicalPrice`.
-
-## Next
-Phase 3 wires **Get these discounts** to the hunt engine (backend brain + allowlisted actions);
-Phase 4 adds Stripe checkout ($1 hold) and the emailed summary.
+## Tuning
+After a scan, **Show details** lists each service with status, source (curated/ai/test), price read,
+and estimate. Hover a row for the URL it landed on.

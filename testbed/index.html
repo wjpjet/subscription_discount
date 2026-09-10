@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Streamly</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%237C5CFF'/%3E%3Cpath d='M24 18l22 14-22 14z' fill='%23fff'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+<header class="nav" id="nav" hidden>
+  <a href="/" data-link class="brand"><span class="logo"></span>Streamly</a>
+  <nav class="links"><a href="/" data-link>Home</a><a href="/browse" data-link>Browse</a><a href="/browse" data-link>My List</a></nav>
+  <div class="account">
+    <button class="avatar" id="avatar-btn" aria-haspopup="menu" aria-expanded="false" title="Account">S</button>
+    <div class="menu" id="avatar-menu" role="menu" hidden>
+      <a href="/settings" data-link role="menuitem">Settings</a>
+      <a href="/settings/subscription" data-link role="menuitem">Subscription</a>
+      <button data-action="signout" role="menuitem">Sign out</button>
+    </div>
+  </div>
+</header>
+<main id="app"></main>
+<div class="devbar" id="devbar" data-wa-ignore hidden>
+  <span class="devbar-title">Testbed controls</span>
+  <span class="devbar-status" id="dev-status"></span>
+  <button data-action="reset" class="dev-btn">Reset state</button>
+  <button data-action="toggle-offer" class="dev-btn" id="dev-offer"></button>
+  <button data-action="signout" class="dev-btn">Sign out</button>
+</div>
+<script src="/app.js"></script>
+</body>
+</html>
