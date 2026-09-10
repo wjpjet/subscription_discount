@@ -1,4 +1,4 @@
-# Walkaway — Implementation Plan (v6)
+# Walkaway — Implementation Plan (v7)
 
 > **Working name: "Walkaway"** (placeholder). *Every subscription has a walkaway price.* A Chrome
 > extension (+ thin backend) — **one button**: it finds the subscription services you're signed into,
@@ -6,7 +6,7 @@
 > discount, accepts it, and never actually cancels.** 10% of verified savings, $1 minimum, $0 otherwise.
 
 _Last updated: 2026-09-09 · Scope: personal / a few users · Autonomy: hands-off · One workflow, no A/B_
-_**v6:** checkout places a **temporary hold** (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
+_**v7:** $1 card-check hold + one charge; **one-time narrative** ("save ~$X on your upcoming renewals"); no accounts (the card is the spam gate); Phase 2 extension **built** in `extension/`. **v6:** hold (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
 
 ---
 
@@ -40,7 +40,9 @@ and retreats if not. "Confirm cancellation" is never a correct action.
 | **Messaging rule** | Say *"the services you're currently signed into."* **Never** say "browsing history." | Accurate: we check sign-in state, never where they've been. |
 | **Navigation** | Extension drives the merchant pages itself in a **background tab**; user can watch | Side panel shows progress; "Watch" brings the tab forward. |
 | **Autonomy** | Hands-off | No confirmation prompts. Agent *cannot* finalize a cancel. |
-| **Business model** | 10% of **verified** savings per run, $1 min, $0 otherwise | Checkout places a **hold** for 10% of the estimate (manual-capture PaymentIntent); after verification we **capture ≤ the hold** or **release it**. Never charge on the estimate. |
+| **Business model** | **One charge:** 10% of verified savings over the offer terms, $1 min, $0 otherwise | Checkout places a **$1 hold** (card works or it doesn't), saves the card, releases the hold after the run; then **one** off-session charge only if savings were verified. |
+| **Narrative** | **"Save ~$X on your upcoming renewals — by not cancelling."** Never "$X/mo." | Offers run a fixed term and rarely repeat soon; this is a one-time saving, paid for once. Rerun when an offer ends. |
+| **Accounts / spam** | **No accounts.** The card ($1 hold) gates the expensive part; the free Scan is local and cheap; backend endpoints rate-limited per device/IP | Accounts are free to create and wouldn't stop abuse. |
 | **Scale** | Personal / a few users | Extension loaded unpacked / unlisted; no store review yet. |
 
 ---
@@ -59,19 +61,17 @@ and retreats if not. "Confirm cancellation" is never a correct action.
    names with **Makes offers / No offers · kept** labels, and **one number: the total estimated
    savings.** No per-service amounts (keeps the offer simple and avoids cherry-picking).
    Button: **Get these discounts →**
-4. **Checkout** — Stripe Checkout in **payment mode with `capture_method: manual`**: card + email;
-   amount = `max($1, 10% × estimated savings over term)` shown as a **temporary hold** with the text
-   *"We hold this now, like a hotel. After the run you're charged only what we verify — $0 and the
-   hold released if nothing is saved."* Return page offers an **optional password** → upgrades the
-   anonymous session to a real account (`updateUser({email, password})`). Email stored either way.
+4. **Checkout** — Stripe Checkout, **payment mode, `capture_method: manual`, amount $1**, with
+   `setup_future_usage: off_session` so the card is saved: *"$1 hold to check your card — released
+   after the run. Then one charge: 10% of what we actually save you. $0 if nothing."* Email collected
+   here (Stripe requires it) for the summary + receipt. Optional password on the return page.
 5. **Hunt** — for each offer-eligible subscription, background tab + backend brain; progress in the
    side panel; **Watch** brings the tab forward.
-6. **Verify → capture → email** — re-read each billing page (discount applied *and* sub still active)
-   → verified savings → **capture** `min(hold, max($1, 10% × Σ verified savings over offer terms))`
-   (if verified fee exceeds the hold, capture the hold and attempt one follow-up charge for the rest)
-   → **one email** (Resend) with the per-service before/after, screenshots, total saved, fee, and the
-   Stripe receipt link. If nothing verified: **cancel the hold** (funds released, $0) and send a
-   "nothing saved, nothing owed" email.
+6. **Verify → charge → email** — re-read each billing page (discount applied *and* sub still active)
+   → verified savings over each offer's term → **cancel the $1 hold** and make **one** off-session
+   charge `max($1, 10% × Σ verified savings)` → **one email** (Resend) with per-service before/after,
+   screenshots, total saved, fee, and the Stripe receipt link. Nothing verified → cancel the hold, $0,
+   and a "nothing saved, nothing owed" email.
 
 ## 4. Architecture
 
@@ -93,8 +93,8 @@ and retreats if not. "Confirm cancellation" is never a correct action.
    /agent/classify   account-page snapshot → {plan, price, renewal} | login_wall | no_paid_plan
    /agent/step       Claude (tool use) with the allowlisted tool set;
                      server-side guardrail: `confirm_cancellation` is NOT a tool
-   /checkout         Stripe Checkout (payment mode, manual capture) → hold 10% of estimate + email
-   /runs/:id/settle  verify → capture verified fee (≤ hold) or cancel the hold → email (Resend)
+   /checkout         Stripe Checkout ($1 manual-capture hold, card saved for off-session use) + email
+   /runs/:id/settle  verify → cancel hold → one charge (10% of verified, $1 min) or $0 → email (Resend)
 
   LANDING PAGE — static, Netlify, auto-deploys from `main` (`/landing`)              ← live
   LATER — email / bank discovery adapters; scheduled re-hunts
@@ -133,7 +133,7 @@ siriusxm.com, nytimes.com, …"). **No `history`.** No `<all_urls>`.
   Xfinity, Paramount+, LinkedIn Premium, NordVPN, Headspace). Mark Netflix / Prime / Disney+
   `has_inflow_offer=false` → skip. **This list is also the Scan's domain filter.**
 
-### Phase 2 — Extension: Scan _(~1 week)_ ← **building now**
+### Phase 2 — Extension: Scan ← **built** (`extension/`, see its README to load it)
 **Stack:** WXT (MV3, TypeScript, React) · plain CSS with the landing-page tokens · no backend needed
 for 2a.
 **Layout (`extension/`):**
@@ -163,11 +163,11 @@ stubbed until Phase 3.
 - **Exit:** one real subscription of yours → offer found and accepted (or correctly skipped).
 
 ### Phase 4 — Checkout, settlement, email _(~1 week)_
-- Stripe Checkout, **payment mode + manual capture**: hold `max($1, 10% × estimate)`; hold text;
-  return page with optional password (anonymous → permanent account upgrade). Stripe Radar on.
-- Settlement: verify each win → **capture** `min(hold, verified fee)` or **cancel** the hold;
-  idempotent per run; holds auto-expire in 7 days (we settle within the hour); refund path if a
-  verification was wrong.
+- Stripe Checkout: **$1 manual-capture hold + save card** (`setup_future_usage: off_session`);
+  return page with optional password. Stripe Radar on.
+- Settlement: verify each win → cancel the $1 hold → **one** off-session charge `max($1, 10% × Σ
+  verified savings)`; idempotent per run; refund path if a verification was wrong. Run the smallest
+  win first; if its charge fails, stop.
 - **One summary email** (Resend): per-service before/after, screenshots, total, fee, Stripe receipt
   link. Results view in the side panel; `run_events` audit trail.
 
@@ -231,9 +231,9 @@ Playbooks skip known offenders; ambiguity backs out; not reducible to zero witho
 - **The gap:** discounts are applied to the *user's* merchant accounts and can't be reversed. With a
   save-card-only checkout, a real-but-empty prepaid card, a virtual card closed after the run, or a
   card that later declines would get the discounts for free.
-- **The fix:** a **hold** (manual-capture PaymentIntent) at checkout reserves the funds *before*
-  anything runs. Empty/insufficient cards fail the hold; closing a virtual card after authorization
-  generally still lets the capture settle. Capture ≤ hold after verification; cancel if nothing.
+- **The fix (proportionate):** a **$1 hold** at checkout proves the card is real and live before
+  anything runs; fake, expired, and empty cards fail it. The residual (a card with $1 but not $10) is
+  accepted — at 10% fees the attack isn't worth anyone's time.
 - **Belt and suspenders:** Stripe Radar (default) + 3DS where offered; run the **smallest win first**
   and stop the run if its capture fails; keep the emailed before/after screenshots as dispute
   evidence. Chargebacks stay a normal, bounded business risk.
@@ -267,8 +267,13 @@ Playbooks skip known offenders; ambiguity backs out; not reducible to zero witho
 3. **Reveal precision** — **point estimate with a tilde ("~$66/mo")** vs. a range ("$50–80/mo").
 4. **Reveal shows service names** (as asked) — note it leaks *which* services make offers; the
    alternative is count + total only ("4 of 5 make offers · ~$66/mo").
-5. **Hold amount** — **10% of the estimate over the offer term, $1 min, no cap.**
+5. **Hold amount** — **$1** (decided).
 6. **Fee basis** — **over the offer term** (e.g. 6 months × $17 = $102 → $10.20) vs. first month only.
 7. **First merchants to seed** — send the subscription services you're **signed into in Chrome**
    (top 5); playbooks get built and tested against those first.
 8. **Email sender** — **Resend on their sandbox domain now**, your own domain when you have one.
+9. **Domain** — walkaway.com / .ai / .app / .co / .io / .money and getwalkaway.com / walkawayprice.com
+   / iwillwalk.com are **taken**. **Available** (as of 2026-09-10): `trywalkaway.com`,
+   `usewalkaway.com`, `walkawaydeal.com`, `thewalkawayprice.com`, `walkawayapp.com`, and
+   `walkaway.so` / `.club` / `.deals` / `.cash` / `.fyi`. Suggested: **trywalkaway.com** now (cheap,
+   conventional for a waitlist), upgrade later if the name sticks.
