@@ -1,0 +1,22 @@
+# Netlify config (repo root). Zero-build static landing page served from ./landing.
+# Connect this repo in Netlify with NO base directory and NO build command —
+# the publish directory is read from here, and every push to `main` redeploys.
+
+[build]
+  publish = "landing"
+
+# Security headers (cheap wins for a static page)
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=()"
+    Strict-Transport-Security = "max-age=31536000; includeSubDomains"
+
+# Always revalidate the page itself; fonts/CDN assets are cached by their own hosts.
+[[headers]]
+  for = "/index.html"
+  [headers.values]
+    Cache-Control = "public, max-age=0, must-revalidate"

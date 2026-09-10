@@ -1,0 +1,21 @@
+# OS
+.DS_Store
+Thumbs.db
+
+# Dependencies / build output (for the app + extension later)
+node_modules/
+dist/
+build/
+.output/
+.wxt/
+
+# Secrets — never commit these
+.env
+.env.*
+!.env.example
+
+# Netlify local state
+.netlify/
+
+# Logs
+*.log
