@@ -1,17 +1,14 @@
-// The brain: Claude decides discovery, page classification, and each navigation step.
 import { z } from 'zod';
-import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
-import { getClient, MODEL, EFFORT, BRAIN } from './anthropic.mjs';
+import { generateStructured, AIDeclined, BRAIN } from './llm.mjs';
 import { STATES, ACTIONS, OUTCOMES } from '../../../shared/guardrails.js';
 import { mockDecide, mockClassify, mockDiscover } from '../../../shared/brain-mock.js';
-import { playbookForDomain } from '../../../shared/playbooks.js';
 
 export const Decision = z.object({
   state: z.enum(STATES),
   reasoning: z.string().describe('One or two sentences: what this screen is and why this action.'),
   action: z.object({
     type: z.enum(ACTIONS),
-    id: z.number().int().nullable().describe('Element id from the snapshot for click/type/select/accept_offer.'),
+    id: z.number().int().nullable().describe('Element id from the snapshot (click/type/select/accept_offer).'),
     text: z.string().nullable().describe('Text to type (type only).'),
     value: z.string().nullable().describe('Option to choose (select only).'),
     url: z.string().nullable().describe('Same-site URL (navigate only).'),
@@ -42,9 +39,11 @@ export const Discovery = z.object({
     isSubscription: z.boolean().describe('A consumer service with recurring paid plans.'),
     name: z.string(),
     category: z.string(),
-    accountUrl: z.string().nullable().describe('Best-guess URL of the signed-in account/subscription/billing page.'),
+    accountUrl: z.string().nullable().describe('Best-guess URL of the signed-in account / subscription / billing page.'),
     typicalMonthlyPriceUsd: z.number().nullable(),
     makesRetentionOffers: z.enum(['likely', 'unlikely', 'unknown']).describe('Does this service show a discount/loyalty offer during its cancellation flow?'),
+    typicalOfferDiscountPct: z.number().nullable().describe('If known: typical discount as a fraction of the monthly price, e.g. 0.5.'),
+    typicalOfferTermMonths: z.number().nullable().describe('If known: how many months the offer usually lasts.'),
     confidence: z.number(),
     notes: z.string(),
   })),
@@ -72,12 +71,10 @@ Return exactly one decision: the screen state, a one-sentence reasoning, and one
 
 const CLASSIFY_SYSTEM = `You read a snapshot of a subscription service's account/billing page and report the signed-in subscription state precisely. Normalize prices to USD per month. If the page is a login wall, signedIn=false. If signed in but there is no paid plan, hasPaidPlan=false. Report an applied promotional/loyalty price when the page shows one.`;
 
-const DISCOVER_SYSTEM = `You classify website domains. For each domain, decide whether it is a consumer service with recurring paid subscriptions (streaming, news, software, VPN, fitness, dating, cloud storage, memberships, etc.). Use your knowledge of the company. Infrastructure, ad-tech, banks, retailers without memberships, social networks without paid tiers, and unknown domains are not subscriptions. Give your best-guess account/subscription page URL for real services, a typical monthly price in USD, and whether the service is known to present a discount or loyalty offer during its cancellation flow.`;
+const DISCOVER_SYSTEM = `You classify website domains. For each domain, decide whether it is a consumer service with recurring paid subscriptions (streaming, news, software, VPN, fitness, dating, cloud storage, memberships, etc.). Use your knowledge of the company. Infrastructure, ad-tech, banks, retailers without memberships, social networks without paid tiers, and unknown domains are not subscriptions. For real services give your best-guess signed-in account/subscription page URL, a typical monthly price in USD, whether the service is known to present a discount or loyalty offer during its cancellation flow, and if known the typical discount fraction and term in months.`;
 
 export function renderSnapshot(s) {
-  const lines = [];
-  lines.push(`URL: ${s.url}`);
-  lines.push(`TITLE: ${s.title || ''}`);
+  const lines = [`URL: ${s.url}`, `TITLE: ${s.title || ''}`];
   if (s.headings && s.headings.length) lines.push(`HEADINGS: ${s.headings.join(' | ')}`);
   if (s.hasPassword) lines.push('NOTE: a password field is present (login page?)');
   if (s.prices && s.prices.length) lines.push('PRICES: ' + s.prices.slice(0, 12).map((p) => `$${p.amount}${p.unit ? '/' + p.unit : ''} («${p.context.trim()}»)`).join(' ; '));
@@ -96,15 +93,14 @@ export function renderSnapshot(s) {
     if (e.offscreen) bits.push('(offscreen)');
     lines.push('  ' + bits.join(' '));
   }
-  lines.push('PAGE TEXT (truncated):');
-  lines.push((s.text || '').slice(0, 3500));
+  lines.push('PAGE TEXT (truncated):', (s.text || '').slice(0, 3500));
   return lines.join('\n');
 }
-
 function renderHistory(history) {
   if (!history || !history.length) return '(none)';
   return history.slice(-12).map((h) => `step ${h.step}: [${h.state}] ${h.action ? h.action.type : ''}${h.action && h.action.id != null ? ' #' + h.action.id : ''}${h.target ? ' "' + h.target + '"' : ''}${h.note ? ' — ' + h.note : ''} @ ${h.url || ''}`).join('\n');
 }
+const NULLS = { id: null, text: null, value: null, url: null, direction: null, reason: null, offer: null, outcome: null, details: null };
 
 export async function decide(input) {
   if (BRAIN === 'mock') return mockDecide(input);
@@ -112,63 +108,39 @@ export async function decide(input) {
   const user = [
     `SERVICE: ${merchant.name || merchant.domain} (${merchant.domain})`,
     `GOAL: ${goal === 'verify' ? 'VERIFY — this is the account/billing page after the run. Do not act; call finish with the current monthly price and whether a promotional price is applied.' : 'HUNT — reach the loyalty offer and accept it; never finalize a cancellation.'}`,
-    `STEP: ${step} of ${maxSteps}`,
-    `HISTORY:\n${renderHistory(history)}`,
-    `CURRENT PAGE:\n${renderSnapshot(snapshot)}`,
+    `STEP: ${step} of ${maxSteps}`, `HISTORY:\n${renderHistory(history)}`, `CURRENT PAGE:\n${renderSnapshot(snapshot)}`,
   ].join('\n\n');
-  const res = await getClient().messages.parse({
-    model: MODEL,
-    max_tokens: 8000,
-    cache_control: { type: 'ephemeral' },
-    system: HUNT_SYSTEM,
-    output_config: { format: zodOutputFormat(Decision), effort: EFFORT },
-    messages: [{ role: 'user', content: user }],
-  });
-  if (res.stop_reason === 'refusal' || !res.parsed_output) {
-    return { state: 'ambiguous', reasoning: 'Model declined or returned no decision; backing out.', action: { type: 'back_out', reason: 'model_refusal_or_unparseable', id: null, text: null, value: null, url: null, direction: null, offer: null, outcome: null, details: null } };
+  try {
+    const { output, provider, model } = await generateStructured({ system: HUNT_SYSTEM, user, schema: Decision, maxTokens: 8000 });
+    return { ...output, _provider: provider, _model: model };
+  } catch (e) {
+    if (e instanceof AIDeclined) return { state: 'ambiguous', reasoning: e.message, action: { ...NULLS, type: 'back_out', reason: 'ai_declined: ' + e.message }, _provider: 'none' };
+    throw e; // outage → HTTP 500 → the extension retries, then stops without acting
   }
-  return res.parsed_output;
 }
 
 export async function classify(input) {
-  if (BRAIN === 'mock') return mockClassify(input.snapshot);
-  const res = await getClient().messages.parse({
-    model: MODEL,
-    max_tokens: 4000,
-    cache_control: { type: 'ephemeral' },
-    system: CLASSIFY_SYSTEM,
-    output_config: { format: zodOutputFormat(PageClass), effort: 'medium' },
-    messages: [{ role: 'user', content: `DOMAIN: ${input.domain}\n\n${renderSnapshot(input.snapshot)}` }],
-  });
-  if (res.stop_reason === 'refusal' || !res.parsed_output) return mockClassify(input.snapshot);
-  return res.parsed_output;
+  if (BRAIN === 'mock') return { ...mockClassify(input.snapshot), _provider: 'mock' };
+  try {
+    const { output, provider } = await generateStructured({ system: CLASSIFY_SYSTEM, user: `DOMAIN: ${input.domain}\n\n${renderSnapshot(input.snapshot)}`, schema: PageClass, maxTokens: 3000, effort: 'low' });
+    return { ...output, _provider: provider };
+  } catch (e) {
+    console.error('[classify] falling back to heuristics:', e.message);
+    return { ...mockClassify(input.snapshot), notes: 'heuristic fallback: ' + e.message, _provider: 'fallback' };
+  }
 }
 
 const discoverCache = new Map();
 export async function discover(domains) {
-  const out = []; const todo = [];
-  for (const d of domains) {
-    const pb = playbookForDomain(d);
-    if (pb) { out.push({ domain: d, isSubscription: true, name: pb.name, category: 'curated', accountUrl: pb.accountUrl, typicalMonthlyPriceUsd: pb.typicalPrice, makesRetentionOffers: pb.hasInflowOffer ? 'likely' : 'unlikely', confidence: pb.confidence, notes: 'curated playbook' }); continue; }
-    if (discoverCache.has(d)) { out.push(discoverCache.get(d)); continue; }
-    todo.push(d);
-  }
-  if (!todo.length) return out;
-  if (BRAIN === 'mock') { for (const r of mockDiscover(todo)) { discoverCache.set(r.domain, r); out.push(r); } return out; }
-  for (let i = 0; i < todo.length; i += 80) {
-    const chunk = todo.slice(i, i + 80);
-    const res = await getClient().messages.parse({
-      model: MODEL,
-      max_tokens: 16000,
-      cache_control: { type: 'ephemeral' },
-      system: DISCOVER_SYSTEM,
-      output_config: { format: zodOutputFormat(Discovery), effort: 'medium' },
-      messages: [{ role: 'user', content: `Classify these domains:\n${chunk.join('\n')}` }],
-    });
-    const services = (res.parsed_output && res.parsed_output.services) || [];
-    const byDomain = new Map(services.map((s) => [s.domain.toLowerCase(), s]));
+  if (BRAIN === 'mock') return mockDiscover(domains);
+  const out = [], todo = [];
+  for (const d of domains) { if (discoverCache.has(d)) out.push(discoverCache.get(d)); else todo.push(d); }
+  for (let i = 0; i < todo.length; i += 60) {
+    const chunk = todo.slice(i, i + 60);
+    const { output } = await generateStructured({ system: DISCOVER_SYSTEM, user: `Classify these domains:\n${chunk.join('\n')}`, schema: Discovery, maxTokens: 16000, effort: 'low' });
+    const byDomain = new Map((output.services || []).map((s) => [s.domain.toLowerCase(), s]));
     for (const d of chunk) {
-      const r = byDomain.get(d.toLowerCase()) || { domain: d, isSubscription: false, name: d, category: 'unknown', accountUrl: null, typicalMonthlyPriceUsd: null, makesRetentionOffers: 'unknown', confidence: 0.1, notes: 'not returned by model' };
+      const r = byDomain.get(d.toLowerCase()) || { domain: d, isSubscription: false, name: d, category: 'unknown', accountUrl: null, typicalMonthlyPriceUsd: null, makesRetentionOffers: 'unknown', typicalOfferDiscountPct: null, typicalOfferTermMonths: null, confidence: 0.1, notes: 'not returned by model' };
       discoverCache.set(d, r); out.push(r);
     }
   }

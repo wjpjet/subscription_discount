@@ -4,4 +4,6 @@ export interface FinishDetails { beforeMonthlyPriceUsd: number | null; afterMont
 export interface AgentAction { type: string; id?: number | null; text?: string | null; value?: string | null; url?: string | null; direction?: 'up' | 'down' | null; reason?: string | null; offer?: Offer | null; outcome?: string | null; details?: FinishDetails | null }
 export interface Decision { state: string; reasoning: string; action: AgentAction }
 export interface StepResponse { brain: string; model: string; proposed: AgentAction; decision: Decision; guardrails: string[] }
-export interface DiscoveredService { domain: string; isSubscription: boolean; name: string; category: string; accountUrl: string | null; typicalMonthlyPriceUsd: number | null; makesRetentionOffers: 'likely' | 'unlikely' | 'unknown'; confidence: number; notes: string }
+export interface DiscoveredService { domain: string; isSubscription: boolean; name: string; category: string; accountUrl: string | null; typicalMonthlyPriceUsd: number | null; makesRetentionOffers: 'likely' | 'unlikely' | 'unknown'; typicalOfferDiscountPct: number | null; typicalOfferTermMonths: number | null; confidence: number; notes: string }
+export interface Settlement { holdReleased: boolean; feeCents: number; charged: boolean; receiptUrl?: string | null; needsAction?: boolean; error?: string; status?: string }
+export interface CheckoutResult { paymentIntentId: string; customerId: string; email: string | null }

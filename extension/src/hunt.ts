@@ -44,7 +44,7 @@ export async function huntOne(item: ScanItem, settings: Settings, onEvent: (e: H
     for (let step = 0; step <= maxSteps; step++) {
       if (stopRequested) { result.outcome = 'error'; result.reason = 'stopped by user'; break; }
       const snapshot = await runInTab(tabId, snapshotPage, [{ maxElements: 120, textChars: 4000 }]);
-      const res = await apiPost<StepResponse>('/api/agent-step', { runId: `${item.domain}-${Date.now()}`, merchant, goal: 'hunt', step, maxSteps, history, snapshot });
+      const res = await stepWithRetry({ runId: `${item.domain}-${Date.now()}`, merchant, goal: 'hunt', step, maxSteps, history, snapshot });
       // Defense in depth: re-apply the guardrails locally too.
       const local = applyGuardrails({ decision: res.decision as Decision, snapshot, history, merchantDomain: item.domain, step, maxSteps, goal: 'hunt' });
       const decision: Decision = local.decision;
@@ -56,6 +56,7 @@ export async function huntOne(item: ScanItem, settings: Settings, onEvent: (e: H
         rec.ok = true; steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec });
         result.outcome = a.type === 'finish' ? (a.outcome || 'error') : 'no_offer_backed_out';
         result.reason = a.reason || null; result.details = a.details || null;
+        if (a.type === 'back_out' && /^ai_declined/.test(a.reason || '')) result.outcome = 'ai_declined';
         break;
       }
       if (a.type === 'click' || a.type === 'accept_offer') {
@@ -88,12 +89,23 @@ export async function huntOne(item: ScanItem, settings: Settings, onEvent: (e: H
       } else { result.termMonths = term; result.savingsUsd = result.details?.savingsUsd ?? null; }
     }
   } catch (e: any) {
-    result.outcome = 'error'; result.error = String(e?.message || e);
+    // Nothing is ever clicked without a decision: an outage or a refused API call ends the run here.
+    result.outcome = 'error'; result.error = String(e?.message || e); result.reason = 'brain unavailable';
   } finally {
     if (tabId !== undefined && !settings.watch) await closeTab(tabId);
   }
   onEvent({ type: 'done', item, result });
   return result;
+}
+
+/** The brain is remote; retry transient failures before giving up. No decision → no click. */
+async function stepWithRetry(body: unknown): Promise<StepResponse> {
+  let last: any;
+  for (let i = 0; i < 3; i++) {
+    try { return await apiPost<StepResponse>('/api/agent-step', body); }
+    catch (e: any) { last = e; if (/unauthorized|No API URL/i.test(String(e?.message))) break; if (i < 2) await sleep(1500 * (i + 1)); }
+  }
+  throw new Error(`brain unavailable: ${String(last?.message || last)}`);
 }
 
 async function settle(tabId: number) {

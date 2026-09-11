@@ -45,7 +45,7 @@ export async function runScan(settings: Settings, onProgress: (p: ScanProgress) 
 }
 
 async function probe(c: Candidate, useApi: boolean): Promise<ScanItem> {
-  const base: ScanItem = { id: c.domain, domain: c.domain, name: c.name, accountUrl: c.accountUrl, source: c.source, status: 'unknown', hasOffer: c.makesOffers === 'likely', monthlyPrice: null, planName: null, offerApplied: false, estSavings: 0, termMonths: c.playbook?.typicalTermMonths ?? 3, discountPct: c.playbook?.typicalDiscountPct ?? 0.5, confidence: c.confidence, before: null };
+  const base: ScanItem = { id: c.domain, domain: c.domain, name: c.name, accountUrl: c.accountUrl, source: c.source, status: 'unknown', hasOffer: c.makesOffers === 'likely', monthlyPrice: null, planName: null, offerApplied: false, estSavings: 0, termMonths: c.termMonths, discountPct: c.discountPct, confidence: c.confidence, before: null };
   let tabId: number | undefined;
   try {
     tabId = await openTab(c.accountUrl, false);

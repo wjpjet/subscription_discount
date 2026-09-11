@@ -9,7 +9,9 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
-    "zod": "^3.25.0"
+    "zod": "^3.25.0",
+    "zod-to-json-schema": "^3.24.0",
+    "stripe": "^17.0.0"
   },
   "devDependencies": {
     "puppeteer-core": "^24.0.0"

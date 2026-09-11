@@ -2,18 +2,17 @@
  * Discovery: which subscription services is this browser signed into?
  *  1. Every cookie the browser has (needs <all_urls>, requested at Scan time) → registrable domains,
  *     keeping only domains with session-like cookies. Cookie VALUES are never read past the name.
- *  2. Those domain NAMES go to the brain (/api/discover), which says which are subscription services
- *     and where their account page is. Curated playbooks win on conflicts.
+ *  2. Those domain NAMES go to the brain (/api/discover), which decides which are subscription
+ *     services, where the account page is, and what a typical loyalty offer looks like.
  *  3. Test mode: exactly one candidate — the configured test domain.
  */
 import { browser } from '#imports';
 import { etld1, isInfra, AUTH_COOKIE_RE } from '../../shared/domains.js';
-import { playbookForDomain, type Playbook } from '../../shared/playbooks.js';
 import { apiPost, apiAvailable } from './api';
 import type { Settings } from './settings';
 import type { DiscoveredService } from './types';
 
-export interface Candidate { domain: string; name: string; accountUrl: string; source: 'curated' | 'ai' | 'test'; typicalPrice: number | null; makesOffers: 'likely' | 'unlikely' | 'unknown'; confidence: number; playbook?: Playbook; notes?: string }
+export interface Candidate { domain: string; name: string; accountUrl: string; source: 'ai' | 'test'; typicalPrice: number | null; makesOffers: 'likely' | 'unlikely' | 'unknown'; discountPct: number; termMonths: number; confidence: number; notes?: string }
 export interface DomainFeatures { domain: string; cookies: number; httpOnly: number; authLike: number }
 
 export function originsFor(settings: Settings): string[] {
@@ -36,22 +35,18 @@ export async function signedInDomains(): Promise<DomainFeatures[]> {
 export async function discoverCandidates(settings: Settings, onProgress: (msg: string) => void): Promise<{ candidates: Candidate[]; domainsChecked: number }> {
   if (settings.testMode) {
     if (!settings.testDomain || !settings.testAccountUrl) throw new Error('Test mode needs a test domain and an account URL — open Settings (⚙).');
-    return { domainsChecked: 1, candidates: [{ domain: settings.testDomain, name: settings.testName || 'Test service', accountUrl: settings.testAccountUrl, source: 'test', typicalPrice: null, makesOffers: 'likely', confidence: 1 }] };
+    return { domainsChecked: 1, candidates: [{ domain: settings.testDomain, name: settings.testName || 'Test service', accountUrl: settings.testAccountUrl, source: 'test', typicalPrice: null, makesOffers: 'likely', discountPct: 0.5, termMonths: 3, confidence: 1 }] };
   }
+  if (!(await apiAvailable())) throw new Error('Scan needs the API URL — open Settings (⚙) and enter your Netlify site URL (or run `npm run api:dev` and use http://127.0.0.1:8787).');
   onProgress("Checking which sites you're signed into…");
   const feats = await signedInDomains();
   const domains = feats.map((f) => f.domain);
-  const out: Candidate[] = [];
-  if (await apiAvailable()) {
-    onProgress(`Asking the brain which of ${domains.length} sites are subscription services…`);
-    const res = await apiPost<{ services: DiscoveredService[] }>('/api/discover', { domains });
-    for (const s of res.services) {
-      if (!s.isSubscription) continue;
-      const pb = playbookForDomain(s.domain);
-      out.push({ domain: s.domain, name: s.name || s.domain, accountUrl: pb?.accountUrl || s.accountUrl || `https://www.${s.domain}/account`, source: pb ? 'curated' : 'ai', typicalPrice: pb?.typicalPrice ?? s.typicalMonthlyPriceUsd ?? null, makesOffers: pb ? (pb.hasInflowOffer ? 'likely' : 'unlikely') : s.makesRetentionOffers, confidence: pb ? pb.confidence : s.confidence, playbook: pb, notes: s.notes });
-    }
-  } else {
-    for (const d of domains) { const pb = playbookForDomain(d); if (pb) out.push({ domain: d, name: pb.name, accountUrl: pb.accountUrl, source: 'curated', typicalPrice: pb.typicalPrice, makesOffers: pb.hasInflowOffer ? 'likely' : 'unlikely', confidence: pb.confidence, playbook: pb }); }
-  }
-  return { candidates: out, domainsChecked: domains.length };
+  onProgress(`Asking the brain which of ${domains.length} sites are subscription services…`);
+  const res = await apiPost<{ services: DiscoveredService[] }>('/api/discover', { domains });
+  const candidates: Candidate[] = res.services.filter((s) => s.isSubscription).map((s) => ({
+    domain: s.domain, name: s.name || s.domain, accountUrl: s.accountUrl || `https://www.${s.domain}/account`, source: 'ai' as const,
+    typicalPrice: s.typicalMonthlyPriceUsd ?? null, makesOffers: s.makesRetentionOffers,
+    discountPct: s.typicalOfferDiscountPct ?? 0.5, termMonths: s.typicalOfferTermMonths ?? 3, confidence: s.confidence, notes: s.notes,
+  }));
+  return { candidates, domainsChecked: domains.length };
 }

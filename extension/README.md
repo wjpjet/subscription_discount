@@ -17,6 +17,7 @@ Click the toolbar icon to open the side panel.
 | **Client key** | Only if `WALKAWAY_CLIENT_KEY` is set on the backend. |
 | **Test mode** | Scan + Hunt touch **only** the test domain below. Use with the Streamly testbed (`testbed/`). |
 | **Watch mode** | Opens the hunt tab in front (screenshots/vision possible) and leaves it open afterwards. |
+| **Skip payment (testing)** | On by default. Off = real flow: Stripe Checkout with a $1 hold, then 10% of verified savings after the run (needs `STRIPE_SECRET_KEY` on the backend). |
 | **Max steps** | Step budget per service (default 25). |
 
 ## How discovery works (normal mode)
@@ -24,7 +25,7 @@ Click the toolbar icon to open the side panel.
 2. Every cookie → registrable domain; only domains with session-like cookies are kept; cookie
    **values are never read**, only names/flags.
 3. The domain **names** go to `/api/discover`, where the brain decides which are subscription
-   services and where the account page is. Curated playbooks (`shared/playbooks.js`) win on conflicts.
+   services, where the account page is, and what a typical loyalty offer looks like (no curated list — the model decides).
 4. Each candidate's account page opens briefly in a background tab; `/api/classify` reads plan/price.
 
 ## How the hunt works
@@ -32,6 +33,9 @@ Per service: open the account page (background tab) → snapshot the page (numbe
 elements + text) → `/api/agent-step` returns one action → guardrails (server **and** here) →
 execute → repeat. Terminal actions: `accept_offer` → `finish(discount_applied)`, or `back_out`.
 Then it re-reads the billing page to verify the new price. See `shared/guardrails.js`.
+
+If the AI declines a site (safety refusal), the run ends with **AI declined this site** — nothing is clicked. If the
+API is unreachable, the step is retried three times, then the run ends with an error — nothing is clicked.
 
 ## Tuning
 After a scan, **Show details** lists each service with status, source (curated/ai/test), price read,

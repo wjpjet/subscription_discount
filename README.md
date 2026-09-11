@@ -8,8 +8,8 @@ $0 if nothing is saved.
 |---|---|
 | `landing/` | Static landing page + waitlist. Netlify, auto-deploys from `main`. See `landing/README.md`. |
 | `extension/` | The Chrome extension (WXT + React): Scan (AI discovery of signed-in subscription services) and Hunt (AI-driven cancellation-flow navigation that accepts loyalty offers and can never finalize a cancel). See `extension/README.md`. |
-| `netlify/functions/` | The brain: `/api/discover`, `/api/classify`, `/api/agent-step` (Claude via structured outputs). Deployed with the landing site. Needs `ANTHROPIC_API_KEY`. |
-| `shared/` | Code used by both sides: `guardrails.js` (the safety rules), `page-scripts.js` (in-page snapshot/actions), `brain-mock.js` (rule-based test brain), `playbooks.js` (curated services). |
+| `netlify/functions/` | The brain (`/api/discover`, `/api/classify`, `/api/agent-step`) on **Anthropic or Gemini** (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY`, `AI_PROVIDER`), plus Stripe (`/api/checkout`, `/api/checkout-status`, `/api/settle`, `STRIPE_SECRET_KEY`). Deployed with the landing site. |
+| `shared/` | Code used by both sides: `guardrails.js` (the safety rules), `page-scripts.js` (in-page snapshot/actions), `brain-mock.js` (rule-based test brain). |
 | `testbed/` | "Streamly": a fake subscription service with a 3-step cancel flow + retention offer, for testing. Deploy as a second Netlify site (base dir `testbed`). |
 | `scripts/` | `dev-api.mjs` (run the functions locally), `e2e-testbed.mjs` (headless end-to-end: 3 scenarios). |
 | `IMPLEMENTATION_PLAN.md` | Architecture, decisions, phases, deploy steps. |

@@ -1,4 +1,4 @@
-# Walkaway — Implementation Plan (v8)
+# Walkaway — Implementation Plan (v9)
 
 > **Working name: "Walkaway"** (placeholder). *Every subscription has a walkaway price.* A Chrome
 > extension (+ thin backend) — **one button**: it finds the subscription services you're signed into,
@@ -6,7 +6,7 @@
 > discount, accepts it, and never actually cancels.** 10% of verified savings, $1 minimum, $0 otherwise.
 
 _Last updated: 2026-09-09 · Scope: personal / a few users · Autonomy: hands-off · One workflow, no A/B_
-_**v8:** AI discovery over **all** signed-in sites (not a fixed list); the **hunt engine** (Claude decides each step; deterministic guardrails server- and extension-side); a **Streamly testbed** with a 3-step cancel flow + retention offer; extension **test mode**; a **mock brain** + puppeteer e2e harness (3 scenarios pass). **v7:** $1 card-check hold + one charge; **one-time narrative** ("save ~$X on your upcoming renewals"); no accounts (the card is the spam gate); Phase 2 extension **built** in `extension/`. **v6:** hold (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
+_**v9:** curated playbooks **removed** (unverified guesses); brain runs on **Anthropic or Gemini** (`AI_PROVIDER`, per-call fallback); refusal/outage fallbacks; **Stripe checkout + settlement** functions built (skippable in test mode); cost estimates (§13). **v8:** AI discovery over **all** signed-in sites (not a fixed list); the **hunt engine** (Claude decides each step; deterministic guardrails server- and extension-side); a **Streamly testbed** with a 3-step cancel flow + retention offer; extension **test mode**; a **mock brain** + puppeteer e2e harness (3 scenarios pass). **v7:** $1 card-check hold + one charge; **one-time narrative** ("save ~$X on your upcoming renewals"); no accounts (the card is the spam gate); Phase 2 extension **built** in `extension/`. **v6:** hold (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
 
 ---
 
@@ -36,7 +36,9 @@ and retreats if not. "Confirm cancellation" is never a correct action.
 | **Workflow** | **One:** install → Scan → *services + total* → Checkout → Hunt → emailed summary | No A/B. Email/bank intake = later features. |
 | **Account** | **Not required.** Anonymous session by default; email collected at checkout; password optional | Supabase anonymous sign-in, upgradeable to a real account later. |
 | **Reveal rule** | Before paying: show **which** services make offers and the **total** estimated savings — **never per-service amounts** | Per-service before/after appears only in the post-run summary. |
-| **Detection** | **All signed-in sites → AI filter → account page** | Cookie *names/flags* (never values) → registrable domains with session-like cookies → domain **names** sent to `/api/discover` (Claude decides which are subscription services and where the account page is; curated playbooks win) → background-tab account page → `/api/classify`. No `history` permission. |
+| **Detection** | **All signed-in sites → AI filter → account page** | Cookie *names/flags* (never values) → registrable domains with session-like cookies → domain **names** sent to `/api/discover` (the model decides which are subscription services, where the account page is, and what a typical offer looks like — **no curated list**) → background-tab account page → `/api/classify`. No `history` permission. |
+| **AI provider** | `AI_PROVIDER=anthropic` (Claude Opus 5 default) or `gemini` (your key) or `gemini,anthropic` (fallback order) | Same prompts + schemas on both; a decline or outage on one provider falls through to the next. |
+| **When the AI gives up** | Refusal → `back_out`, reported as *AI declined this site*. Outage → 3 retries, then the run ends with an error. **No decision → no click.** | The mock brain is for tests only, never a fallback on real sites. |
 | **Privacy wording** | "Only the names of sites you're signed into are sent — never cookies, passwords, or history." | Landing page, FAQ, and panel all say this now. |
 | **Messaging rule** | Say *"the services you're currently signed into."* **Never** say "browsing history." | Accurate: we check sign-in state, never where they've been. |
 | **Navigation** | Extension drives the merchant pages itself in a **background tab**; user can watch | Side panel shows progress; "Watch" brings the tab forward. |
@@ -180,7 +182,7 @@ stubbed until Phase 3.
   blocked_needs_you | error`. **End-state verification** by re-reading the billing page.
 - **Exit:** one real subscription of yours → offer found and accepted (or correctly skipped).
 
-### Phase 4 — Checkout, settlement, email _(~1 week)_
+### Phase 4 — Checkout, settlement, email ← **checkout + settlement built** (`/api/checkout`, `/api/checkout-status`, `/api/settle`; needs `STRIPE_SECRET_KEY`); summary email still to do
 - Stripe Checkout: **$1 manual-capture hold + save card** (`setup_future_usage: off_session`);
   return page with optional password. Stripe Radar on.
 - Settlement: verify each win → cancel the $1 hold → **one** off-session charge `max($1, 10% × Σ
@@ -312,3 +314,22 @@ Playbooks skip known offenders; ambiguity backs out; not reducible to zero witho
    Scan → Get these discounts. Toggle the testbed's retention offer OFF and rerun to see the back-out.
 4. **Verify without spending:** `npm run e2e:testbed:mock` runs the three scenarios headlessly.
    With a key: `ANTHROPIC_API_KEY=… npm run e2e:testbed`.
+
+---
+
+## 13. Running cost (measured prompt sizes × list prices)
+
+Per hunt step the brain reads ≈ 2–4k tokens (numbered elements + page text + history + a ~700-token
+cached system prompt) and writes ≈ 0.2–1.5k (decision JSON + thinking). A typical service takes 5–10
+steps plus two classify calls; discovery is one call per ~60 domains.
+
+| Brain | $/1M in / out | ≈ per step | ≈ per service (8 steps + verify) | ≈ full run (scan 200 sites + 5 services) |
+|---|---|---|---|---|
+| Claude Opus 5 | $5 / $25 | $0.03–0.05 | $0.30–0.50 | **$2–3** |
+| Claude Sonnet 5 | $2 / $10 | $0.01–0.02 | $0.10–0.20 | ~$1 |
+| Claude Haiku 4.5 | $1 / $5 | ~$0.01 | ~$0.08 | ~$0.50 |
+| Gemini Flash (2.5-class list price ≈ $0.30 / $2.50) | | ~$0.002 | ~$0.02 | **~$0.10–0.20** |
+
+The fee floor ($1 per run) covers Flash/Haiku/Sonnet comfortably; Opus 5 needs a few wins per run to
+break even. Latency matters too: Netlify synchronous functions time out at ~10s, so keep effort at
+`medium` (default) or use a Flash/Sonnet-class model for `agent-step`.

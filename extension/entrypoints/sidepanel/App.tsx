@@ -4,10 +4,14 @@ import { DEFAULTS, getSettings, saveSettings, type Settings } from '@/src/settin
 import { originsFor } from '@/src/discovery';
 import { runScan, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
 import { huntAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
+import { startCheckout, waitForCheckout, settle } from '@/src/payment';
 import { focusTab } from '@/src/tabs';
 import { money, outcomeLabel } from '@/src/format';
+import type { CheckoutResult, Settlement } from '@/src/types';
 
-type Screen = 'idle' | 'scanning' | 'reveal' | 'hunting' | 'done' | 'settings' | 'error';
+type Screen = 'idle' | 'scanning' | 'reveal' | 'checkout' | 'hunting' | 'done' | 'settings' | 'error';
+interface HuntState { current: ScanItem | null; tabId: number | null; log: HuntStep[]; results: HuntResult[]; total: number; verifying: boolean; settlement: Settlement | null }
+const EMPTY_HUNT: HuntState = { current: null, tabId: null, log: [], results: [], total: 0, verifying: false, settlement: null };
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('idle');
@@ -15,20 +19,22 @@ export default function App() {
   const [progress, setProgress] = useState<ScanProgress | null>(null);
   const [result, setResult] = useState<ScanResult | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [hunt, setHunt] = useState<{ current: ScanItem | null; tabId: number | null; log: HuntStep[]; results: HuntResult[]; total: number; verifying: boolean }>({ current: null, tabId: null, log: [], results: [], total: 0, verifying: false });
+  const [checkoutMsg, setCheckoutMsg] = useState('');
+  const [hunt, setHunt] = useState<HuntState>(EMPTY_HUNT);
   const returnTo = useRef<Screen>('idle');
+  const cancelCheckout = useRef(false);
 
   useEffect(() => {
     (async () => {
       setSettings(await getSettings());
       const v = await browser.storage.local.get(['scanResult', 'huntResults', 'previewHunt']);
-      if (v.huntResults) { setHunt((h) => ({ ...h, results: v.huntResults as HuntResult[] })); }
+      if (v.huntResults) setHunt((h) => ({ ...h, results: v.huntResults as HuntResult[] }));
       if (v.scanResult) { setResult(v.scanResult as ScanResult); setScreen('reveal'); }
       // Design previews only (sidepanel.html?preview=…); never used in the real flow.
       const pv = new URLSearchParams(location.search).get('preview');
       if (pv === 'settings') setScreen('settings');
       else if (pv === 'done' && v.huntResults) setScreen('done');
-      else if (pv === 'hunting' && v.previewHunt) { setHunt(v.previewHunt as any); setScreen('hunting'); }
+      else if (pv === 'hunting' && v.previewHunt) { setHunt(v.previewHunt as HuntState); setScreen('hunting'); }
     })();
   }, []);
 
@@ -46,13 +52,25 @@ export default function App() {
       setResult(r); setScreen('reveal');
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
-  async function rescan() { await browser.storage.local.remove(['scanResult', 'huntResults']); setResult(null); setHunt({ current: null, tabId: null, log: [], results: [], total: 0, verifying: false }); await startScan(); }
+  async function rescan() { await browser.storage.local.remove(['scanResult', 'huntResults']); setResult(null); setHunt(EMPTY_HUNT); await startScan(); }
 
   async function startHunt() {
     if (!result) return;
     const targets = result.items.filter((i) => (i.status === 'signed_in' || i.status === 'unknown') && i.hasOffer);
     const s = await getSettings(); setSettings(s);
-    setHunt({ current: null, tabId: null, log: [], results: [], total: targets.length, verifying: false });
+    setError(null); setHunt({ ...EMPTY_HUNT, total: targets.length });
+
+    let pay: CheckoutResult | null = null;
+    if (!s.skipPayment) {
+      try {
+        cancelCheckout.current = false;
+        setScreen('checkout'); setCheckoutMsg('Opening secure checkout…');
+        const { sessionId, url } = await startCheckout(result.totalEstSavings);
+        await browser.tabs.create({ url, active: true });
+        pay = await waitForCheckout(sessionId, (m) => { if (cancelCheckout.current) throw new Error('Checkout cancelled — nothing was charged.'); setCheckoutMsg(m); });
+      } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); return; }
+    }
+
     setScreen('hunting');
     const onEvent = (e: HuntEvent) => {
       if (e.type === 'start') setHunt((h) => ({ ...h, current: e.item, tabId: e.tabId, log: [], verifying: false }));
@@ -63,11 +81,17 @@ export default function App() {
     try {
       const results = await huntAll(targets, s, onEvent);
       await browser.storage.local.set({ huntResults: results });
+      let settlement: Settlement | null = null;
+      if (pay) {
+        const verified = results.reduce((sum, r) => sum + (r.outcome === 'discount_applied' ? (r.savingsUsd || 0) : 0), 0);
+        settlement = await settle(pay.paymentIntentId, pay.customerId, verified).catch((e: any) => ({ holdReleased: false, feeCents: 0, charged: false, error: String(e?.message || e) }));
+      }
+      setHunt((h) => ({ ...h, settlement }));
       setScreen('done');
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
 
-  const right: Record<Screen, string> = { idle: settings.testMode ? 'Test mode' : 'No account needed', scanning: 'Scanning…', reveal: settings.testMode ? 'Test mode' : 'Scan complete', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
+  const right: Record<Screen, string> = { idle: settings.testMode ? 'Test mode' : 'No account needed', scanning: 'Scanning…', reveal: settings.testMode ? 'Test mode' : 'Scan complete', checkout: 'Checkout', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
   const openSettings = () => { returnTo.current = screen === 'settings' ? 'idle' : screen; setScreen('settings'); };
 
   return (
@@ -80,9 +104,10 @@ export default function App() {
       </div>
       {screen === 'idle' && <Idle onScan={startScan} error={error} testMode={settings.testMode} />}
       {screen === 'scanning' && <Scanning progress={progress} />}
-      {screen === 'reveal' && result && <Reveal result={result} onHunt={startHunt} onRescan={rescan} testMode={settings.testMode} />}
+      {screen === 'reveal' && result && <Reveal result={result} onHunt={startHunt} onRescan={rescan} testMode={settings.testMode} skipPayment={settings.skipPayment} />}
+      {screen === 'checkout' && <Checkout msg={checkoutMsg} onCancel={() => { cancelCheckout.current = true; }} />}
       {screen === 'hunting' && <Hunting hunt={hunt} watch={settings.watch} />}
-      {screen === 'done' && <Done results={hunt.results} onRescan={rescan} onAgain={startHunt} />}
+      {screen === 'done' && <Done hunt={hunt} onRescan={rescan} onAgain={startHunt} />}
       {screen === 'settings' && <SettingsScreen settings={settings} onSave={async (p) => { const n = await saveSettings(p); setSettings(n); setScreen(returnTo.current); }} onCancel={() => setScreen(returnTo.current)} />}
       {screen === 'error' && <ErrorScreen error={error} onRetry={startScan} onSettings={openSettings} />}
     </div>
@@ -115,7 +140,7 @@ function Scanning({ progress }: { progress: ScanProgress | null }) {
   );
 }
 
-function Reveal({ result, onHunt, onRescan, testMode }: { result: ScanResult; onHunt: () => void; onRescan: () => void; testMode: boolean }) {
+function Reveal({ result, onHunt, onRescan, testMode, skipPayment }: { result: ScanResult; onHunt: () => void; onRescan: () => void; testMode: boolean; skipPayment: boolean }) {
   const [details, setDetails] = useState(false);
   const found = result.items.filter((i) => i.status === 'signed_in' || i.status === 'unknown');
   const offers = found.filter((i) => i.hasOffer);
@@ -139,19 +164,31 @@ function Reveal({ result, onHunt, onRescan, testMode }: { result: ScanResult; on
       )}
       <div className="spacer" />
       <button className="btn" onClick={onHunt} disabled={offers.length === 0}>Get these discounts →</button>
-      <p className="fine">Runs in a background tab. It cannot press “confirm cancellation” — that action doesn't exist in its toolset.</p>
+      <p className="fine">{skipPayment ? 'Payment skipped (testing). ' : '$1 hold to check your card, released after · then 10% of verified savings, $0 if nothing. '}It cannot press “confirm cancellation” — that action doesn't exist in its toolset.</p>
       <p className="links"><a onClick={onRescan}>Rescan</a> · <a onClick={() => setDetails(!details)}>{details ? 'Hide' : 'Show'} details</a></p>
       {details && <DevTable items={result.items} />}
     </div>
   );
 }
 
-function Hunting({ hunt, watch }: { hunt: { current: ScanItem | null; tabId: number | null; log: HuntStep[]; results: HuntResult[]; total: number; verifying: boolean }; watch: boolean }) {
+function Checkout({ msg, onCancel }: { msg: string; onCancel: () => void }) {
+  return (
+    <div className="body">
+      <h1>One quick <em>card check.</em></h1>
+      <p>A secure Stripe checkout opened in a new tab. We place a $1 hold to make sure the card works — released after the run. Then one charge: 10% of what we actually save you. $0 if nothing.</p>
+      <p className="fine left">{msg}</p>
+      <div className="spacer" />
+      <button className="btn ghost" onClick={onCancel}>Cancel</button>
+    </div>
+  );
+}
+
+function Hunting({ hunt, watch }: { hunt: HuntState; watch: boolean }) {
   const done = hunt.results.length, total = hunt.total || 1;
   return (
     <div className="body">
       <div className="prog"><i style={{ width: `${Math.max(4, Math.round((done / total) * 100))}%` }} /></div>
-      <div className="count">{hunt.current ? `${hunt.verifying ? 'Verifying' : 'Hunting'} ${done + 1} of ${hunt.total} — ${hunt.current.name}` : 'Starting…'}</div>
+      <div className="count">{hunt.current ? `${hunt.verifying ? 'Verifying' : 'Hunting'} ${Math.min(done + 1, hunt.total)} of ${hunt.total} — ${hunt.current.name}` : 'Starting…'}</div>
       <div className="log">
         {hunt.log.slice(-10).map((s) => (
           <div className={`step ${s.action.type === 'back_out' ? 'warn' : s.action.type === 'finish' ? 'done' : 'now'}`} key={s.step}>
@@ -169,9 +206,11 @@ function Hunting({ hunt, watch }: { hunt: { current: ScanItem | null; tabId: num
   );
 }
 
-function Done({ results, onRescan, onAgain }: { results: HuntResult[]; onRescan: () => void; onAgain: () => void }) {
-  const total = results.reduce((s, r) => s + (r.savingsUsd || 0), 0);
+function Done({ hunt, onRescan, onAgain }: { hunt: HuntState; onRescan: () => void; onAgain: () => void }) {
+  const results = hunt.results;
+  const total = results.reduce((s, r) => s + (r.outcome === 'discount_applied' ? (r.savingsUsd || 0) : 0), 0);
   const wins = results.filter((r) => r.outcome === 'discount_applied').length;
+  const st = hunt.settlement;
   return (
     <div className="body">
       <h1>{wins ? <>You're paying <em>{money(total)} less</em> on your upcoming renewals.</> : <>No discounts <em>this time.</em></>}</h1>
@@ -183,7 +222,9 @@ function Done({ results, onRescan, onAgain }: { results: HuntResult[]; onRescan:
           </div>
         ))}
       </div>
-      <p className="sub">Nothing was cancelled. {wins ? 'Your fee: 10% of verified savings — checkout arrives in the next build.' : ''}</p>
+      <p className="sub">Nothing was cancelled.{' '}
+        {st ? (st.error ? `Payment: ${st.error}` : st.charged ? <>Charged {money(st.feeCents / 100)} (10% of verified savings). {st.receiptUrl && <a href={st.receiptUrl} target="_blank" rel="noreferrer">Receipt</a>}</> : st.needsAction ? 'Your bank needs to authenticate the fee — we will email you.' : 'No charge — the $1 hold was released.') : (wins ? 'Payment skipped (testing).' : '')}
+      </p>
       <div className="spacer" />
       <button className="btn ghost" onClick={onAgain}>Run again</button>
       <p className="links"><a onClick={onRescan}>Rescan</a></p>
@@ -203,6 +244,7 @@ function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; on
       <label>Test domain<input {...f('testDomain')} placeholder="streamly-testbed.netlify.app" /></label>
       <label>Test account URL<input {...f('testAccountUrl')} placeholder="https://streamly-testbed.netlify.app/settings/subscription" /></label>
       <label>Test service name<input {...f('testName')} /></label>
+      <label className="check"><input type="checkbox" checked={s.skipPayment} onChange={(e) => setS({ ...s, skipPayment: e.target.checked })} /> Skip payment (testing) — no $1 hold, no fee</label>
       <label className="check"><input type="checkbox" checked={s.watch} onChange={(e) => setS({ ...s, watch: e.target.checked })} /> Watch mode — open the hunt tab in front and leave it open</label>
       <label>Max steps per service<input type="number" min={5} max={40} {...f('maxSteps')} /></label>
       <div className="spacer" />
