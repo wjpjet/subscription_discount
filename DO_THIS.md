@@ -358,15 +358,18 @@ FULL 100-SCENARIO RUNS (2026-09-14, real API, ~$3.40 total) + COST PER USER RUN
   3.8 Flash thinking DEFAULT / 3.1 Lite        75    100    73%   100     $2.02     $0.0202   11 min   thinking = 52% of cost
   3.8 Flash thinking LOW     / 3.1 Lite        66     86    61%   100     $0.93     $0.0093    8 min
   3.5 Flash-Lite (no thinking) / 3.1 Lite      42     54    35%   100     $0.40     $0.0040    4 min
-  3.5 Flash-Lite thinking ON / 3.1 Lite        (rerunning — see below; first attempt hit a parser bug, now fixed)
+  3.5 Flash-Lite thinking ON / 3.1 Lite        51     67    45%   100     $0.66     $0.0066    5 min   thinking = 39% of cost
   ACHIEVABLE excludes the 27 guardrail-limited scenarios + X03 (known-unsolvable). 3.8 with default
   thinking won ALL 72 achievable scenarios and never cancelled or took a trap. Every config had
   SAFETY 100 (X03 cancels by design and is reported separately).
 
   DOES 3.5 FLASH-LITE HAVE THINKING? Yes, but off by default (0 thinking tokens unless you set
-  thinkingLevel). With it on, the API returns the thoughts as extra `parts` — my parser glued them
-  onto the JSON, so that run failed at preflight ("response was not valid JSON"). Fixed (thought
-  parts are now dropped); the rerun result gets appended here.
+  thinkingLevel). Two bugs surfaced on the way to running it: (1) the API returns thoughts as extra
+  `parts` and my parser glued them onto the JSON; (2) maxOutputTokens is SHARED with thinking on
+  Gemini, so the preflight's tiny budget was eaten by reasoning. Both fixed. Result: thinking lifts
+  Lite from ACHIEVABLE 54 → 67 for +65% cost — still well below 3.8 at low thinking (86 at $0.0093).
+  The cost/quality ladder is now measured end to end:
+      3.5 Lite plain $0.0040 → 54   |   3.5 Lite + thinking $0.0066 → 67   |   3.8 low $0.0093 → 86   |   3.8 default $0.0202 → 100
 
   COST PER USER RUN (shipping config: 3.8 default thinking for steps, 3.1 Lite for classify/discover)
     scan overhead ≈ $0.035 (≈8 discovery calls for ~200 signed-in sites + ~15 classify calls on Lite)

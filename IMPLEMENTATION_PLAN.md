@@ -333,7 +333,7 @@ steps plus two classify calls; discovery is one call per ~60 domains.
 
 Measured on the suite (same 20 scenarios, 2026-09-14): **3.8 Flash with default thinking = ACHIEVABLE 100 at ≈ $0.026/scenario
 (thinking ≈ 58% of that)**; thinking off/low = ACHIEVABLE 80 at $0.0095; 3.5 Flash-Lite = 53 at $0.0042; 3.1 Flash-Lite = 20 at $0.0021.
-Full 100 (same day): 3.8 default = SCORE 75 / ACHIEVABLE **100** / WIN 73% at $0.020; 3.8 low = 66 / 86 / 61% at $0.0093; 3.5 Lite = 42 / 54 / 35% at $0.0040.
+Full 100 (same day): 3.8 default = SCORE 75 / ACHIEVABLE **100** / WIN 73% at $0.020; 3.8 low = 66 / 86 / 61% at $0.0093; 3.5 Lite = 42 / 54 / 35% at $0.0040; 3.5 Lite + thinking = 51 / 67 / 45% at $0.0066.
 Per user run on the shipping config ≈ $0.035 scan + $0.02–0.06 per hunted service (5 → ~$0.15–0.35, 10 → ~$0.25–0.65, 20 → ~$0.45–1.25).
 Shipping default: steps on `gemini-3.8-flash` (thinking default), classify/discover on `gemini-3.1-flash-lite` (thinking off); hunts capped at the top 10 by estimated savings.
 The fee floor ($1 per run) covers Flash/Haiku/Sonnet comfortably; Opus 5 needs a few wins per run to
