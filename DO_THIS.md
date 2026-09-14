@@ -350,3 +350,35 @@ TWO BUGS FIXED IN THIS PASS
   2. The backend's per-IP rate limiter (90/min) was tripping in the suite because a whole run looks
      like one IP — those "rate limited" errors were self-inflicted. Now 300/min by default
      (WALKAWAY_RATE_LIMIT), disabled for in-process runs.
+
+
+FULL 100-SCENARIO RUNS (2026-09-14, real API, ~$3.40 total) + COST PER USER RUN
+==============================================================================
+  Config (steps / classify+discover)         SCORE  ACHIEV  WIN   SAFETY  cost/100  per scen  time
+  3.8 Flash thinking DEFAULT / 3.1 Lite        75    100    73%   100     $2.02     $0.0202   11 min   thinking = 52% of cost
+  3.8 Flash thinking LOW     / 3.1 Lite        66     86    61%   100     $0.93     $0.0093    8 min
+  3.5 Flash-Lite (no thinking) / 3.1 Lite      42     54    35%   100     $0.40     $0.0040    4 min
+  3.5 Flash-Lite thinking ON / 3.1 Lite        (rerunning — see below; first attempt hit a parser bug, now fixed)
+  ACHIEVABLE excludes the 27 guardrail-limited scenarios + X03 (known-unsolvable). 3.8 with default
+  thinking won ALL 72 achievable scenarios and never cancelled or took a trap. Every config had
+  SAFETY 100 (X03 cancels by design and is reported separately).
+
+  DOES 3.5 FLASH-LITE HAVE THINKING? Yes, but off by default (0 thinking tokens unless you set
+  thinkingLevel). With it on, the API returns the thoughts as extra `parts` — my parser glued them
+  onto the JSON, so that run failed at preflight ("response was not valid JSON"). Fixed (thought
+  parts are now dropped); the rerun result gets appended here.
+
+  COST PER USER RUN (shipping config: 3.8 default thinking for steps, 3.1 Lite for classify/discover)
+    scan overhead ≈ $0.035 (≈8 discovery calls for ~200 signed-in sites + ~15 classify calls on Lite)
+    per hunted service ≈ $0.020 (testbed pages; real sites have bigger DOMs → budget $0.04–0.06)
+      5 services   ≈ $0.14   (real-site budget ≈ $0.25–0.35)
+     10 services   ≈ $0.24   (≈ $0.45–0.65)
+     20 services   ≈ $0.44   (≈ $0.85–1.25)
+    Same runs on 3.8 LOW: $0.08 / $0.13 / $0.22.   On 3.5 Lite: $0.055 / $0.075 / $0.115.
+    After 2027-01-01 (3.8 price doubles): roughly 2× the 3.8 numbers.
+
+  WHAT THIS MEANS: the fee is max($1, 10% of verified savings); a typical win is $30–100 of savings
+  over the offer term → $3–10 per win. At a 73% win rate on offer-making services, a 10-service run
+  costs ~$0.25–0.65 and returns tens of dollars. Cheaper models cost 30–40 points of win rate,
+  which is the money. Use 3.8 with default thinking; cap hunts at the top 10 by estimated savings
+  (extension setting "Max services per run", default 10) — that is the cost cap.

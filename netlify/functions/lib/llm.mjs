@@ -94,7 +94,8 @@ async function callGemini({ system, user, schema, maxTokens, model, thinking }) 
   const cand = j.candidates && j.candidates[0];
   if (!cand) throw new AIDeclined(`gemini declined (${(j.promptFeedback && j.promptFeedback.blockReason) || 'no candidates'})`);
   if (cand.finishReason && !['STOP', 'MAX_TOKENS'].includes(cand.finishReason)) throw new AIDeclined(`gemini declined (${cand.finishReason})`);
-  const text = ((cand.content && cand.content.parts) || []).map((p) => p.text || '').join('');
+  // Thinking models may return their thoughts as extra parts (flagged `thought: true`) — keep only the answer.
+  const text = ((cand.content && cand.content.parts) || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
   let parsed; try { parsed = JSON.parse(text); } catch { throw new Error('gemini: response was not valid JSON'); }
   const v = schema.safeParse(parsed);
   if (!v.success) throw new Error('gemini: schema mismatch: ' + v.error.issues.slice(0, 3).map((i) => i.path.join('.') + ' ' + i.message).join('; '));
