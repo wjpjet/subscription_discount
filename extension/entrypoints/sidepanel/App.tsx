@@ -56,8 +56,9 @@ export default function App() {
 
   async function startHunt() {
     if (!result) return;
-    const targets = result.items.filter((i) => (i.status === 'signed_in' || i.status === 'unknown') && i.hasOffer);
     const s = await getSettings(); setSettings(s);
+    // Items are already sorted by estimated savings; hunt the top N (people rarely have more than 5–10 live subscriptions).
+    const targets = result.items.filter((i) => (i.status === 'signed_in' || i.status === 'unknown') && i.hasOffer).slice(0, Math.max(1, s.maxHunts || 10));
     setError(null); setHunt({ ...EMPTY_HUNT, total: targets.length });
 
     let pay: CheckoutResult | null = null;
@@ -234,7 +235,7 @@ function Done({ hunt, onRescan, onAgain }: { hunt: HuntState; onRescan: () => vo
 
 function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; onSave: (p: Partial<Settings>) => void; onCancel: () => void }) {
   const [s, setS] = useState<Settings>(settings);
-  const f = (k: keyof Settings) => ({ value: String(s[k] ?? ''), onChange: (e: any) => setS({ ...s, [k]: k === 'maxSteps' ? Number(e.target.value) : e.target.value }) });
+  const f = (k: keyof Settings) => ({ value: String(s[k] ?? ''), onChange: (e: any) => setS({ ...s, [k]: (k === 'maxSteps' || k === 'maxHunts') ? Number(e.target.value) : e.target.value }) });
   return (
     <div className="body form">
       <h1>Settings</h1>
@@ -246,6 +247,7 @@ function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; on
       <label>Test service name<input {...f('testName')} /></label>
       <label className="check"><input type="checkbox" checked={s.skipPayment} onChange={(e) => setS({ ...s, skipPayment: e.target.checked })} /> Skip payment (testing) — no $1 hold, no fee</label>
       <label className="check"><input type="checkbox" checked={s.watch} onChange={(e) => setS({ ...s, watch: e.target.checked })} /> Watch mode — open the hunt tab in front and leave it open</label>
+      <label>Max services per run <span className="hint">highest estimated savings first</span><input type="number" min={1} max={30} {...f('maxHunts')} /></label>
       <label>Max steps per service<input type="number" min={5} max={40} {...f('maxSteps')} /></label>
       <div className="spacer" />
       <button className="btn" onClick={() => onSave(s)}>Save</button>
