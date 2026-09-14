@@ -19,7 +19,12 @@ export function snapshotPage(opts) {
   var old = document.querySelectorAll('[data-wa-id]');
   for (var k = 0; k < old.length; k++) old[k].removeAttribute('data-wa-id');
   var sel = 'a[href],button,input,select,textarea,[role="button"],[role="link"],[role="menuitem"],[role="tab"],[role="radio"],[role="checkbox"],[onclick],summary';
-  var nodes = document.querySelectorAll(sel);
+  // Collect from the document AND every open shadow root (web components), in document order.
+  var nodes = [], shadowRoots = [];
+  (function collect(root) {
+    var found = root.querySelectorAll(sel); for (var a = 0; a < found.length; a++) nodes.push(found[a]);
+    var all = root.querySelectorAll('*'); for (var b = 0; b < all.length; b++) { if (all[b].shadowRoot) { shadowRoots.push(all[b].shadowRoot); collect(all[b].shadowRoot); } }
+  })(document);
   var els = [], id = 0, vh = window.innerHeight;
   for (var i = 0; i < nodes.length && els.length < maxEl; i++) {
     var el = nodes[i];
@@ -50,6 +55,7 @@ export function snapshotPage(opts) {
   if (body) {
     var kids = body.children, parts = [];
     for (var c = 0; c < kids.length; c++) { if (!kids[c].hasAttribute('data-wa-ignore')) parts.push(kids[c].innerText || ''); }
+    for (var sr = 0; sr < shadowRoots.length; sr++) { var kids2 = shadowRoots[sr].children; for (var q = 0; q < kids2.length; q++) parts.push(kids2[q].innerText || ''); }
     text = parts.join('\n').replace(/[ \t]+/g, ' ').replace(/\n{2,}/g, '\n').trim();
   }
   var hs = document.querySelectorAll('h1,h2,h3');
@@ -62,16 +68,24 @@ export function snapshotPage(opts) {
   return { url: location.href, title: document.title, headings: heads, text: text.slice(0, textChars), textLength: text.length, hasPassword: !!document.querySelector('input[type="password"]'), prices: prices, elements: els, scrollY: window.scrollY, scrollHeight: document.documentElement.scrollHeight, viewportHeight: vh };
 }
 
+/** Find a tagged element, looking through open shadow roots too. Self-contained (serialized). */
+function waFind(id) {
+  var s = '[data-wa-id="' + id + '"]';
+  var el = document.querySelector(s); if (el) return el;
+  var found = null;
+  (function walk(root) { if (found) return; var all = root.querySelectorAll('*'); for (var i = 0; i < all.length && !found; i++) { if (all[i].shadowRoot) { found = all[i].shadowRoot.querySelector(s); if (!found) walk(all[i].shadowRoot); } } })(document);
+  return found;
+}
 /** Read the CURRENT text of a tagged element right before acting (guards against swapped buttons). */
 export function readElement(id) {
-  var el = document.querySelector('[data-wa-id="' + id + '"]');
+  var el = (function (id) { var s = '[data-wa-id="' + id + '"]'; var e = document.querySelector(s); if (e) return e; var f = null; (function walk(root) { if (f) return; var all = root.querySelectorAll('*'); for (var i = 0; i < all.length && !f; i++) { if (all[i].shadowRoot) { f = all[i].shadowRoot.querySelector(s); if (!f) walk(all[i].shadowRoot); } } })(document); return f; })(id);
   if (!el) return null;
   return { text: (el.innerText || el.value || el.getAttribute('aria-label') || el.getAttribute('title') || '').replace(/\s+/g, ' ').trim().slice(0, 160), type: el.type || '', name: el.name || '', tag: el.tagName.toLowerCase(), disabled: !!el.disabled };
 }
 
 /** Perform one in-page action. Returns {ok, note}. */
 export function performAction(action) {
-  function byId(id) { return document.querySelector('[data-wa-id="' + id + '"]'); }
+  function byId(id) { var s = '[data-wa-id="' + id + '"]'; var e = document.querySelector(s); if (e) return e; var f = null; (function walk(root) { if (f) return; var all = root.querySelectorAll('*'); for (var i = 0; i < all.length && !f; i++) { if (all[i].shadowRoot) { f = all[i].shadowRoot.querySelector(s); if (!f) walk(all[i].shadowRoot); } } })(document); return f; }
   function fire(el, type) { el.dispatchEvent(new Event(type, { bubbles: true })); }
   try {
     if (action.type === 'click' || action.type === 'accept_offer') {

@@ -71,9 +71,10 @@ async function callGemini({ system, user, schema, maxTokens, model, thinking }) 
   const post = (gc) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: gc }) });
   let res = await post(generationConfig);
   if (res.status === 400 && tc) {
+    // Any 400 while a thinking setting is present → retry once without it (models differ on thinkingBudget vs thinkingLevel).
     const txt = await res.text();
-    if (/think/i.test(txt)) { console.warn(`[gemini] ${model} rejected thinkingConfig ${JSON.stringify(tc)} — retrying without it`); const { thinkingConfig, ...rest } = generationConfig; res = await post(rest); }
-    else { const e = new Error(`gemini 400: ${txt.slice(0, 300)}`); e.status = 400; throw e; }
+    console.warn(`[gemini] ${model} returned 400 with thinkingConfig ${JSON.stringify(tc)} (${txt.slice(0, 160).replace(/\s+/g, ' ')}) — retrying without it`);
+    const { thinkingConfig, ...rest } = generationConfig; res = await post(rest);
   }
   if (!res.ok) { const e = new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 300)}`); e.status = res.status; throw e; }
   const j = await res.json();

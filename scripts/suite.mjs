@@ -7,6 +7,7 @@ import fs from 'node:fs'; import path from 'node:path'; import vm from 'node:vm'
 import puppeteer from 'puppeteer-core';
 import { hunt, classifyPage, sleep } from './lib/driver.mjs';
 import { serveTestbed } from './lib/testbed-server.mjs';
+import { preflight } from './lib/preflight.mjs';
 import { isFinalizeText } from '../shared/guardrails.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
@@ -19,9 +20,10 @@ if (args['fast-model']) process.env.GEMINI_MODEL_FAST = String(args['fast-model'
 if (args.thinking) process.env.GEMINI_THINKING_STEP = String(args.thinking);
 if (args['fast-thinking']) process.env.GEMINI_THINKING_FAST = String(args['fast-thinking']);
 if (args.provider) process.env.AI_PROVIDER = String(args.provider);
-// Assumed list prices per 1M tokens (input, output). Thinking tokens bill as output. Override with PRICE_IN / PRICE_OUT.
-const PRICES = { 'gemini-3.8-flash': [0.30, 2.50], 'gemini-3.5-flash-lite': [0.10, 0.40], 'gemini-2.5-flash': [0.30, 2.50], 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10], 'claude-haiku-4-5': [1, 5] };
-function price(model) { if (process.env.PRICE_IN && process.env.PRICE_OUT) return [Number(process.env.PRICE_IN), Number(process.env.PRICE_OUT), 'PRICE_IN/PRICE_OUT']; const k = Object.keys(PRICES).find((m) => String(model || '').startsWith(m)); return k ? [...PRICES[k], 'assumed ' + k] : [0.30, 2.50, 'assumed default']; }
+// Prices per 1M tokens (input, output; thinking bills as output). Source: ai.google.dev/gemini-api/docs/pricing fetched 2026-09-14
+// (3.8/3.7 Flash are introductory through 2026-12-31, then $1.50/$7.50) and Anthropic list prices. Override with PRICE_IN / PRICE_OUT.
+const PRICES = { 'gemini-3.8-flash': [0.75, 3.75], 'gemini-3.7-flash': [0.75, 3.75], 'gemini-3.5-flash-lite': [0.30, 2.50], 'gemini-3.5-flash': [1.50, 9.00], 'gemini-3.1-flash-lite': [0.25, 1.50], 'gemini-2.5-flash-lite': [0.10, 0.40], 'gemini-2.5-flash': [0.30, 2.50], 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10], 'claude-haiku-4-5': [1, 5] };
+function price(model) { if (process.env.PRICE_IN && process.env.PRICE_OUT) return [Number(process.env.PRICE_IN), Number(process.env.PRICE_OUT), 'PRICE_IN/PRICE_OUT']; const k = Object.keys(PRICES).find((m) => String(model || '').startsWith(m)); return k ? [...PRICES[k], 'list price for ' + k + ' as of 2026-09-14'] : [0.75, 3.75, 'unknown model — assumed 3.8 Flash rate']; }
 
 const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'testbed/scenarios.js'), 'utf8'), ctx);
 let scenarios = ctx.window.WALKAWAY_SCENARIOS;
@@ -63,6 +65,9 @@ async function runOne(browser, s) {
   return rec;
 }
 
+let pf;
+try { pf = await preflight(); } catch (e) { console.error('\n' + e.message + '\n'); process.exit(3); }
+console.log(pf.brain === 'mock' ? 'Preflight: mock brain (no API calls)' : `Preflight OK: ${pf.provider} ${pf.model} (fast: ${pf.fastModel}, thinking ${pf.thinking}) · ${pf.ms}ms for two tiny calls`);
 const srv = await serveTestbed(PORT);
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu'] });
 const results = []; let i = 0; const t0 = Date.now();
@@ -71,7 +76,7 @@ await Promise.all(Array.from({ length: Math.min(CONC, scenarios.length) }, async
   while (i < scenarios.length) {
     const s = scenarios[i++]; const r = await runOne(browser, s); results.push(r);
     const tag = { PASS: '✅', MISS: '➖', CANCELLED: '❌', TRAP: '❌', ERROR: '💥' }[r.result];
-    console.log(`${tag} ${r.result.padEnd(9)} ${r.id}  ${r.difficulty.padEnd(6)} expect=${r.expected.padEnd(20)} got=${String(r.outcome).padEnd(20)} steps=${String(r.steps ?? '-').padStart(2)}  ${r.name}${r.guardrailLimited ? '  [guardrail-limited]' : ''}`);
+    console.log(`${tag} ${r.result.padEnd(9)} ${r.id}  ${r.difficulty.padEnd(6)} expect=${r.expected.padEnd(20)} got=${String(r.outcome).padEnd(20)} steps=${String(r.steps ?? '-').padStart(2)}  ${r.name}${r.guardrailLimited ? '  [guardrail-limited]' : ''}${r.result === 'ERROR' ? `\n     ↳ ${r.error}` : ''}`);
     if (r.result === 'CANCELLED' || r.result === 'TRAP' || (args.verbose && r.result !== 'PASS')) console.log((r.log || []).join('\n'));
   }
 }));
@@ -102,6 +107,8 @@ if (tot.calls) {
 }
 if (unsafe.length) console.log('\nUNSAFE RUNS:\n' + unsafe.map((r) => `  ${r.id} ${r.result} — ${r.name}`).join('\n'));
 if (knownUnsafe.length) console.log('\nKNOWN-LIMITATION UNSAFE (excluded from SAFETY; documented in the plan):\n' + knownUnsafe.map((r) => `  ${r.id} ${r.result} — ${r.note}`).join('\n'));
+const errors = results.filter((r) => r.result === 'ERROR');
+if (errors.length) { console.log(`\nERRORS: ${errors.length} — first message: ${errors[0].error}`); if (errors.length === n) console.log('Every scenario errored: the brain never answered. Fix the model/key (see the message above; `npm run models` lists valid ids) and rerun.'); }
 const misses = results.filter((r) => r.result === 'MISS');
 if (misses.length) console.log(`\nMISSES (safe but not as expected): ${misses.map((r) => r.id).join(', ')}`);
 console.log(`\n${Math.round((Date.now() - t0) / 1000)}s total`);

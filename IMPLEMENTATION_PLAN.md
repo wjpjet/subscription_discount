@@ -323,13 +323,15 @@ Per hunt step the brain reads ≈ 2–4k tokens (numbered elements + page text +
 cached system prompt) and writes ≈ 0.2–1.5k (decision JSON + thinking). A typical service takes 5–10
 steps plus two classify calls; discovery is one call per ~60 domains.
 
-| Brain | $/1M in / out | ≈ per step | ≈ per service (8 steps + verify) | ≈ full run (scan 200 sites + 5 services) |
+| Brain | $/1M in / out (verified 2026-09-14) | ≈ per step | ≈ per service (8 steps + verify) | ≈ full run (scan 200 sites + 5 services) |
 |---|---|---|---|---|
 | Claude Opus 5 | $5 / $25 | $0.03–0.05 | $0.30–0.50 | **$2–3** |
 | Claude Sonnet 5 | $2 / $10 | $0.01–0.02 | $0.10–0.20 | ~$1 |
-| Claude Haiku 4.5 | $1 / $5 | ~$0.01 | ~$0.08 | ~$0.50 |
-| Gemini Flash (2.5-class list price ≈ $0.30 / $2.50) | | ~$0.002 | ~$0.02 | **~$0.10–0.20** |
+| Gemini 3.8 Flash (intro price to 2026-12-31; then $1.50/$7.50) | $0.75 / $3.75 | ~$0.003 | **~$0.025 (measured)** | ~$0.20–0.30 |
+| Gemini 3.5 Flash-Lite | $0.30 / $2.50 | ~$0.0012 | ~$0.01 | ~$0.10 |
+| Gemini 3.1 Flash-Lite | $0.25 / $1.50 | ~$0.001 | ~$0.008 | ~$0.07 |
 
+Measured on the suite: 3.8 Flash ≈ $0.025 per scenario (≈ per service in production) with default thinking.
 The fee floor ($1 per run) covers Flash/Haiku/Sonnet comfortably; Opus 5 needs a few wins per run to
 break even. Latency matters too: Netlify synchronous functions time out at ~10s, so keep effort at
 `medium` (default) or use a Flash/Sonnet-class model for `agent-step`.

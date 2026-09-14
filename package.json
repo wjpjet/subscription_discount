@@ -9,7 +9,8 @@
     "suite": "node --env-file-if-exists=.env scripts/suite.mjs",
     "suite:mock": "WALKAWAY_BRAIN=mock node scripts/suite.mjs",
     "test:stripe": "node --env-file-if-exists=.env scripts/test-stripe.mjs",
-    "package:extension": "node scripts/package-extension.mjs"
+    "package:extension": "node scripts/package-extension.mjs",
+    "models": "node --env-file-if-exists=.env scripts/list-models.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

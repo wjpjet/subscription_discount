@@ -267,3 +267,47 @@ SUITE RUN #1 WITH GEMINI 3.8 FLASH (2026-09-14) — ANALYSIS
 
   Once you've picked: put the same GEMINI_MODEL / GEMINI_MODEL_FAST / GEMINI_THINKING_* values in
   Netlify's environment variables and trigger a deploy.
+
+
+PRICING — VERIFIED (2026-09-14), NOT ASSUMED
+============================================
+  The earlier cost table was my assumption; the suite's COST line is now token counts (exact, from
+  the API) × these list prices from Google's pricing page and Anthropic's:
+      gemini-3.8-flash       $0.75 in / $3.75 out   (intro through 2026-12-31; $1.50 / $7.50 after)
+      gemini-3.5-flash       $1.50 / $9.00
+      gemini-3.5-flash-lite  $0.30 / $2.50
+      gemini-3.1-flash-lite  $0.25 / $1.50          <- cheapest stable Flash-Lite
+      gemini-2.5-flash       $0.30 / $2.50
+  Thinking tokens bill at the output rate on every Gemini model. 3.8 Flash reasons "at medium" by
+  default. The suite prints the thinking share, so a run tells you whether --thinking=off pays.
+
+  The $0.50 / 20-scenario run (~$0.025 each) is consistent with these rates: ~9 calls per
+  scenario × ~3k input tokens × $0.75/M ≈ $0.02 before any thinking. So INPUT tokens are the
+  bigger lever, i.e. a cheaper-per-token model helps more than turning thinking off.
+
+  Model ids confirmed on Google's models page: gemini-3.8-flash, gemini-3.5-flash-lite,
+  gemini-3.1-flash-lite, gemini-2.5-flash-lite (all stable).
+
+WHY THE flash-lite RUN ERRORED, AND WHAT TO RUN
+-----------------------------------------------
+  All 20 failed in 17s = the API refused every call before navigation. The suite hid the
+  message; now it (1) makes a preflight call and stops with the exact API error, (2) prints the
+  error on each row. Likely causes: the thinking setting (fixed: any 400 now retries without it)
+  or a model/tier mismatch. Do this:
+      npm run models                                                   # exact ids your key can use
+      npm run suite -- --limit=1 --model=gemini-3.5-flash-lite         # preflight prints the real error
+  then paste the preflight line if it still fails.
+
+  Recommended A/B (cheapest first):
+      npm run suite -- --limit=20 --fast-model=gemini-3.1-flash-lite                    # cheap classify/discover
+      npm run suite -- --limit=20 --model=gemini-3.1-flash-lite --fast-model=gemini-3.1-flash-lite
+      npm run suite -- --limit=20 --model=gemini-3.5-flash-lite --fast-model=gemini-3.1-flash-lite
+      npm run suite -- --limit=20 --thinking=low                                        # 3.8 with less reasoning
+
+JAVASCRIPT-RENDERED PAGES
+-------------------------
+  Yes: the extension's content script runs inside the live tab AFTER the site's JavaScript has run,
+  so it reads the rendered DOM (React/Vue/Angular included), not the HTML source. It now also looks
+  inside open shadow roots (web components). Limits: cross-origin iframes (a hosted billing widget
+  from another domain) and canvas-drawn UIs are invisible to text snapshots — those would need the
+  screenshot/vision path, which is a later addition.

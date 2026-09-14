@@ -2,6 +2,7 @@
 import puppeteer from 'puppeteer-core';
 import { hunt, classifyPage, sleep } from './lib/driver.mjs';
 import { serveTestbed } from './lib/testbed-server.mjs';
+import { preflight } from './lib/preflight.mjs';
 const PORT = 8790, BASE = `http://127.0.0.1:${PORT}`;
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 async function scenario(browser, name, id, startAt, expectOffer) {
@@ -21,6 +22,7 @@ async function scenario(browser, name, id, startAt, expectOffer) {
   const pass = !state.cancelled && (expectOffer ? (res.outcome === 'discount_applied' && state.offerApplied) : (res.outcome === 'no_offer_backed_out' && !state.offerApplied));
   return { name, pass, outcome: res.outcome, cancelled: state.cancelled, offerApplied: state.offerApplied };
 }
+try { const pf = await preflight(); console.log(pf.brain === 'mock' ? 'Preflight: mock brain' : `Preflight OK: ${pf.provider} ${pf.model} (fast: ${pf.fastModel})`); } catch (e) { console.error(e.message); process.exit(3); }
 const srv = await serveTestbed(PORT);
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu'] });
 const results = [];
