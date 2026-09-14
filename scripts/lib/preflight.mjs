@@ -14,8 +14,8 @@ export async function preflight() {
   const schema = z.object({ ok: z.boolean() });
   const t0 = Date.now();
   try {
-    const main = await llm.generateStructured({ system: 'You answer with JSON only.', user: 'Return {"ok": true}.', schema, maxTokens: 200, tier: 'main' });
-    const fast = await llm.generateStructured({ system: 'You answer with JSON only.', user: 'Return {"ok": true}.', schema, maxTokens: 200, tier: 'fast' });
+    const main = await llm.generateStructured({ system: 'You answer with JSON only.', user: 'Return {"ok": true}.', schema, maxTokens: 2000, tier: 'main' });   // thinking shares this budget
+    const fast = await llm.generateStructured({ system: 'You answer with JSON only.', user: 'Return {"ok": true}.', schema, maxTokens: 2000, tier: 'fast' });
     return { brain: 'llm', provider: main.provider, model: main.model, fastModel: fast.model, ms: Date.now() - t0, thinking: `${llm.THINKING_STEP}/${llm.THINKING_FAST}` };
   } catch (e) {
     const msg = String((e && e.message) || e);

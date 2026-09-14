@@ -96,7 +96,11 @@ async function callGemini({ system, user, schema, maxTokens, model, thinking }) 
   if (cand.finishReason && !['STOP', 'MAX_TOKENS'].includes(cand.finishReason)) throw new AIDeclined(`gemini declined (${cand.finishReason})`);
   // Thinking models may return their thoughts as extra parts (flagged `thought: true`) — keep only the answer.
   const text = ((cand.content && cand.content.parts) || []).filter((p) => !p.thought).map((p) => p.text || '').join('');
-  let parsed; try { parsed = JSON.parse(text); } catch { throw new Error('gemini: response was not valid JSON'); }
+  let parsed; try { parsed = JSON.parse(text); } catch {
+    const u0 = j.usageMetadata || {};
+    if (cand.finishReason === 'MAX_TOKENS' || !text.trim()) throw new Error(`gemini: output truncated before the JSON (finishReason=${cand.finishReason}, thinking tokens=${u0.thoughtsTokenCount || 0}, maxOutputTokens=${maxTokens}) — raise maxTokens or lower thinking`);
+    throw new Error('gemini: response was not valid JSON: ' + text.slice(0, 120).replace(/\s+/g, ' '));
+  }
   const v = schema.safeParse(parsed);
   if (!v.success) throw new Error('gemini: schema mismatch: ' + v.error.issues.slice(0, 3).map((i) => i.path.join('.') + ' ' + i.message).join('; '));
   const u = j.usageMetadata || {};
