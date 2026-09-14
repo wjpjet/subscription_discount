@@ -10,12 +10,13 @@ async function scenario(browser, name, id, startAt, expectOffer) {
   await page.goto(`${BASE}/login`, { waitUntil: 'load' }); await page.type('#email', 'e2e@example.com'); await page.type('#password', 'walkaway');
   await Promise.all([page.waitForNavigation({ timeout: 5000 }).catch(() => {}), page.click('button[type=submit]')]);
   await page.goto(`${BASE}/?scenario=${id}`, { waitUntil: 'load' }); await sleep(150);
-  const before = await classifyPage(page, merchant);
+  const acc = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
+  const before = await classifyPage(page, merchant, acc);
   await page.goto(`${BASE}${startAt}`, { waitUntil: 'load' });
-  const res = await hunt(page, merchant);
-  const after = await classifyPage(page, merchant);
+  const res = await hunt(page, merchant, 20, acc);
+  const after = await classifyPage(page, merchant, acc);
   const state = await page.evaluate(() => JSON.parse(localStorage.getItem('streamly.state')));
-  console.log(`\n=== ${name} ===\n${res.log.join('\n')}\noutcome: ${res.outcome}${res.reason ? ' (' + res.reason + ')' : ''}\nprice before → after: $${before.monthlyPriceUsd} → $${after.monthlyPriceUsd}  offerApplied=${state.offerApplied} cancelled=${state.cancelled}`);
+  console.log(`\n=== ${name} ===\n${res.log.join('\n')}\noutcome: ${res.outcome}${res.reason ? ' (' + res.reason + ')' : ''}\nprice before → after: $${before.monthlyPriceUsd} → $${after.monthlyPriceUsd}  offerApplied=${state.offerApplied} cancelled=${state.cancelled}\ntokens: ${acc.calls} calls · in ${acc.inputTokens} · out ${acc.outputTokens} · thinking ${acc.thinkingTokens}`);
   await context.close();
   const pass = !state.cancelled && (expectOffer ? (res.outcome === 'discount_applied' && state.offerApplied) : (res.outcome === 'no_offer_backed_out' && !state.offerApplied));
   return { name, pass, outcome: res.outcome, cancelled: state.cancelled, offerApplied: state.offerApplied };

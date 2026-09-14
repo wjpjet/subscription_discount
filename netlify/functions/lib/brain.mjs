@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { generateStructured, AIDeclined, BRAIN } from './llm.mjs';
+import { generateStructured, AIDeclined, BRAIN, ZERO_USAGE, addUsage } from './llm.mjs';
 import { STATES, ACTIONS, OUTCOMES } from '../../../shared/guardrails.js';
 import { mockDecide, mockClassify, mockDiscover } from '../../../shared/brain-mock.js';
 
@@ -111,8 +111,8 @@ export async function decide(input) {
     `STEP: ${step} of ${maxSteps}`, `HISTORY:\n${renderHistory(history)}`, `CURRENT PAGE:\n${renderSnapshot(snapshot)}`,
   ].join('\n\n');
   try {
-    const { output, provider, model } = await generateStructured({ system: HUNT_SYSTEM, user, schema: Decision, maxTokens: 8000 });
-    return { ...output, _provider: provider, _model: model };
+    const { output, provider, model, usage } = await generateStructured({ system: HUNT_SYSTEM, user, schema: Decision, maxTokens: 8000, tier: 'main' });
+    return { ...output, _provider: provider, _model: model, _usage: usage };
   } catch (e) {
     if (e instanceof AIDeclined) return { state: 'ambiguous', reasoning: e.message, action: { ...NULLS, type: 'back_out', reason: 'ai_declined: ' + e.message }, _provider: 'none' };
     throw e; // outage → HTTP 500 → the extension retries, then stops without acting
@@ -122,8 +122,8 @@ export async function decide(input) {
 export async function classify(input) {
   if (BRAIN === 'mock') return { ...mockClassify(input.snapshot), _provider: 'mock' };
   try {
-    const { output, provider } = await generateStructured({ system: CLASSIFY_SYSTEM, user: `DOMAIN: ${input.domain}\n\n${renderSnapshot(input.snapshot)}`, schema: PageClass, maxTokens: 3000, effort: 'low' });
-    return { ...output, _provider: provider };
+    const { output, provider, usage } = await generateStructured({ system: CLASSIFY_SYSTEM, user: `DOMAIN: ${input.domain}\n\n${renderSnapshot(input.snapshot)}`, schema: PageClass, maxTokens: 3000, tier: 'fast' });
+    return { ...output, _provider: provider, _usage: usage };
   } catch (e) {
     console.error('[classify] falling back to heuristics:', e.message);
     return { ...mockClassify(input.snapshot), notes: 'heuristic fallback: ' + e.message, _provider: 'fallback' };
@@ -132,17 +132,18 @@ export async function classify(input) {
 
 const discoverCache = new Map();
 export async function discover(domains) {
-  if (BRAIN === 'mock') return mockDiscover(domains);
-  const out = [], todo = [];
+  if (BRAIN === 'mock') return { services: mockDiscover(domains), usage: ZERO_USAGE };
+  const out = [], todo = []; let usage = ZERO_USAGE;
   for (const d of domains) { if (discoverCache.has(d)) out.push(discoverCache.get(d)); else todo.push(d); }
   for (let i = 0; i < todo.length; i += 25) {   // small chunks: each call stays well under a 10s function timeout
     const chunk = todo.slice(i, i + 25);
-    const { output } = await generateStructured({ system: DISCOVER_SYSTEM, user: `Classify these domains:\n${chunk.join('\n')}`, schema: Discovery, maxTokens: 6000, effort: 'low' });
+    const { output, usage: u } = await generateStructured({ system: DISCOVER_SYSTEM, user: `Classify these domains:\n${chunk.join('\n')}`, schema: Discovery, maxTokens: 6000, tier: 'fast' });
+    usage = addUsage(usage, u);
     const byDomain = new Map((output.services || []).map((s) => [s.domain.toLowerCase(), s]));
     for (const d of chunk) {
       const r = byDomain.get(d.toLowerCase()) || { domain: d, isSubscription: false, name: d, category: 'unknown', accountUrl: null, typicalMonthlyPriceUsd: null, makesRetentionOffers: 'unknown', typicalOfferDiscountPct: null, typicalOfferTermMonths: null, confidence: 0.1, notes: 'not returned by model' };
       discoverCache.set(d, r); out.push(r);
     }
   }
-  return out;
+  return { services: out, usage };
 }

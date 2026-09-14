@@ -43,7 +43,7 @@ export async function huntOne(item: ScanItem, settings: Settings, onEvent: (e: H
 
     for (let step = 0; step <= maxSteps; step++) {
       if (stopRequested) { result.outcome = 'error'; result.reason = 'stopped by user'; break; }
-      const snapshot = await runInTab(tabId, snapshotPage, [{ maxElements: 120, textChars: 4000 }]);
+      const snapshot = await runInTab(tabId, snapshotPage, [{ maxElements: 100, textChars: 3000 }]);
       const res = await stepWithRetry({ runId: `${item.domain}-${Date.now()}`, merchant, goal: 'hunt', step, maxSteps, history, snapshot });
       // Defense in depth: re-apply the guardrails locally too.
       const local = applyGuardrails({ decision: res.decision as Decision, snapshot, history, merchantDomain: item.domain, step, maxSteps, goal: 'hunt' });

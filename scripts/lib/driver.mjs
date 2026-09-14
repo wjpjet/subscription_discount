@@ -3,18 +3,20 @@ import { snapshotPage, performAction, readElement } from '../../shared/page-scri
 import { isFinalizeText } from '../../shared/guardrails.js';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
-export async function callFn(name, body) {
+export const ZERO = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
+function add(acc, u) { if (acc && u) { acc.inputTokens += u.inputTokens || 0; acc.outputTokens += u.outputTokens || 0; acc.thinkingTokens += u.thinkingTokens || 0; acc.calls += u.calls || 1; } }
+export async function callFn(name, body, acc) {
   const mod = await import(`../../netlify/functions/${name}.mjs`);
   const res = await mod.default(new Request(`http://local/api/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), {});
-  const j = await res.json(); if (j.error) throw new Error(`${name}: ${j.error}`); return j;
+  const j = await res.json(); if (j.error) throw new Error(`${name}: ${j.error}`); add(acc, j.usage); return j;
 }
 async function settle(page) { await Promise.race([page.waitForNavigation({ timeout: 2500 }).catch(() => {}), sleep(900)]); await sleep(400); }
 
-export async function hunt(page, merchant, maxSteps = 20) {
+export async function hunt(page, merchant, maxSteps = 20, acc) {
   const history = [], log = []; let t0 = Date.now();
   for (let step = 0; step <= maxSteps; step++) {
-    const snapshot = await page.evaluate(snapshotPage, { maxElements: 120, textChars: 4000 });
-    const { decision, guardrails, proposed } = await callFn('agent-step', { runId: 'suite', merchant, goal: 'hunt', step, maxSteps, history, snapshot });
+    const snapshot = await page.evaluate(snapshotPage, { maxElements: 100, textChars: 3000 });
+    const { decision, guardrails, proposed } = await callFn('agent-step', { runId: 'suite', merchant, goal: 'hunt', step, maxSteps, history, snapshot }, acc);
     const a = decision.action;
     const target = a.id != null ? (snapshot.elements.find((e) => e.id === a.id) || {}).text : undefined;
     log.push(`  step ${step} [${decision.state}] ${proposed.type}${proposed.id != null ? ' #' + proposed.id : ''} → ${a.type}${target ? ` "${target}"` : ''}${guardrails.length ? '  ⛔ ' + guardrails.join('; ') : ''}  @ ${new URL(snapshot.url).pathname}`);
@@ -37,8 +39,8 @@ export async function hunt(page, merchant, maxSteps = 20) {
   return { outcome: 'error', reason: 'loop exhausted', history, log, steps: maxSteps + 1, ms: Date.now() - t0 };
 }
 
-export async function classifyPage(page, merchant) {
+export async function classifyPage(page, merchant, acc) {
   await page.goto(merchant.accountUrl, { waitUntil: 'load' }); await sleep(300);
   const snapshot = await page.evaluate(snapshotPage, {});
-  return (await callFn('classify', { domain: merchant.domain, snapshot })).result;
+  return (await callFn('classify', { domain: merchant.domain, snapshot }, acc)).result;
 }

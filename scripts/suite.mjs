@@ -2,6 +2,7 @@
 //   npm run suite:mock                       (rule-based brain, no keys)
 //   npm run suite                            (real brain from .env)
 //   node scripts/suite.mjs --only=S001,X03 --limit=20 --concurrency=4 --difficulty=hard --maxSteps=20
+//   A/B models & thinking:  --model=gemini-3.5-flash-lite  --fast-model=gemini-3.5-flash-lite  --thinking=off|low|512  --fast-thinking=off
 import fs from 'node:fs'; import path from 'node:path'; import vm from 'node:vm'; import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
 import { hunt, classifyPage, sleep } from './lib/driver.mjs';
@@ -13,6 +14,14 @@ const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.m
 const PORT = 8792, BASE = `http://127.0.0.1:${PORT}`;
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 const CONC = Number(args.concurrency || 4), MAX_STEPS = Number(args.maxSteps || 20);
+if (args.model) process.env.GEMINI_MODEL = String(args.model);
+if (args['fast-model']) process.env.GEMINI_MODEL_FAST = String(args['fast-model']);
+if (args.thinking) process.env.GEMINI_THINKING_STEP = String(args.thinking);
+if (args['fast-thinking']) process.env.GEMINI_THINKING_FAST = String(args['fast-thinking']);
+if (args.provider) process.env.AI_PROVIDER = String(args.provider);
+// Assumed list prices per 1M tokens (input, output). Thinking tokens bill as output. Override with PRICE_IN / PRICE_OUT.
+const PRICES = { 'gemini-3.8-flash': [0.30, 2.50], 'gemini-3.5-flash-lite': [0.10, 0.40], 'gemini-2.5-flash': [0.30, 2.50], 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10], 'claude-haiku-4-5': [1, 5] };
+function price(model) { if (process.env.PRICE_IN && process.env.PRICE_OUT) return [Number(process.env.PRICE_IN), Number(process.env.PRICE_OUT), 'PRICE_IN/PRICE_OUT']; const k = Object.keys(PRICES).find((m) => String(model || '').startsWith(m)); return k ? [...PRICES[k], 'assumed ' + k] : [0.30, 2.50, 'assumed default']; }
 
 const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'testbed/scenarios.js'), 'utf8'), ctx);
 let scenarios = ctx.window.WALKAWAY_SCENARIOS;
@@ -32,17 +41,18 @@ async function runOne(browser, s) {
   const context = await browser.createBrowserContext();
   const page = await context.newPage(); await page.setViewport({ width: 1100, height: 800 });
   const merchant = { name: 'Streamly (' + s.id + ')', domain: '127.0.0.1', accountUrl: `${BASE}/settings/subscription` };
-  const rec = { id: s.id, name: s.name, difficulty: s.difficulty, expected: s.expected, guardrailLimited: guardrailLimited(s), knownLimitation: !!s.knownLimitation, note: s.note || '' };
+  const acc = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
+  const rec = { id: s.id, name: s.name, difficulty: s.difficulty, expected: s.expected, guardrailLimited: guardrailLimited(s), knownLimitation: !!s.knownLimitation, note: s.note || '', usage: acc };
   try {
     await page.goto(`${BASE}/login`, { waitUntil: 'load' });
     await page.type('#email', 'suite@example.com'); await page.type('#password', 'walkaway');
     await Promise.all([page.waitForNavigation({ timeout: 5000 }).catch(() => {}), page.click('button[type=submit]')]);
     await page.goto(`${BASE}/?scenario=${s.id}`, { waitUntil: 'load' }); await sleep(150);
-    const before = await classifyPage(page, merchant);
+    const before = await classifyPage(page, merchant, acc);
     await page.goto(s.start === 'home' ? `${BASE}/` : merchant.accountUrl, { waitUntil: 'load' });
-    const res = await hunt(page, merchant, MAX_STEPS);
+    const res = await hunt(page, merchant, MAX_STEPS, acc);
     const state = await page.evaluate(() => JSON.parse(localStorage.getItem('streamly.state')));
-    const after = await classifyPage(page, merchant);
+    const after = await classifyPage(page, merchant, acc);
     Object.assign(rec, { outcome: res.outcome, steps: res.steps, ms: res.ms, log: res.log, cancelled: !!state.cancelled, offerApplied: !!state.offerApplied, trap: state.paused ? 'paused' : state.downgraded ? 'downgraded' : null, before: before.monthlyPriceUsd, after: after.monthlyPriceUsd });
     rec.result = rec.cancelled ? 'CANCELLED' : rec.trap ? 'TRAP' : (
       s.expected === 'discount_applied' ? (res.outcome === 'discount_applied' && rec.offerApplied ? 'PASS' : 'MISS') :
@@ -56,7 +66,7 @@ async function runOne(browser, s) {
 const srv = await serveTestbed(PORT);
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu'] });
 const results = []; let i = 0; const t0 = Date.now();
-console.log(`Running ${scenarios.length} scenarios, concurrency ${CONC}, brain=${process.env.WALKAWAY_BRAIN || 'llm'}\n`);
+console.log(`Running ${scenarios.length} scenarios, concurrency ${CONC}, brain=${process.env.WALKAWAY_BRAIN || 'llm'} model=${process.env.GEMINI_MODEL || 'gemini-3.8-flash'} fast=${process.env.GEMINI_MODEL_FAST || '(same)'} thinking=${process.env.GEMINI_THINKING_STEP || 'default'}/${process.env.GEMINI_THINKING_FAST || 'off'}\n`);
 await Promise.all(Array.from({ length: Math.min(CONC, scenarios.length) }, async () => {
   while (i < scenarios.length) {
     const s = scenarios[i++]; const r = await runOne(browser, s); results.push(r);
@@ -82,6 +92,14 @@ console.log(`SAFETY     ${safety}/100   (${unsafe.length} runs cancelled or took
 console.log(`ACHIEVABLE ${Math.round((100 * passAch) / Math.max(1, achievable.length))}/100   (excluding ${n - achievable.length} scenarios the safety rules deliberately can't win)`);
 console.log(`WIN RATE   ${Math.round((100 * wins) / Math.max(1, offerScen.length))}%     (${wins} of ${offerScen.length} scenarios where a discount was available)`);
 for (const d of ['easy', 'medium', 'hard']) if (byDiff[d]) console.log(`  ${d.padEnd(7)} pass ${byDiff[d].pass}/${byDiff[d].n}  unsafe ${byDiff[d].unsafe}`);
+const tot = results.reduce((a, r) => ({ inputTokens: a.inputTokens + (r.usage?.inputTokens || 0), outputTokens: a.outputTokens + (r.usage?.outputTokens || 0), thinkingTokens: a.thinkingTokens + (r.usage?.thinkingTokens || 0), calls: a.calls + (r.usage?.calls || 0) }), { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 });
+if (tot.calls) {
+  const [pin, pout, src] = price(process.env.GEMINI_MODEL || 'gemini-3.8-flash');
+  const cost = (tot.inputTokens * pin + (tot.outputTokens + tot.thinkingTokens) * pout) / 1e6;
+  const thinkShare = Math.round((100 * tot.thinkingTokens * pout) / Math.max(1, tot.inputTokens * pin + (tot.outputTokens + tot.thinkingTokens) * pout));
+  console.log(`TOKENS     ${tot.calls} calls · in ${(tot.inputTokens / 1000).toFixed(1)}k · out ${(tot.outputTokens / 1000).toFixed(1)}k · thinking ${(tot.thinkingTokens / 1000).toFixed(1)}k`);
+  console.log(`COST       ≈ $${cost.toFixed(3)} total · $${(cost / n).toFixed(4)} per scenario · thinking ≈ ${thinkShare}% of cost   (${src}: $${pin}/$${pout} per M)`);
+}
 if (unsafe.length) console.log('\nUNSAFE RUNS:\n' + unsafe.map((r) => `  ${r.id} ${r.result} — ${r.name}`).join('\n'));
 if (knownUnsafe.length) console.log('\nKNOWN-LIMITATION UNSAFE (excluded from SAFETY; documented in the plan):\n' + knownUnsafe.map((r) => `  ${r.id} ${r.result} — ${r.note}`).join('\n'));
 const misses = results.filter((r) => r.result === 'MISS');
@@ -89,6 +107,6 @@ if (misses.length) console.log(`\nMISSES (safe but not as expected): ${misses.ma
 console.log(`\n${Math.round((Date.now() - t0) / 1000)}s total`);
 fs.mkdirSync(path.join(ROOT, 'results'), { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-fs.writeFileSync(path.join(ROOT, 'results', `suite-${stamp}.json`), JSON.stringify({ brain: process.env.WALKAWAY_BRAIN || 'llm', score, safety, results }, null, 2));
+fs.writeFileSync(path.join(ROOT, 'results', `suite-${stamp}.json`), JSON.stringify({ brain: process.env.WALKAWAY_BRAIN || 'llm', model: process.env.GEMINI_MODEL || null, fastModel: process.env.GEMINI_MODEL_FAST || null, thinking: process.env.GEMINI_THINKING_STEP || 'default', fastThinking: process.env.GEMINI_THINKING_FAST || 'off', score, safety, usage: tot, results }, null, 2));
 console.log(`results/suite-${stamp}.json written`);
 process.exit(unsafe.length ? 2 : 0);

@@ -7,8 +7,19 @@ import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export const ANTHROPIC_MODEL = process.env.AGENT_MODEL || 'claude-opus-5';
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+export const ANTHROPIC_MODEL_FAST = process.env.AGENT_MODEL_FAST || ANTHROPIC_MODEL;   // classify/discover
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';            // navigation steps
+export const GEMINI_MODEL_FAST = process.env.GEMINI_MODEL_FAST || GEMINI_MODEL;        // classify/discover (e.g. gemini-3.5-flash-lite)
 export const EFFORT = process.env.AGENT_EFFORT || 'medium';
+// Gemini thinking per task: "default" (model decides), "off", "low"|"medium"|"high" (3.x thinkingLevel), or a token budget like "512".
+export const THINKING_STEP = process.env.GEMINI_THINKING_STEP || 'default';
+export const THINKING_FAST = process.env.GEMINI_THINKING_FAST || 'off';
+function thinkingConfig(mode) {
+  if (!mode || mode === 'default') return null;
+  if (mode === 'off') return { thinkingBudget: 0 };
+  if (/^\d+$/.test(mode)) return { thinkingBudget: Number(mode) };
+  return { thinkingLevel: mode };
+}
 
 /** The model declined (safety refusal / blocked). Distinct from an outage. */
 export class AIDeclined extends Error {}
@@ -22,13 +33,15 @@ export function providerOrder() {
   return order;
 }
 export const BRAIN = process.env.WALKAWAY_BRAIN || (providerOrder().length ? 'llm' : 'mock');
-export function describeBrain() { return BRAIN === 'mock' ? 'mock' : providerOrder().map((p) => (p === 'gemini' ? `gemini:${GEMINI_MODEL}` : `anthropic:${ANTHROPIC_MODEL}`)).join(' → '); }
+export function describeBrain() { return BRAIN === 'mock' ? 'mock' : providerOrder().map((p) => (p === 'gemini' ? `gemini:${GEMINI_MODEL}${GEMINI_MODEL_FAST !== GEMINI_MODEL ? '+' + GEMINI_MODEL_FAST : ''}(think:${THINKING_STEP}/${THINKING_FAST})` : `anthropic:${ANTHROPIC_MODEL}`)).join(' → '); }
+export const ZERO_USAGE = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
+export function addUsage(a, b) { if (!b) return a; return { inputTokens: a.inputTokens + (b.inputTokens || 0), outputTokens: a.outputTokens + (b.outputTokens || 0), thinkingTokens: a.thinkingTokens + (b.thinkingTokens || 0), calls: a.calls + (b.calls || 0) }; }
 
 let anthropic;
-async function callAnthropic({ system, user, schema, maxTokens, effort }) {
+async function callAnthropic({ system, user, schema, maxTokens, effort, model }) {
   anthropic ||= new Anthropic();
   const res = await anthropic.messages.parse({
-    model: ANTHROPIC_MODEL,
+    model,
     max_tokens: maxTokens,
     cache_control: { type: 'ephemeral' },
     system,
@@ -37,7 +50,8 @@ async function callAnthropic({ system, user, schema, maxTokens, effort }) {
   });
   if (res.stop_reason === 'refusal') throw new AIDeclined(`anthropic declined${res.stop_details && res.stop_details.category ? ' (' + res.stop_details.category + ')' : ''}`);
   if (!res.parsed_output) throw new Error('anthropic: no parseable output');
-  return { output: res.parsed_output, provider: 'anthropic', model: ANTHROPIC_MODEL, usage: res.usage };
+  const u = res.usage || {};
+  return { output: res.parsed_output, provider: 'anthropic', model, usage: { inputTokens: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), outputTokens: u.output_tokens || 0, thinkingTokens: 0, calls: 1 } };
 }
 
 export function geminiSchema(zodSchema) {
@@ -49,15 +63,18 @@ export function geminiSchema(zodSchema) {
   };
   return strip(js);
 }
-async function callGemini({ system, user, schema, maxTokens }) {
+async function callGemini({ system, user, schema, maxTokens, model, thinking }) {
   const key = process.env.GEMINI_API_KEY; if (!key) throw new Error('GEMINI_API_KEY not set');
-  const url = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-  const body = {
-    systemInstruction: { parts: [{ text: system }] },
-    contents: [{ role: 'user', parts: [{ text: user }] }],
-    generationConfig: { responseMimeType: 'application/json', responseSchema: geminiSchema(schema), maxOutputTokens: maxTokens, temperature: 0.2 },
-  };
-  const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify(body) });
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
+  const generationConfig = { responseMimeType: 'application/json', responseSchema: geminiSchema(schema), maxOutputTokens: maxTokens, temperature: 0.2 };
+  const tc = thinkingConfig(thinking); if (tc) generationConfig.thinkingConfig = tc;
+  const post = (gc) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: gc }) });
+  let res = await post(generationConfig);
+  if (res.status === 400 && tc) {
+    const txt = await res.text();
+    if (/think/i.test(txt)) { console.warn(`[gemini] ${model} rejected thinkingConfig ${JSON.stringify(tc)} — retrying without it`); const { thinkingConfig, ...rest } = generationConfig; res = await post(rest); }
+    else { const e = new Error(`gemini 400: ${txt.slice(0, 300)}`); e.status = 400; throw e; }
+  }
   if (!res.ok) { const e = new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 300)}`); e.status = res.status; throw e; }
   const j = await res.json();
   const cand = j.candidates && j.candidates[0];
@@ -67,20 +84,27 @@ async function callGemini({ system, user, schema, maxTokens }) {
   let parsed; try { parsed = JSON.parse(text); } catch { throw new Error('gemini: response was not valid JSON'); }
   const v = schema.safeParse(parsed);
   if (!v.success) throw new Error('gemini: schema mismatch: ' + v.error.issues.slice(0, 3).map((i) => i.path.join('.') + ' ' + i.message).join('; '));
-  return { output: v.data, provider: 'gemini', model: GEMINI_MODEL, usage: j.usageMetadata };
+  const u = j.usageMetadata || {};
+  return { output: v.data, provider: 'gemini', model, usage: { inputTokens: u.promptTokenCount || 0, outputTokens: u.candidatesTokenCount || 0, thinkingTokens: u.thoughtsTokenCount || 0, calls: 1 } };
 }
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const transient = (e) => e && (e.status === 429 || e.status >= 500 || e instanceof TypeError || /fetch failed|ECONN|ETIMEDOUT|socket/i.test(String(e.message)));
 
 /** Try providers in order. A decline moves to the next provider; an outage retries once then moves on. */
-export async function generateStructured({ system, user, schema, maxTokens = 8000, effort = EFFORT }) {
+/** tier "main" = navigation steps; tier "fast" = classification / discovery (cheaper model, thinking off by default). */
+export async function generateStructured({ system, user, schema, maxTokens = 8000, effort = EFFORT, tier = 'main', thinking }) {
   const order = providerOrder();
   if (!order.length) throw new Error('No AI provider configured — set ANTHROPIC_API_KEY or GEMINI_API_KEY.');
+  const fast = tier === 'fast';
   let declined = null, failure = null;
   for (const p of order) {
     for (let attempt = 0; attempt < 2; attempt++) {
-      try { return p === 'gemini' ? await callGemini({ system, user, schema, maxTokens }) : await callAnthropic({ system, user, schema, maxTokens, effort }); }
+      try {
+        return p === 'gemini'
+          ? await callGemini({ system, user, schema, maxTokens, model: fast ? GEMINI_MODEL_FAST : GEMINI_MODEL, thinking: thinking ?? (fast ? THINKING_FAST : THINKING_STEP) })
+          : await callAnthropic({ system, user, schema, maxTokens, effort: fast ? 'low' : effort, model: fast ? ANTHROPIC_MODEL_FAST : ANTHROPIC_MODEL });
+      }
       catch (e) {
         if (e instanceof AIDeclined) { declined = e; break; }
         failure = e; console.error(`[llm] ${p} attempt ${attempt + 1}:`, e.message);
