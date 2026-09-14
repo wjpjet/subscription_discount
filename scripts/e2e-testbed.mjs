@@ -3,6 +3,7 @@ import puppeteer from 'puppeteer-core';
 import { hunt, classifyPage, sleep } from './lib/driver.mjs';
 import { serveTestbed } from './lib/testbed-server.mjs';
 import { preflight } from './lib/preflight.mjs';
+process.env.WALKAWAY_RATE_LIMIT = '0'; // in-process: the whole run looks like one IP
 const PORT = 8790, BASE = `http://127.0.0.1:${PORT}`;
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 async function scenario(browser, name, id, startAt, expectOffer) {

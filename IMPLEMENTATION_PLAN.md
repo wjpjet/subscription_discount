@@ -331,7 +331,9 @@ steps plus two classify calls; discovery is one call per ~60 domains.
 | Gemini 3.5 Flash-Lite | $0.30 / $2.50 | ~$0.0012 | ~$0.01 | ~$0.10 |
 | Gemini 3.1 Flash-Lite | $0.25 / $1.50 | ~$0.001 | ~$0.008 | ~$0.07 |
 
-Measured on the suite: 3.8 Flash ≈ $0.025 per scenario (≈ per service in production) with default thinking.
+Measured on the suite (same 20 scenarios, 2026-09-14): **3.8 Flash with default thinking = ACHIEVABLE 100 at ≈ $0.026/scenario
+(thinking ≈ 58% of that)**; thinking off/low = ACHIEVABLE 80 at $0.0095; 3.5 Flash-Lite = 53 at $0.0042; 3.1 Flash-Lite = 20 at $0.0021.
+Shipping default: steps on `gemini-3.8-flash` (thinking default), classify/discover on `gemini-3.1-flash-lite` (thinking off).
 The fee floor ($1 per run) covers Flash/Haiku/Sonnet comfortably; Opus 5 needs a few wins per run to
 break even. Latency matters too: Netlify synchronous functions time out at ~10s, so keep effort at
 `medium` (default) or use a Flash/Sonnet-class model for `agent-step`.

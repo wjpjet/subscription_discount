@@ -1,6 +1,7 @@
 // Integration test for the payment functions against Stripe TEST mode. `npm run test:stripe`
 // Simulates what Checkout does (a $1 manual-capture hold with a saved test card), then exercises settle.
 import Stripe from 'stripe';
+process.env.WALKAWAY_RATE_LIMIT = '0'; // in-process: the whole run looks like one IP
 const key = process.env.STRIPE_SECRET_KEY;
 if (!key) { console.error('STRIPE_SECRET_KEY missing — put it in .env'); process.exit(1); }
 if (!key.startsWith('sk_test_')) { console.error('Refusing to run against a non-test key.'); process.exit(1); }

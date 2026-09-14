@@ -1,7 +1,10 @@
 const CORS = { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, x-walkaway-key', 'Access-Control-Max-Age': '86400' };
 export function json(body, status = 200) { return new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json', ...CORS } }); }
 const buckets = new Map();
-function rateLimited(ip, limit = 90, windowMs = 60_000) {
+// Per-IP request limit per minute. A real scan+hunt is ~50–150 calls in a few minutes. 0 disables (tests run in-process).
+const LIMIT = process.env.WALKAWAY_RATE_LIMIT === undefined ? 300 : Number(process.env.WALKAWAY_RATE_LIMIT);
+function rateLimited(ip, limit = LIMIT, windowMs = 60_000) {
+  if (!limit) return false;
   const now = Date.now(); const b = buckets.get(ip) || { n: 0, t: now };
   if (now - b.t > windowMs) { b.n = 0; b.t = now; }
   b.n++; buckets.set(ip, b); return b.n > limit;

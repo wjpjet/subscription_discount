@@ -9,17 +9,25 @@ import { zodToJsonSchema } from 'zod-to-json-schema';
 export const ANTHROPIC_MODEL = process.env.AGENT_MODEL || 'claude-opus-5';
 export const ANTHROPIC_MODEL_FAST = process.env.AGENT_MODEL_FAST || ANTHROPIC_MODEL;   // classify/discover
 export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';            // navigation steps
-export const GEMINI_MODEL_FAST = process.env.GEMINI_MODEL_FAST || GEMINI_MODEL;        // classify/discover (e.g. gemini-3.5-flash-lite)
+export const GEMINI_MODEL_FAST = process.env.GEMINI_MODEL_FAST || 'gemini-3.1-flash-lite'; // classify/discover: cheapest Lite, accuracy-neutral in the suite
 export const EFFORT = process.env.AGENT_EFFORT || 'medium';
 // Gemini thinking per task: "default" (model decides), "off", "low"|"medium"|"high" (3.x thinkingLevel), or a token budget like "512".
 export const THINKING_STEP = process.env.GEMINI_THINKING_STEP || 'default';
 export const THINKING_FAST = process.env.GEMINI_THINKING_FAST || 'off';
-function thinkingConfig(mode) {
-  if (!mode || mode === 'default') return null;
-  if (mode === 'off') return { thinkingBudget: 0 };
-  if (/^\d+$/.test(mode)) return { thinkingBudget: Number(mode) };
-  return { thinkingLevel: mode };
+// Models disagree on how to switch thinking off/low: try shapes in order, remember what each model accepted.
+const THINK_CANDIDATES = {
+  off: [{ thinkingLevel: 'minimal' }, { thinkingBudget: 0 }, { thinkingLevel: 'low' }, null],
+  low: [{ thinkingLevel: 'low' }, { thinkingBudget: 512 }, null],
+  medium: [{ thinkingLevel: 'medium' }, null],
+  high: [{ thinkingLevel: 'high' }, null],
+};
+function thinkingCandidates(mode) {
+  if (!mode || mode === 'default') return [null];
+  if (THINK_CANDIDATES[mode]) return THINK_CANDIDATES[mode];
+  if (/^\d+$/.test(mode)) return [{ thinkingBudget: Number(mode) }, { thinkingLevel: 'low' }, null];
+  return [{ thinkingLevel: mode }, null];
 }
+const acceptedShape = new Map(); // `${model}:${mode}` → index into the candidate list;
 
 /** The model declined (safety refusal / blocked). Distinct from an outage. */
 export class AIDeclined extends Error {}
@@ -66,17 +74,22 @@ export function geminiSchema(zodSchema) {
 async function callGemini({ system, user, schema, maxTokens, model, thinking }) {
   const key = process.env.GEMINI_API_KEY; if (!key) throw new Error('GEMINI_API_KEY not set');
   const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`;
-  const generationConfig = { responseMimeType: 'application/json', responseSchema: geminiSchema(schema), maxOutputTokens: maxTokens, temperature: 0.2 };
-  const tc = thinkingConfig(thinking); if (tc) generationConfig.thinkingConfig = tc;
+  const base = { responseMimeType: 'application/json', responseSchema: geminiSchema(schema), maxOutputTokens: maxTokens, temperature: 0.2 };
   const post = (gc) => fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json', 'x-goog-api-key': key }, body: JSON.stringify({ systemInstruction: { parts: [{ text: system }] }, contents: [{ role: 'user', parts: [{ text: user }] }], generationConfig: gc }) });
-  let res = await post(generationConfig);
-  if (res.status === 400 && tc) {
-    // Any 400 while a thinking setting is present → retry once without it (models differ on thinkingBudget vs thinkingLevel).
-    const txt = await res.text();
-    console.warn(`[gemini] ${model} returned 400 with thinkingConfig ${JSON.stringify(tc)} (${txt.slice(0, 160).replace(/\s+/g, ' ')}) — retrying without it`);
-    const { thinkingConfig, ...rest } = generationConfig; res = await post(rest);
+  const mode = thinking || 'default', cands = thinkingCandidates(mode), memo = `${model}:${mode}`;
+  let res;
+  for (let i = acceptedShape.get(memo) || 0; i < cands.length; i++) {
+    const gc = { ...base }; if (cands[i]) gc.thinkingConfig = cands[i];
+    res = await post(gc);
+    if (res.status === 400 && cands[i] && i < cands.length - 1) {
+      const txt = await res.text();
+      console.warn(`[gemini] ${model}: thinking ${JSON.stringify(cands[i])} rejected (${txt.replace(/\s+/g, ' ').slice(0, 90)}) — trying the next shape`);
+      continue;
+    }
+    if (!res.ok) { const e = new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 300)}`); e.status = res.status; throw e; }
+    if (acceptedShape.get(memo) !== i) { acceptedShape.set(memo, i); if (i > 0) console.warn(`[gemini] ${model}: using thinking shape ${JSON.stringify(cands[i])} for mode "${mode}"`); }
+    break;
   }
-  if (!res.ok) { const e = new Error(`gemini ${res.status}: ${(await res.text()).slice(0, 300)}`); e.status = res.status; throw e; }
   const j = await res.json();
   const cand = j.candidates && j.candidates[0];
   if (!cand) throw new AIDeclined(`gemini declined (${(j.promptFeedback && j.promptFeedback.blockReason) || 'no candidates'})`);

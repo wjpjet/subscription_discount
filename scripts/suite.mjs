@@ -14,6 +14,7 @@ const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)=?(.*)$/); return m ? [m[1], m[2] === '' ? true : m[2]] : [a, true]; }));
 const PORT = 8792, BASE = `http://127.0.0.1:${PORT}`;
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
+process.env.WALKAWAY_RATE_LIMIT = '0'; // in-process: the whole run looks like one IP
 const CONC = Number(args.concurrency || 4), MAX_STEPS = Number(args.maxSteps || 20);
 if (args.model) process.env.GEMINI_MODEL = String(args.model);
 if (args['fast-model']) process.env.GEMINI_MODEL_FAST = String(args['fast-model']);

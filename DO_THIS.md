@@ -311,3 +311,42 @@ JAVASCRIPT-RENDERED PAGES
   inside open shadow roots (web components). Limits: cross-origin iframes (a hosted billing widget
   from another domain) and canvas-drawn UIs are invisible to text snapshots — those would need the
   screenshot/vision path, which is a later addition.
+
+
+MODEL A/B — DONE FOR YOU (2026-09-14, same first 20 scenarios, real API, ~$1.20 total)
+====================================================================================
+  Config (steps / classify+discover)                  SCORE  ACHIEV  WIN   cost/20   per scen  time
+  3.8 Flash default thinking / 3.8                      80    100    78%   ~$0.50    $0.025    199s   (your run)
+  3.8 Flash default thinking / 3.1 Flash-Lite           80    100    78%    $0.52    $0.026    188s   thinking = 58% of cost
+  3.8 Flash thinking LOW     / 3.1 Flash-Lite           65     80    61%    $0.19    $0.0095    96s
+  3.8 Flash thinking OFF     / 3.1 Flash-Lite           65     80    61%    $0.19    $0.0095    92s
+  3.5 Flash-Lite off         / 3.1 Flash-Lite           45     53    39%    $0.084   $0.0042    70s
+  3.1 Flash-Lite everywhere                             20     20    17%    $0.041   $0.0021    45s
+  SAFETY was 100 in every run. ACHIEVABLE excludes the 5 guardrail-limited scenarios.
+
+  READ: thinking is what wins the hard scenarios (menu/manage entries, hidden or delayed offers,
+  "are you sure" interstitials): S002, S003, S006, S014, S018 flip to wins only with it. "low" on
+  3.8 behaves like off (≈0 thinking tokens). The Lite models are not good enough for navigation.
+  The classify/discover tier on 3.1 Flash-Lite changed nothing in results, so it stays cheap.
+
+  SHIPPING DEFAULT (now the code default; nothing to set unless you want to override):
+      GEMINI_MODEL=gemini-3.8-flash        GEMINI_THINKING_STEP=default
+      GEMINI_MODEL_FAST=gemini-3.1-flash-lite   GEMINI_THINKING_FAST=off
+  ≈ $0.026 per hunted service; a full run (scan ~200 sites + 5 hunts) ≈ $0.15–0.20. The $1 minimum
+  fee covers ~38 hunted services. 3.8's price doubles on 2027-01-01 ($1.50/$7.50) — re-run the A/B then.
+
+  Future lever if cost matters more: run each service with thinking OFF first and retry once with
+  thinking ON only when it backs out without an offer (~20% cheaper, slower on misses). Not built.
+
+TWO BUGS FIXED IN THIS PASS
+---------------------------
+  1. thinkingBudget: 0 is rejected by Gemini 3.5 Flash-Lite ("invalid argument"), which is why your
+     flash-lite run failed 20/20 in 17s. The backend now tries the thinking shapes each model accepts
+     (minimal → budget 0 → level low) and remembers the winner per model. Probe results:
+        3.8-flash: budget 0 ✓, level low ✓ (both → 0 thinking tokens), level minimal ✗; default ≈ 250
+        thinking tokens even on a trivial prompt (3× slower)
+        3.5-flash-lite: budget 0 ✗, level minimal/low ✓; does not think by default
+        3.1-flash-lite: budget 0 ✓, minimal ✓; level low/medium DO think (118–195 tokens)
+  2. The backend's per-IP rate limiter (90/min) was tripping in the suite because a whole run looks
+     like one IP — those "rate limited" errors were self-inflicted. Now 300/min by default
+     (WALKAWAY_RATE_LIMIT), disabled for in-process runs.
