@@ -1,6 +1,6 @@
 # Walkaway — landing page
 
-A single-file, zero-build static landing page (`index.html`) with a Netlify Forms waitlist.
+A single-file, zero-build static landing page (`index.html`) plus `install.html` (manual install steps + the extension zip in `downloads/`).
 No framework, no dependencies, no build step. Fonts load from Google Fonts; everything else is inline.
 
 ## Preview locally
@@ -48,21 +48,17 @@ netlify deploy --prod    # optional manual deploy; publish dir comes from netlif
 Netlify site → **Domain management → Add a domain.** Point your DNS at Netlify (they show the exact
 records) or transfer nameservers to Netlify DNS. HTTPS is automatic (Let's Encrypt).
 
-## Waitlist submissions
-Netlify site → **Forms.** Two forms are registered — `waitlist` (hero) and `waitlist-bottom`
-(footer CTA); each row includes a `source` field (`hero` / `bottom`). Under **Forms → Form notifications** you can get an
-email or Slack ping per signup, or export CSV.
-
-Free tier: 100 submissions/month. Spam is filtered by the honeypot field + Netlify's Akismet.
+## The extension download
+`downloads/walkaway-extension.zip` is produced by `npm run package:extension` at the repo root (builds the
+extension, zips it, copies it here). Re-run it after every extension change, then commit.
 
 ## Editing
 - **Brand name** — "Walkaway" is a placeholder. Find/replace `Walkaway` in `index.html` (title, nav,
   footer, OG tags). The logo mark is an inline SVG in the nav and footer; the favicon is a data-URI in
   `<head>`.
-- **Copy** — all text is in `index.html`; sections are marked with `<!-- ===== NAME ===== -->` comments.
+- **Copy** — all text is in `index.html` (hero → how it works → what you'll see → pricing → safety → FAQ → CTA).
 - **Colors / type** — CSS custom properties at the top of the `<style>` block (`--accent`, `--ink`,
   `--paper`, fonts).
-- **Estimator assumptions** — in the `<script>` at the bottom (`save = v * (1/3) * 0.45`).
 - **Supported-services pills** — the `.pills` list in the trust strip. Keep this honest: only list
   services you've verified make in-flow offers.
 

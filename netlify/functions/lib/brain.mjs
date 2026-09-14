@@ -135,9 +135,9 @@ export async function discover(domains) {
   if (BRAIN === 'mock') return mockDiscover(domains);
   const out = [], todo = [];
   for (const d of domains) { if (discoverCache.has(d)) out.push(discoverCache.get(d)); else todo.push(d); }
-  for (let i = 0; i < todo.length; i += 60) {
-    const chunk = todo.slice(i, i + 60);
-    const { output } = await generateStructured({ system: DISCOVER_SYSTEM, user: `Classify these domains:\n${chunk.join('\n')}`, schema: Discovery, maxTokens: 16000, effort: 'low' });
+  for (let i = 0; i < todo.length; i += 25) {   // small chunks: each call stays well under a 10s function timeout
+    const chunk = todo.slice(i, i + 25);
+    const { output } = await generateStructured({ system: DISCOVER_SYSTEM, user: `Classify these domains:\n${chunk.join('\n')}`, schema: Discovery, maxTokens: 6000, effort: 'low' });
     const byDomain = new Map((output.services || []).map((s) => [s.domain.toLowerCase(), s]));
     for (const d of chunk) {
       const r = byDomain.get(d.toLowerCase()) || { domain: d, isSubscription: false, name: d, category: 'unknown', accountUrl: null, typicalMonthlyPriceUsd: null, makesRetentionOffers: 'unknown', typicalOfferDiscountPct: null, typicalOfferTermMonths: null, confidence: 0.1, notes: 'not returned by model' };

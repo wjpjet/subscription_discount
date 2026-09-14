@@ -14,11 +14,13 @@ with a "Loyalty offer applied" badge — that's what the extension's verificatio
 
 **Sign in:** any email, password `walkaway`.
 
-**Testbed controls** (yellow bar at the bottom, visible when signed in):
-- **Reset state** — removes an applied offer / un-cancels, so you can rerun.
-- **Retention offer: ON/OFF** — OFF simulates a service that makes no offer (the flow goes straight
-  from the survey to *Are you sure?*). Use it to check the agent backs out instead of cancelling.
-- **Sign out.**
+**Scenarios.** The flow is driven by a scenario config (`scenarios.js`, ~100 variations: where the
+cancel link lives, survey types, pause/downgrade traps, offer styles incl. dark patterns, hidden/
+delayed/modal offers, confirm-button labels, login walls, cookie banners, decoy Cancel buttons,
+misleading text). Open `/scenarios` to pick one (or `/?scenario=S042`). The yellow bar shows the
+current scenario, its expected outcome, and the live status; **Reset state** reruns it.
+
+Run them all headlessly with a score: `npm run suite:mock` (no keys) or `npm run suite` (real brain).
 
 If a run ever lands on `/cancel/done`, the agent pressed the final cancel — that's the failure the
 guardrails exist to prevent, and the page says so loudly.

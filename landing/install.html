@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Install Walkaway</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+:root{--ink:#0E1116;--paper:#F6F3EC;--accent:#FF5C39;--muted:#5F6672;--line:rgba(14,17,22,.1)}
+body{margin:0;background:var(--paper);color:var(--ink);font-family:Inter,system-ui,sans-serif;line-height:1.6}
+.wrap{max-width:720px;margin:0 auto;padding:clamp(2rem,6vw,4rem) clamp(1rem,4vw,2rem)}
+h1{font-family:Fraunces,Georgia,serif;font-weight:500;font-size:clamp(2rem,5vw,3rem);letter-spacing:-.02em;margin:0 0 .5rem}h1 em{font-style:italic;color:var(--accent)}
+p{color:var(--muted);margin:0 0 1rem}
+ol{padding-left:1.2rem}li{margin:.7rem 0}
+.btn{display:inline-block;background:var(--accent);color:var(--ink);font-weight:700;padding:.95rem 1.4rem;border-radius:999px;text-decoration:none}
+.card{background:#fff;border:1px solid var(--line);border-radius:16px;padding:1.4rem;margin:1.4rem 0}
+code{background:rgba(14,17,22,.06);padding:.1rem .4rem;border-radius:6px;font-size:.92em}
+.small{font-size:.9rem}
+a{color:inherit}
+</style></head>
+<body><div class="wrap">
+<h1>Install <em>Walkaway.</em></h1>
+<p>Walkaway is a Chrome extension: it has to run inside your browser, using the accounts you're already signed into. The Chrome Web Store listing is coming; until then it takes about a minute to load by hand.</p>
+<div class="card">
+<ol>
+<li><a class="btn" href="downloads/walkaway-extension.zip">Download the extension (.zip)</a><br><span class="small">Unzip it — you'll get a folder.</span></li>
+<li>Open <code>chrome://extensions</code> in Chrome and turn on <strong>Developer mode</strong> (top right).</li>
+<li>Click <strong>Load unpacked</strong> and pick the unzipped folder.</li>
+<li>Click the Walkaway icon in the toolbar → <strong>Scan my subscriptions</strong>.</li>
+</ol>
+</div>
+<p class="small">The first Scan asks once for permission to check which sites you're signed into — only the site names are sent, never cookies, passwords, or history. Nothing gets cancelled, ever.</p>
+<p class="small"><a href="index.html">← Back</a></p>
+</div></body></html>

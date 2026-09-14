@@ -1,4 +1,5 @@
-// Local API server for the Netlify Functions (no netlify-cli needed): `npm run api:dev` → http://127.0.0.1:8787
+// Standalone API server for the same functions Netlify runs. Local: `npm run api:dev` → http://127.0.0.1:8787
+// Production alternative (no 10s limit): HOST=0.0.0.0 PORT=8787 node --env-file=.env scripts/api-server.mjs
 import http from 'node:http';
 const routes = {
   '/api/discover': () => import('../netlify/functions/discover.mjs'),
@@ -9,6 +10,7 @@ const routes = {
   '/api/settle': () => import('../netlify/functions/settle.mjs'),
 };
 const PORT = Number(process.env.PORT || 8787);
+const HOST = process.env.HOST || '127.0.0.1';
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const load = routes[url.pathname];
@@ -20,4 +22,4 @@ http.createServer(async (req, res) => {
   const response = await mod.default(request, {});
   res.writeHead(response.status, Object.fromEntries(response.headers));
   res.end(Buffer.from(await response.arrayBuffer()));
-}).listen(PORT, '127.0.0.1', () => console.log(`walkaway api → http://127.0.0.1:${PORT}  (brain: ${process.env.WALKAWAY_BRAIN || ((process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY) ? 'llm' : 'mock')})`));
+}).listen(PORT, HOST, () => console.log(`walkaway api → http://${HOST}:${PORT}  (brain: ${process.env.WALKAWAY_BRAIN || ((process.env.ANTHROPIC_API_KEY || process.env.GEMINI_API_KEY) ? 'llm' : 'mock')})`));

@@ -13,7 +13,7 @@ export interface ScanItem { id: string; domain: string; name: string; accountUrl
 export interface ScanProgress { phase: 'discover' | 'pages' | 'done'; done: number; total: number; current?: string; message?: string }
 export interface ScanResult { at: number; testMode: boolean; domainsChecked: number; items: ScanItem[]; found: number; withOffers: number; totalEstSavings: number }
 
-const CONCURRENCY = 2, SETTLE_MS = 1500, PAGE_TIMEOUT_MS = 20000;
+const CONCURRENCY = 4, SETTLE_MS = 1500, PAGE_TIMEOUT_MS = 20000;   // 4 background tabs + classify calls in flight
 
 export async function runScan(settings: Settings, onProgress: (p: ScanProgress) => void): Promise<ScanResult> {
   await browser.storage.local.set({ scanRunning: true });

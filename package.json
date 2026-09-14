@@ -3,9 +3,13 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "api:dev": "node scripts/dev-api.mjs",
-    "e2e:testbed": "node scripts/e2e-testbed.mjs",
-    "e2e:testbed:mock": "WALKAWAY_BRAIN=mock node scripts/e2e-testbed.mjs"
+    "api:dev": "node --env-file-if-exists=.env scripts/api-server.mjs",
+    "e2e:testbed": "node --env-file-if-exists=.env scripts/e2e-testbed.mjs",
+    "e2e:testbed:mock": "WALKAWAY_BRAIN=mock node scripts/e2e-testbed.mjs",
+    "suite": "node --env-file-if-exists=.env scripts/suite.mjs",
+    "suite:mock": "WALKAWAY_BRAIN=mock node scripts/suite.mjs",
+    "test:stripe": "node --env-file-if-exists=.env scripts/test-stripe.mjs",
+    "package:extension": "node scripts/package-extension.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

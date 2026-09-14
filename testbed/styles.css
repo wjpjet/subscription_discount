@@ -54,3 +54,12 @@ p{margin:0 0 10px;color:var(--muted)}
 .devbar-title{font-weight:800}
 .devbar-status{margin-right:auto;color:#6B5A00}
 .dev-btn{background:#3B2F00;color:#FFF7D6;border:0;border-radius:7px;padding:7px 11px;font:700 12px Inter,system-ui,sans-serif;cursor:pointer}
+
+.pagefoot{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.pagefoot a{color:var(--muted)}
+.modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;z-index:20;padding:20px}
+.modal{max-width:520px;width:100%;position:relative}
+.closex{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:22px;cursor:pointer}
+.cookiebar{position:fixed;left:0;right:0;bottom:44px;display:flex;gap:10px;align-items:center;padding:12px 16px;background:#23213A;border-top:1px solid var(--line);z-index:15;font-size:13px}
+.cookiebar span{margin-right:auto}
+.sctable{width:100%;border-collapse:collapse;font-size:12.5px}.sctable th,.sctable td{text-align:left;padding:6px 8px;border-bottom:1px solid var(--line);vertical-align:top}.sctable tr.cur td{background:rgba(124,92,255,.15)}.sctable i{color:var(--muted)}
+.dev-link{color:#3B2F00;font-weight:600}

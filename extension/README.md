@@ -10,6 +10,11 @@ cd extension && npm install && npm run build      # → .output/chrome-mv3/
 `chrome://extensions` → Developer mode → **Load unpacked** → `extension/.output/chrome-mv3`.
 Click the toolbar icon to open the side panel.
 
+## Build-time default API URL
+`cp .env.example .env` and set `WXT_API_BASE=https://<your landing site>` — it becomes the default API URL so
+installed users never need Settings. `npm run package:extension` (repo root) builds, zips, and copies the
+extension into `landing/downloads/` for the install page.
+
 ## Settings (⚙ in the panel)
 | Setting | What it does |
 |---|---|

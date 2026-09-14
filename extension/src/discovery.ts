@@ -41,9 +41,21 @@ export async function discoverCandidates(settings: Settings, onProgress: (msg: s
   onProgress("Checking which sites you're signed into…");
   const feats = await signedInDomains();
   const domains = feats.map((f) => f.domain);
-  onProgress(`Asking the brain which of ${domains.length} sites are subscription services…`);
-  const res = await apiPost<{ services: DiscoveredService[] }>('/api/discover', { domains });
-  const candidates: Candidate[] = res.services.filter((s) => s.isSubscription).map((s) => ({
+  // Small chunks, several in flight: every backend call stays short (Netlify functions time out at ~10s),
+  // and the extension — a long-lived page — is the orchestrator.
+  const CHUNK = 25, PARALLEL = 4;
+  const chunks: string[][] = []; for (let i = 0; i < domains.length; i += CHUNK) chunks.push(domains.slice(i, i + CHUNK));
+  const services: DiscoveredService[] = []; let done = 0, next = 0;
+  onProgress(`Asking the brain which of ${domains.length} sites are subscription services… (0/${chunks.length})`);
+  await Promise.all(Array.from({ length: Math.min(PARALLEL, chunks.length) }, async () => {
+    while (next < chunks.length) {
+      const mine = chunks[next++];
+      const res = await apiPost<{ services: DiscoveredService[] }>('/api/discover', { domains: mine });
+      services.push(...res.services); done++;
+      onProgress(`Asking the brain which of ${domains.length} sites are subscription services… (${done}/${chunks.length})`);
+    }
+  }));
+  const candidates: Candidate[] = services.filter((s) => s.isSubscription).map((s) => ({
     domain: s.domain, name: s.name || s.domain, accountUrl: s.accountUrl || `https://www.${s.domain}/account`, source: 'ai' as const,
     typicalPrice: s.typicalMonthlyPriceUsd ?? null, makesOffers: s.makesRetentionOffers,
     discountPct: s.typicalOfferDiscountPct ?? 0.5, termMonths: s.typicalOfferTermMonths ?? 3, confidence: s.confidence, notes: s.notes,

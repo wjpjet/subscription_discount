@@ -1,13 +1,13 @@
 // Provider layer. Every brain call is "system + user → JSON matching a zod schema".
 //   AI_PROVIDER = "anthropic" | "gemini" | "gemini,anthropic" (fallback order). Default: whichever keys exist.
 //   ANTHROPIC_API_KEY + AGENT_MODEL (default claude-opus-5) + AGENT_EFFORT (default medium)
-//   GEMINI_API_KEY   + GEMINI_MODEL (default gemini-2.5-flash — set the current Flash id from AI Studio)
+//   GEMINI_API_KEY   + GEMINI_MODEL (default gemini-3.8-flash)
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
 
 export const ANTHROPIC_MODEL = process.env.AGENT_MODEL || 'claude-opus-5';
-export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-2.5-flash';
+export const GEMINI_MODEL = process.env.GEMINI_MODEL || 'gemini-3.8-flash';
 export const EFFORT = process.env.AGENT_EFFORT || 'medium';
 
 /** The model declined (safety refusal / blocked). Distinct from an outage. */
@@ -17,8 +17,8 @@ export function providerOrder() {
   const explicit = (process.env.AI_PROVIDER || '').split(',').map((s) => s.trim().toLowerCase()).filter(Boolean);
   if (explicit.length) return explicit;
   const order = [];
+  if (process.env.GEMINI_API_KEY) order.push('gemini');            // default brain: Gemini Flash
   if (process.env.ANTHROPIC_API_KEY || process.env.ANTHROPIC_AUTH_TOKEN) order.push('anthropic');
-  if (process.env.GEMINI_API_KEY) order.push('gemini');
   return order;
 }
 export const BRAIN = process.env.WALKAWAY_BRAIN || (providerOrder().length ? 'llm' : 'mock');

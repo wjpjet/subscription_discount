@@ -16,18 +16,19 @@
     <div class="menu" id="avatar-menu" role="menu" hidden>
       <a href="/settings" data-link role="menuitem">Settings</a>
       <a href="/settings/subscription" data-link role="menuitem">Subscription</a>
+      <span id="menu-cancel" hidden></span>
       <button data-action="signout" role="menuitem">Sign out</button>
     </div>
   </div>
 </header>
 <main id="app"></main>
 <div class="devbar" id="devbar" data-wa-ignore hidden>
-  <span class="devbar-title">Testbed controls</span>
+  <span class="devbar-title">Testbed</span> <a href="/scenarios" data-link class="dev-link">scenarios</a>
   <span class="devbar-status" id="dev-status"></span>
   <button data-action="reset" class="dev-btn">Reset state</button>
-  <button data-action="toggle-offer" class="dev-btn" id="dev-offer"></button>
-  <button data-action="signout" class="dev-btn">Sign out</button>
+    <button data-action="signout" class="dev-btn">Sign out</button>
 </div>
+<script src="/scenarios.js"></script>
 <script src="/app.js"></script>
 </body>
 </html>

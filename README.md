@@ -10,9 +10,9 @@ $0 if nothing is saved.
 | `extension/` | The Chrome extension (WXT + React): Scan (AI discovery of signed-in subscription services) and Hunt (AI-driven cancellation-flow navigation that accepts loyalty offers and can never finalize a cancel). See `extension/README.md`. |
 | `netlify/functions/` | The brain (`/api/discover`, `/api/classify`, `/api/agent-step`) on **Anthropic or Gemini** (`ANTHROPIC_API_KEY` / `GEMINI_API_KEY`, `AI_PROVIDER`), plus Stripe (`/api/checkout`, `/api/checkout-status`, `/api/settle`, `STRIPE_SECRET_KEY`). Deployed with the landing site. |
 | `shared/` | Code used by both sides: `guardrails.js` (the safety rules), `page-scripts.js` (in-page snapshot/actions), `brain-mock.js` (rule-based test brain). |
-| `testbed/` | "Streamly": a fake subscription service with a 3-step cancel flow + retention offer, for testing. Deploy as a second Netlify site (base dir `testbed`). |
-| `scripts/` | `dev-api.mjs` (run the functions locally), `e2e-testbed.mjs` (headless end-to-end: 3 scenarios). |
+| `testbed/` | "Streamly": a fake subscription service driven by **100 scenario configs** (`scenarios.js`) — entry locations, survey types, pause/downgrade traps, dark-pattern offers, login walls, noise. Deploy as a second Netlify site (base dir `testbed`). |
+| `scripts/` | `api-server.mjs` (the functions as a standalone server), `suite.mjs` (**the 100-scenario suite, scored 0–100**), `e2e-testbed.mjs` (3-scenario smoke), `test-stripe.mjs` (Stripe test-mode integration), `package-extension.mjs`. |
 | `IMPLEMENTATION_PLAN.md` | Architecture, decisions, phases, deploy steps. |
 | `netlify.toml` | Publishes `landing/`, bundles the functions, security headers. |
 
-**Quick start:** `npm install && npm run e2e:testbed:mock` (no API key needed) proves the loop end to end.
+**Quick start:** `npm install && npm run suite:mock` (no keys) runs all 100 scenarios and prints the score; `npm run suite` uses the real brain from `.env`.

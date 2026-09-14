@@ -1,4 +1,4 @@
-# Walkaway — Implementation Plan (v9)
+# Walkaway — Implementation Plan (v10)
 
 > **Working name: "Walkaway"** (placeholder). *Every subscription has a walkaway price.* A Chrome
 > extension (+ thin backend) — **one button**: it finds the subscription services you're signed into,
@@ -6,7 +6,7 @@
 > discount, accepts it, and never actually cancels.** 10% of verified savings, $1 minimum, $0 otherwise.
 
 _Last updated: 2026-09-09 · Scope: personal / a few users · Autonomy: hands-off · One workflow, no A/B_
-_**v9:** curated playbooks **removed** (unverified guesses); brain runs on **Anthropic or Gemini** (`AI_PROVIDER`, per-call fallback); refusal/outage fallbacks; **Stripe checkout + settlement** functions built (skippable in test mode); cost estimates (§13). **v8:** AI discovery over **all** signed-in sites (not a fixed list); the **hunt engine** (Claude decides each step; deterministic guardrails server- and extension-side); a **Streamly testbed** with a 3-step cancel flow + retention offer; extension **test mode**; a **mock brain** + puppeteer e2e harness (3 scenarios pass). **v7:** $1 card-check hold + one charge; **one-time narrative** ("save ~$X on your upcoming renewals"); no accounts (the card is the spam gate); Phase 2 extension **built** in `extension/`. **v6:** hold (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
+_**v10:** Gemini 3.8 Flash is the default brain; **100-scenario suite** (`npm run suite`) with SCORE / SAFETY / ACHIEVABLE / WIN RATE; Stripe verified 10/10 in test mode; timeout-proof design (25-domain discovery chunks × 4 in flight, 4 concurrent probes, one step per call); landing page simplified ("we pretend to cancel" first, no waitlist, install page + packaged zip). **v9:** curated playbooks **removed** (unverified guesses); brain runs on **Anthropic or Gemini** (`AI_PROVIDER`, per-call fallback); refusal/outage fallbacks; **Stripe checkout + settlement** functions built (skippable in test mode); cost estimates (§13). **v8:** AI discovery over **all** signed-in sites (not a fixed list); the **hunt engine** (Claude decides each step; deterministic guardrails server- and extension-side); a **Streamly testbed** with a 3-step cancel flow + retention offer; extension **test mode**; a **mock brain** + puppeteer e2e harness (3 scenarios pass). **v7:** $1 card-check hold + one charge; **one-time narrative** ("save ~$X on your upcoming renewals"); no accounts (the card is the spam gate); Phase 2 extension **built** in `extension/`. **v6:** hold (hotel model) and captures only verified savings — closes the bogus-card gap; Phase 2 build spec; open decisions. **v5:** no account required; Scan reveals the **services** and the **total** (not per-service amounts); checkout = card + email (password optional); summary + receipt emailed. v4: extension-only, "sites you're signed into", no history; email/bank deferred._
 
 ---
 
@@ -37,7 +37,7 @@ and retreats if not. "Confirm cancellation" is never a correct action.
 | **Account** | **Not required.** Anonymous session by default; email collected at checkout; password optional | Supabase anonymous sign-in, upgradeable to a real account later. |
 | **Reveal rule** | Before paying: show **which** services make offers and the **total** estimated savings — **never per-service amounts** | Per-service before/after appears only in the post-run summary. |
 | **Detection** | **All signed-in sites → AI filter → account page** | Cookie *names/flags* (never values) → registrable domains with session-like cookies → domain **names** sent to `/api/discover` (the model decides which are subscription services, where the account page is, and what a typical offer looks like — **no curated list**) → background-tab account page → `/api/classify`. No `history` permission. |
-| **AI provider** | `AI_PROVIDER=anthropic` (Claude Opus 5 default) or `gemini` (your key) or `gemini,anthropic` (fallback order) | Same prompts + schemas on both; a decline or outage on one provider falls through to the next. |
+| **AI provider** | **Gemini 3.8 Flash by default** (`GEMINI_API_KEY`); `AI_PROVIDER=gemini,anthropic` for fallback to Claude Opus 5 | Same prompts + schemas on both; a decline or outage on one provider falls through to the next. |
 | **When the AI gives up** | Refusal → `back_out`, reported as *AI declined this site*. Outage → 3 retries, then the run ends with an error. **No decision → no click.** | The mock brain is for tests only, never a fallback on real sites. |
 | **Privacy wording** | "Only the names of sites you're signed into are sent — never cookies, passwords, or history." | Landing page, FAQ, and panel all say this now. |
 | **Messaging rule** | Say *"the services you're currently signed into."* **Never** say "browsing history." | Accurate: we check sign-in state, never where they've been. |
@@ -333,3 +333,12 @@ steps plus two classify calls; discovery is one call per ~60 domains.
 The fee floor ($1 per run) covers Flash/Haiku/Sonnet comfortably; Opus 5 needs a few wins per run to
 break even. Latency matters too: Netlify synchronous functions time out at ~10s, so keep effort at
 `medium` (default) or use a Flash/Sonnet-class model for `agent-step`.
+
+---
+
+## 14. Known limitation: instant-cancel links
+A service whose "Cancel subscription" link cancels immediately with no confirmation step cannot be
+distinguished from a normal entry link before clicking it. Suite scenario X03 models this and is
+reported outside the SAFETY score. Mitigations if it ever matters: a per-service memory of
+"this link cancels instantly" (learned from a first failure), or preferring links that navigate
+to a new page over in-place buttons — neither is reliable enough to promise.

@@ -3,13 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Walkaway — Every subscription has a walkaway price</title>
-<meta name="description" content="Walkaway walks the cancellation flow of your subscriptions just far enough to surface the loyalty discount, accepts it, and keeps everything exactly as it was. Nothing gets cancelled. You only pay when you save: 10% of verified savings, $1 minimum.">
+<title>Walkaway — We pretend to cancel your subscriptions</title>
+<meta name="description" content="Walkaway walks through each subscription's cancellation steps like a human would — until the loyalty offer appears — then takes the deal and stops. Nothing gets cancelled. You pay 10% of what you save, once.">
 <meta name="theme-color" content="#0E1116">
 <meta property="og:type" content="website">
-<meta property="og:title" content="Walkaway — Every subscription has a walkaway price">
-<meta property="og:description" content="We threaten to leave. You stay — for less. 10% of verified savings, $1 minimum, $0 if we save you nothing.">
-<meta name="twitter:card" content="summary_large_image">
+<meta property="og:title" content="Walkaway — We pretend to cancel your subscriptions. You keep them, for less.">
+<meta property="og:description" content="Companies save their best price for people about to leave. We go get it. Nothing gets cancelled. 10% of what you save, once.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23FF5C39'/%3E%3Cpath d='M18 32h24M32 20l12 12-12 12' fill='none' stroke='%230E1116' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -65,15 +64,6 @@ em.hl{font-style:italic;color:var(--accent);font-weight:500}
 .field::placeholder{color:var(--muted-2)}
 .hero .field{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:var(--paper)}
 .hero .field::placeholder{color:rgba(246,243,236,.5)}
-.form-row{display:flex;gap:.6rem;max-width:520px}
-.form-row .field{flex:1;min-width:0}
-@media (max-width:560px){.form-row{flex-direction:column}.form-row .btn{width:100%}}
-.form-note{font-size:.85rem;color:var(--muted-2);margin-top:.7rem}
-.form-msg{margin-top:.8rem;font-size:.95rem;font-weight:500;min-height:1.4em}
-.form-msg.ok{color:var(--save)}
-.form-msg.err{color:var(--accent)}
-.hero .form-msg.ok{color:#5FD6A4}
-input[type=email]:invalid{box-shadow:none}
 
 /* ---------- Nav ---------- */
 .nav{position:sticky;top:0;z-index:50;background:rgba(14,17,22,.82);backdrop-filter:saturate(160%) blur(14px);-webkit-backdrop-filter:saturate(160%) blur(14px);border-bottom:1px solid var(--line-dark);color:var(--paper)}
@@ -141,14 +131,6 @@ input[type=email]:invalid{box-shadow:none}
   .chip{white-space:normal}
 }
 
-/* ---------- Trust strip ---------- */
-.strip{border-bottom:1px solid var(--line);padding-block:1.6rem}
-.strip .container{display:flex;flex-direction:column;gap:.9rem}
-.strip p{font-size:.85rem;color:var(--muted);font-weight:500}
-.pills{display:flex;flex-wrap:wrap;gap:.5rem}
-.pill{font-size:.85rem;font-weight:600;padding:.45rem .8rem;border-radius:999px;background:var(--white);border:1px solid var(--line);color:var(--ink-2)}
-.pill.no{color:var(--muted);text-decoration:line-through;text-decoration-color:rgba(14,17,22,.35)}
-
 /* ---------- Steps ---------- */
 .steps{display:grid;grid-template-columns:repeat(4,1fr);gap:1.25rem}
 @media (max-width:980px){.steps{grid-template-columns:repeat(2,1fr)}}
@@ -189,25 +171,6 @@ input[type=email]:invalid{box-shadow:none}
 .compare{margin-top:1.4rem;display:flex;gap:.8rem;align-items:flex-start;padding:1.1rem 1.3rem;border-radius:var(--r-md);background:var(--accent-soft);border:1px solid rgba(255,92,57,.25);font-size:.98rem;max-width:760px}
 .compare svg{flex:none;margin-top:.15rem}
 
-/* ---------- Estimator ---------- */
-.est{margin-top:2.5rem;background:var(--ink);color:var(--paper);border-radius:var(--r-lg);padding:clamp(1.5rem,4vw,2.4rem);display:grid;grid-template-columns:1.1fr 1fr;gap:2rem;align-items:center}
-@media (max-width:860px){.est{grid-template-columns:1fr}}
-.est h3{font-size:1.5rem}
-.est p{color:rgba(246,243,236,.7);margin-top:.5rem;font-size:.98rem}
-.est label{display:flex;justify-content:space-between;font-size:.88rem;font-weight:600;color:rgba(246,243,236,.8);margin-top:1.6rem;margin-bottom:.6rem}
-.est output{font-variant-numeric:tabular-nums;color:var(--paper)}
-input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:6px;border-radius:999px;background:rgba(255,255,255,.14);outline:none;margin:0}
-input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:24px;height:24px;border-radius:50%;background:var(--accent);border:3px solid var(--ink);box-shadow:0 0 0 2px var(--accent);cursor:pointer}
-input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;background:var(--accent);border:3px solid var(--ink);box-shadow:0 0 0 2px var(--accent);cursor:pointer}
-input[type=range]:focus-visible{outline:3px solid var(--accent);outline-offset:6px;border-radius:999px}
-.est-out{display:grid;gap:.75rem}
-.est-line{display:flex;justify-content:space-between;align-items:baseline;padding:.9rem 1.1rem;border-radius:12px;background:rgba(255,255,255,.05);border:1px solid var(--line-dark)}
-.est-line span{font-size:.9rem;color:rgba(246,243,236,.7)}
-.est-line b{font-family:var(--display);font-size:1.6rem;font-weight:500;font-variant-numeric:tabular-nums;letter-spacing:-.01em}
-.est-line.keep{background:rgba(31,169,113,.14);border-color:rgba(31,169,113,.45)}
-.est-line.keep b{color:#5FD6A4}
-.est-note{font-size:.8rem;color:rgba(246,243,236,.5);margin-top:.2rem}
-
 /* ---------- Safety ---------- */
 .safety{background:var(--white);border-top:1px solid var(--line);border-bottom:1px solid var(--line)}
 .grid4{display:grid;grid-template-columns:repeat(4,1fr);gap:1.25rem}
@@ -230,18 +193,6 @@ details[open] summary::after{transform:rotate(45deg)}
 details p{padding:0 0 1.2rem;color:var(--muted);max-width:66ch}
 details p + p{margin-top:.6rem}
 
-/* ---------- Join ---------- */
-.join{background:var(--ink);color:var(--paper);position:relative;overflow:hidden;isolation:isolate}
-.join::before{content:"";position:absolute;inset:0;z-index:-1;background:radial-gradient(800px 420px at 50% 120%,rgba(255,92,57,.28),transparent 60%)}
-.join .container{text-align:center;display:flex;flex-direction:column;align-items:center;gap:1.2rem}
-.join .lead{color:rgba(246,243,236,.72);margin-inline:auto}
-.join form{width:100%;max-width:520px;margin-top:.6rem}
-.join .form-row{margin-inline:auto}
-.join .field{background:rgba(255,255,255,.06);border-color:rgba(255,255,255,.18);color:var(--paper)}
-.join .field::placeholder{color:rgba(246,243,236,.5)}
-.join .form-note{color:rgba(246,243,236,.5)}
-.join .form-msg.ok{color:#5FD6A4}
-
 /* ---------- Footer ---------- */
 footer{background:#0B0E14;color:rgba(246,243,236,.6);padding:2.6rem 0;font-size:.88rem;border-top:1px solid var(--line-dark)}
 footer .container{display:flex;flex-wrap:wrap;justify-content:space-between;gap:1.5rem;align-items:flex-start}
@@ -257,11 +208,34 @@ footer a:hover{color:var(--paper)}
 .js .reveal{opacity:0;transform:translateY(14px);transition:opacity .6s ease,transform .6s ease}
 .js .reveal.in{opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){.js .reveal{opacity:1;transform:none;transition:none}}
+
+/* ---------- v3 layout ---------- */
+.steps.three{grid-template-columns:repeat(3,1fr)}
+@media (max-width:900px){.steps.three{grid-template-columns:1fr}}
+/* ---------- v3 hero: trick strip + CTA ---------- */
+.hero .container{grid-template-columns:1fr;gap:2.2rem}
+.hero .lead{max-width:62ch}
+.hero .lead strong{color:var(--paper)}
+.trickline{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin-top:1.8rem}
+.trickline .chip{font-size:.92rem}
+.trickline .chip.offer{background:rgba(255,92,57,.16);border-color:rgba(255,92,57,.45)}
+.trickline .yes{background:rgba(31,169,113,.16);border:1px solid rgba(31,169,113,.5);border-radius:12px;padding:.7rem 1rem;font-weight:700;font-size:.92rem}
+.trickline .no{background:rgba(255,255,255,.03);border:1px solid var(--line-dark);border-radius:12px;padding:.7rem 1rem;font-size:.92rem;color:rgba(246,243,236,.6)}
+.trickline .no s{text-decoration-color:rgba(255,92,57,.9);text-decoration-thickness:2px;color:rgba(246,243,236,.85)}
+.cta-row{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;margin-top:2rem}
+.cta-note{font-size:.88rem;color:rgba(246,243,236,.6)}
+.see{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,4rem);align-items:center}
+@media (max-width:900px){.see{grid-template-columns:1fr}}
+.see .mock{transform:none;margin-inline:auto}
+.cta-final{background:var(--ink);color:var(--paper);text-align:center}
+.cta-final .container{display:flex;flex-direction:column;align-items:center;gap:1.2rem}
+.cta-final .lead{color:rgba(246,243,236,.72)}
+.pill{font-size:.85rem;font-weight:600;padding:.45rem .8rem;border-radius:999px;background:var(--white);border:1px solid var(--line);color:var(--ink-2)}
+.pills{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;margin-top:1.2rem}
 </style>
 </head>
 <body>
 
-<!-- ===== NAV ===== -->
 <header class="nav">
   <div class="container">
     <a class="logo" href="#top" aria-label="Walkaway home">
@@ -271,10 +245,9 @@ footer a:hover{color:var(--paper)}
     <nav aria-label="Primary">
       <ul class="nav-links">
         <li><a href="#how">How it works</a></li>
-        <li><a href="#trick">The trick</a></li>
         <li><a href="#pricing">Pricing</a></li>
         <li><a href="#faq">FAQ</a></li>
-        <li class="cta"><a class="btn btn-primary" href="#join">Get early access</a></li>
+        <li class="cta"><a class="btn btn-primary" href="install.html">Add to Chrome</a></li>
       </ul>
     </nav>
   </div>
@@ -282,316 +255,153 @@ footer a:hover{color:var(--paper)}
 
 <main id="top">
 
-<!-- ===== HERO ===== -->
 <section class="hero">
   <div class="container">
     <div class="hero-copy">
-      <span class="eyebrow">Your AI negotiator for subscriptions</span>
-      <h1>Every subscription has a <em class="hl">walkaway price.</em></h1>
-      <p class="lead">Install the extension and click once. Walkaway finds the subscription services you're signed into, walks each cancellation flow just far enough to surface the loyalty discount they only show people about to leave — then accepts it and keeps everything exactly as it was. <strong>Nothing gets cancelled. You pay once — and only if you save.</strong></p>
+      <span class="eyebrow">The subscription trick, done for you</span>
+      <h1>We <em class="hl">pretend to cancel</em> your subscriptions. You keep them all — for less.</h1>
+      <p class="lead">Companies save their best price for people who are about to leave. Walkaway walks through the cancel steps like a human would — right up to the loyalty offer — then takes the deal and stops. <strong>Nothing gets cancelled. Ever.</strong></p>
 
-      <div class="hero-actions">
-        <form name="waitlist" method="POST" data-netlify="true" data-netlify-honeypot="bot-field" class="js-form" action="/">
-          <input type="hidden" name="form-name" value="waitlist">
-          <input type="hidden" name="source" value="hero">
-          <p class="sr-only"><label>Don't fill this out if you're human: <input name="bot-field"></label></p>
-          <div class="form-row">
-            <label class="sr-only" for="email-hero">Email address</label>
-            <input class="field" id="email-hero" type="email" name="email" placeholder="you@example.com" autocomplete="email" required>
-            <button class="btn btn-primary" type="submit">Get early access</button>
-          </div>
-          <p class="form-note">Free to scan. Pay once: 10% of what we verifiably save you. $0 if we save you nothing.</p>
-          <p class="form-msg" role="status" aria-live="polite"></p>
-        </form>
+      <div class="trickline" aria-label="What Walkaway does">
+        <span class="chip">Settings</span><span class="arrow" aria-hidden="true">→</span>
+        <span class="chip">Cancel subscription</span><span class="arrow" aria-hidden="true">→</span>
+        <span class="chip">“Why are you leaving?”</span><span class="arrow" aria-hidden="true">→</span>
+        <span class="chip offer">“Wait — 50% off for 6 months?”</span><span class="arrow" aria-hidden="true">→</span>
+        <span class="yes">✓ Takes it. Stops.</span>
+        <span class="no"><s>Confirm cancellation</s> — it can’t press this</span>
       </div>
 
-      <div class="hero-proof">
-        <div class="proof"><b>10%</b><span>of what we save you — paid once</span></div>
-        <div class="proof"><b>$0</b><span>if we find no discount</span></div>
-        <div class="proof"><b>Never</b><span>cancels a subscription</span></div>
-      </div>
-    </div>
-
-    <div class="hero-visual">
-      <div class="mock" aria-hidden="true">
-        <div class="mock-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="mock-title">5 subscriptions found · 4 make offers</span></div>
-        <ul class="mock-rows">
-          <li class="row"><span class="brand">SiriusXM</span><span class="tag ok">Makes offers</span></li>
-          <li class="row"><span class="brand">The New York Times</span><span class="tag ok">Makes offers</span></li>
-          <li class="row skip"><span class="brand">Spotify</span><span class="tag skip">No offers · kept</span></li>
-          <li class="row"><span class="brand">Hulu</span><span class="tag ok">Makes offers</span></li>
-          <li class="row"><span class="brand">Adobe Creative Cloud</span><span class="tag ok">Makes offers</span></li>
-        </ul>
-        <div class="mock-foot">
-          <div><small>On upcoming renewals</small><strong class="save">~$500</strong></div>
-          <div><small>Your fee, once</small><strong>~$50</strong></div>
-          <div><small>Account</small><strong>Not needed</strong></div>
-        </div>
-        <div class="mock-cta">Get these discounts →</div>
-        <div class="ticker"><span class="pulse"></span><span id="tick">Checking which services you're signed into…</span></div>
+      <div class="cta-row">
+        <a class="btn btn-primary btn-lg" href="install.html">Add to Chrome</a>
+        <a class="btn btn-ghost" href="#how">How it works</a>
+        <span class="cta-note">Free to scan · then 10% of what you save, once · $0 if nothing</span>
       </div>
     </div>
   </div>
 </section>
 
-<!-- ===== TRUST STRIP ===== -->
-<section class="strip" aria-label="Supported services">
-  <div class="container">
-    <p>Hunts for loyalty offers on services known to make them, including:</p>
-    <div class="pills">
-      <span class="pill">SiriusXM</span><span class="pill">The New York Times</span><span class="pill">Hulu</span><span class="pill">Audible</span><span class="pill">Adobe Creative Cloud</span><span class="pill">YouTube Premium</span><span class="pill">Xfinity</span><span class="pill">Paramount+</span><span class="pill">Peacock</span><span class="pill">LinkedIn Premium</span><span class="pill">NordVPN</span><span class="pill">Headspace</span>
-      <span class="pill no" title="Some services never make offers. We detect that and leave them alone.">Netflix</span>
-    </div>
-    <p>Some services — like Netflix — never make offers. We know which ones, and we leave those alone.</p>
-  </div>
-</section>
-
-<!-- ===== HOW IT WORKS ===== -->
 <section class="section" id="how">
   <div class="container">
     <div class="sec-head reveal">
       <span class="eyebrow">How it works</span>
-      <h2>Install once. Click once. Keep the difference.</h2>
-      <p class="lead">You see what you could save before anything runs. Nothing changes until you say so.</p>
+      <h2>Three steps. One click from you.</h2>
     </div>
-    <div class="steps">
+    <div class="steps three">
       <article class="step reveal">
         <div class="num">1</div>
-        <h3>Install</h3>
-        <p>Add the extension and click <strong>Scan</strong>. It finds the subscription services you're currently signed into. Only the names of those sites are sent to identify subscriptions — never cookies, passwords, or history.</p>
+        <h3>Add it. Click Scan.</h3>
+        <p>It finds the subscriptions you're signed into and shows the total you could save on your upcoming renewals. Free.</p>
       </article>
       <article class="step reveal">
         <div class="num">2</div>
-        <h3>We check your plans</h3>
-        <p>It quietly opens each account in the background and checks your plan. You see which services make loyalty offers and the total you'd save on your upcoming renewals — free, before anything runs.</p>
+        <h3>It walks the cancel steps — like a human.</h3>
+        <p>Settings, cancel, the “why are you leaving?” survey… until the loyalty offer shows up. It takes the deal and backs out. It physically can't press “confirm cancellation.”</p>
       </article>
       <article class="step reveal">
         <div class="num">3</div>
-        <h3>One click</h3>
-        <p>Enter a card and an email — no account needed; we place a $1 hold just to check the card. It runs in your own browser, in a background tab, using the accounts you're already signed into.</p>
-      </article>
-      <article class="step reveal">
-        <div class="num">4</div>
-        <h3>Pay only on results</h3>
-        <p>We verify the new price on your billing page. Then — and only then — you're charged once: 10% of what we saved. We email you a summary and receipt. Nothing saved, nothing owed.</p>
+        <h3>You pay 10%. Once.</h3>
+        <p>We check the new price on your billing page. You're charged 10% of what we actually saved — $1 minimum, $0 if nothing. Summary and receipt emailed.</p>
       </article>
     </div>
   </div>
 </section>
 
-<!-- ===== THE TRICK ===== -->
-<section class="section trick" id="trick">
-  <div class="container">
-    <div class="sec-head reveal">
-      <span class="eyebrow">The trick, explained</span>
-      <h2>Companies show their best price to the people about to leave.</h2>
-      <p class="lead">Retention offers exist because it costs far more to win you back than to keep you. So the real price hides behind the “Cancel” button. Walkaway goes and gets it.</p>
-    </div>
-
-    <div class="flow reveal" aria-label="Cancellation flow">
-      <span class="chip">Account settings</span><span class="arrow" aria-hidden="true">→</span>
-      <span class="chip">Cancel subscription</span><span class="arrow" aria-hidden="true">→</span>
-      <span class="chip">“Why are you leaving?”</span><span class="arrow" aria-hidden="true">→</span>
-      <span class="chip offer">“Wait — 60% off for 6 months?”</span>
-    </div>
-
-    <div class="branch reveal">
-      <div class="choice yes">
-        <div class="ic" aria-hidden="true">✓</div>
-        <div><b>Accept offer</b><span>This is the button we press. Your plan stays exactly as it was — just cheaper.</span></div>
-      </div>
-      <div class="choice no">
-        <div class="ic" aria-hidden="true">✕</div>
-        <div><b>Confirm cancellation</b><span>This button isn't in our toolset. Walkaway can't press it — not “won't,” <em>can't</em>. If there's no offer, it backs out.</span></div>
+<section class="section" style="background:var(--white);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
+  <div class="container see">
+    <div class="reveal">
+      <span class="eyebrow">What you'll see</span>
+      <h2>Which services make offers, and what it adds up to.</h2>
+      <p class="lead" style="margin-top:1rem">Some services — Netflix, for one — never make offers. We know which, and leave those alone. The exact numbers show up in your summary after the run.</p>
+      <div class="pills" style="justify-content:flex-start">
+        <span class="pill">Streaming</span><span class="pill">News</span><span class="pill">Music &amp; audio</span><span class="pill">Software</span><span class="pill">VPNs</span><span class="pill">Telecom</span><span class="pill">Fitness &amp; apps</span>
       </div>
     </div>
-
-    <p class="trick-copy reveal">Every step is classified before we act: <em>is this an offer, or is this the point of no return?</em> On anything ambiguous, Walkaway retreats. The only two outcomes are “you're paying less” or “nothing changed.”</p>
+    <div class="mock reveal" aria-hidden="true">
+      <div class="mock-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="mock-title">5 subscriptions found · 4 make offers</span></div>
+      <ul class="mock-rows">
+        <li class="row"><span class="brand">SiriusXM</span><span class="tag ok">Makes offers</span></li>
+        <li class="row"><span class="brand">The New York Times</span><span class="tag ok">Makes offers</span></li>
+        <li class="row skip"><span class="brand">Spotify</span><span class="tag skip">No offers · kept</span></li>
+        <li class="row"><span class="brand">Hulu</span><span class="tag ok">Makes offers</span></li>
+        <li class="row"><span class="brand">Adobe Creative Cloud</span><span class="tag ok">Makes offers</span></li>
+      </ul>
+      <div class="mock-foot">
+        <div><small>On upcoming renewals</small><strong class="save">~$500</strong></div>
+        <div><small>Your fee, once</small><strong>~$50</strong></div>
+        <div><small>Account</small><strong>Not needed</strong></div>
+      </div>
+      <div class="mock-cta">Get these discounts →</div>
+      <div class="ticker"><span class="pulse"></span><span id="tick">Checking which services you're signed into…</span></div>
+    </div>
   </div>
 </section>
 
-<!-- ===== PRICING ===== -->
 <section class="section" id="pricing">
   <div class="container">
     <div class="sec-head reveal">
       <span class="eyebrow">Pricing</span>
       <h2>Free to scan. 10% of what you save — once.</h2>
-      <p class="lead">No subscription to manage your subscriptions. One charge, after we've verified your discounts.</p>
     </div>
-
     <div class="tiles">
-      <div class="tile hero-tile reveal">
-        <div class="big">10%</div>
-        <div class="lab">of verified savings</div>
-        <div class="sub">On the discounts we actually secured, over the term of each offer. Charged once. $1 minimum.</div>
-      </div>
-      <div class="tile reveal">
-        <div class="big">$1</div>
-        <div class="lab">hold to check your card</div>
-        <div class="sub">Placed at checkout, released after the run. Not a fee.</div>
-      </div>
-      <div class="tile reveal">
-        <div class="big">$0</div>
-        <div class="lab">if we save you nothing</div>
-        <div class="sub">No offer, no fee. No monthly plan. Ever.</div>
-      </div>
+      <div class="tile hero-tile reveal"><div class="big">10%</div><div class="lab">of verified savings</div><div class="sub">On the discounts we actually secured, over the term of each offer. Charged once. $1 minimum.</div></div>
+      <div class="tile reveal"><div class="big">$1</div><div class="lab">hold to check your card</div><div class="sub">Placed at checkout, released after the run. Not a fee.</div></div>
+      <div class="tile reveal"><div class="big">$0</div><div class="lab">if we save you nothing</div><div class="sub">No offer, no fee. No monthly plan. Ever.</div></div>
     </div>
-
     <div class="compare reveal">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8492A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
       <div>Bill-negotiation services typically take <strong>35–60%</strong> of your savings. We take 10% — and only after the new price is verified on your own billing page.</div>
     </div>
-
-    <div class="est reveal">
-      <div>
-        <h3>What would you keep?</h3>
-        <p>Drag to your monthly subscription spend. This is an illustration — your real number comes after the free scan.</p>
-        <label for="spend"><span>Monthly subscription spend</span><output id="spend-out" for="spend">$120</output></label>
-        <input type="range" id="spend" min="20" max="400" step="5" value="120">
-        <p class="est-note">Assumes roughly one in three services has an active loyalty offer averaging ~45% off for ~6 months.</p>
-      </div>
-      <div class="est-out" aria-live="polite">
-        <div class="est-line"><span>Estimated savings on upcoming renewals</span><b id="est-save">$108.00</b></div>
-        <div class="est-line"><span>Walkaway's fee (10%, once)</span><b id="est-fee">$10.80</b></div>
-        <div class="est-line keep"><span>You keep</span><b id="est-keep">$97.20</b></div>
-      </div>
-    </div>
   </div>
 </section>
 
-<!-- ===== SAFETY ===== -->
 <section class="section safety" id="safety">
   <div class="container">
     <div class="sec-head reveal">
       <span class="eyebrow">Safety</span>
-      <h2>Built to be trusted near your money.</h2>
-      <p class="lead">The whole point is that you keep your subscriptions. So we designed it to be incapable of losing them.</p>
+      <h2>Built so it can't lose your subscriptions.</h2>
     </div>
     <div class="grid4">
-      <div class="safe reveal">
-        <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 4v5"/></svg></div>
-        <h3>Runs in your browser</h3>
-        <p>It uses the accounts you're already signed into. We never see, ask for, or store a password.</p>
-      </div>
-      <div class="safe reveal">
-        <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div>
-        <h3>Cannot cancel</h3>
-        <p>The “confirm cancellation” action doesn't exist in the agent's toolset. On anything ambiguous, it backs out.</p>
-      </div>
-      <div class="safe reveal">
-        <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3-3h12l3 3v12a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></div>
-        <h3>Every step recorded</h3>
-        <p>A screenshot of every screen, every run. Review exactly what happened, any time.</p>
-      </div>
-      <div class="safe reveal">
-        <div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></div>
-        <h3>Only sites you're signed into</h3>
-        <p>To find your subscriptions, the extension looks at which sites you're signed into and sends only their names — like hulu.com — to identify subscription services. Never cookies, passwords, or your history.</p>
-      </div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 4v5"/></svg></div><h3>Runs in your browser</h3><p>It uses the accounts you're already signed into. We never see or store a password.</p></div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Cannot cancel</h3><p>“Confirm cancellation” isn't an action it can take. On anything unclear, it backs out.</p></div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3-3h12l3 3v12a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></div><h3>Every step logged</h3><p>You can watch it work, and review each step afterwards.</p></div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></div><h3>Only site names are sent</h3><p>To spot subscriptions, we send the names of sites you're signed into — never cookies, passwords, or history.</p></div>
     </div>
   </div>
 </section>
 
-<!-- ===== FAQ ===== -->
 <section class="section" id="faq">
   <div class="container">
-    <div class="sec-head reveal">
-      <span class="eyebrow">FAQ</span>
-      <h2>Fair questions.</h2>
-    </div>
+    <div class="sec-head reveal"><span class="eyebrow">FAQ</span><h2>Fair questions.</h2></div>
     <div class="faq-list">
-      <details class="reveal">
-        <summary>Will it ever actually cancel something?</summary>
-        <p>It's designed so it can't. The “confirm cancellation” button isn't an action it can take — it's not in its toolset at all. Every screen is classified before any click, and on anything ambiguous it backs out.</p>
-        <p>The honest caveat: a small number of services finalize a cancellation with no offer and no confirmation step. We track which ones do this and skip them entirely rather than attempt them.</p>
-      </details>
-      <details class="reveal">
-        <summary>Which services does it work with?</summary>
-        <p>Ones that make loyalty offers when you go to leave — streaming, news, audio, software, telecom are common. Some services (Netflix, for example) never make offers; we know which, and we leave those alone rather than waste a run. Coverage grows as we add services.</p>
-      </details>
-      <details class="reveal">
-        <summary>What if there's no discount?</summary>
-        <p>You pay nothing. The fee only exists when we've verified a lower price on your billing page.</p>
-      </details>
-      <details class="reveal">
-        <summary>Is this a one-time thing?</summary>
-        <p>Mostly, yes. Loyalty offers run for a set term — a few months to a year — and most services won't offer again for a while. So think of it as a one-time saving on your upcoming renewals: you keep paying the lower price for the term, and you can run Walkaway again when an offer ends.</p>
-      </details>
-      <details class="reveal">
-        <summary>How is the fee calculated?</summary>
-        <p>10% of the verified savings over the term of each offer, added up across the run — charged once, with a $1 minimum. Example: one service drops you from $24 to $7 a month for six months — that's $102 saved, so the fee is $10.20. We confirm the new prices first, then email you a summary and receipt.</p>
-      </details>
-      <details class="reveal">
-        <summary>Do you store my passwords?</summary>
-        <p>No. Walkaway runs as a browser extension in your own browser, using the sessions you're already logged into. Passwords never leave your machine because we never touch them.</p>
-      </details>
-      <details class="reveal">
-        <summary>What does the extension actually look at?</summary>
-        <p>To find your subscriptions, it looks at which sites you're signed into and sends only those site names to identify subscription services, then reads your plan and price from each account page. During a hunt, it only touches the tab of the service it's working on. Cookies, passwords, and your browsing history never leave your browser.</p>
-      </details>
-      <details class="reveal">
-        <summary>Do I have to sit and watch it?</summary>
-        <p>No. It works in a background tab while you keep doing whatever you were doing. Open the side panel to follow along, or bring the tab to the front any time to watch it click through.</p>
-      </details>
-      <details class="reveal">
-        <summary>Do I need an account?</summary>
-        <p>No. At checkout you enter a card and an email so we can send your summary and receipt. Add a password only if you'd like to log in later and see your past runs.</p>
-      </details>
-      <details class="reveal">
-        <summary>What happens on my card at checkout?</summary>
-        <p>A $1 hold, just to confirm the card works — released after the run. Then, only if we saved you money, one charge for 10% of the verified savings. If we saved you nothing, nothing is charged.</p>
-      </details>
-      <details class="reveal">
-        <summary>Does it run while my computer is off?</summary>
-        <p>Not today. It runs in your browser while it's open — you can watch it go. Scheduled re-hunts when offers expire are on the roadmap.</p>
-      </details>
-      <details class="reveal">
-        <summary>Is this allowed?</summary>
-        <p>You're using your own accounts, in your own browser, on your own click — Walkaway just does the tedious part. Some services' terms discourage automation, so we act only when you tell us to, and we back off rather than push through anything a service blocks.</p>
-      </details>
+      <details class="reveal"><summary>Will it ever actually cancel something?</summary><p>It's built so it can't: the “confirm cancellation” button isn't an action it can take. Every screen is checked before any click, and on anything unclear it backs out. Rare services cancel with no confirmation step at all; we track those and skip them.</p></details>
+      <details class="reveal"><summary>So what does it actually do?</summary><p>The same thing a savvy person does by hand: go to cancel, sit through the “are you sure?” screens, and take the discount the company offers to keep you. Then it stops. Your plan stays exactly as it was — just cheaper.</p></details>
+      <details class="reveal"><summary>Which services work?</summary><p>Any that make a loyalty offer when you go to leave — streaming, news, music, software, VPNs, telecom, fitness apps. Some (Netflix, for example) never do; we skip those.</p></details>
+      <details class="reveal"><summary>What if there's no discount?</summary><p>You pay nothing. The $1 card hold is released and there's no fee.</p></details>
+      <details class="reveal"><summary>Is this a one-time thing?</summary><p>Mostly. Offers run for a set term — months to a year — and most services won't offer again for a while. Run Walkaway again when an offer ends.</p></details>
+      <details class="reveal"><summary>How is the fee calculated?</summary><p>10% of the verified savings over each offer's term, added up, charged once, $1 minimum. Example: $24 → $7 a month for six months is $102 saved, so the fee is $10.20.</p></details>
+      <details class="reveal"><summary>What does the extension look at?</summary><p>Which sites you're signed into — it sends only those site names to identify subscription services, then reads your plan from each account page. During a run it only touches the tab it's working in. Cookies, passwords, and your browsing history never leave your browser.</p></details>
     </div>
   </div>
 </section>
 
-<!-- ===== JOIN ===== -->
-<section class="section join" id="join">
+<section class="section cta-final">
   <div class="container">
-    <span class="eyebrow">Early access</span>
+    <span class="eyebrow">Ready?</span>
     <h2>Stop paying the <em class="hl">sucker price.</em></h2>
-    <p class="lead">Join the waitlist. We'll scan for free and tell you what you could save before you decide anything.</p>
-    <form name="waitlist-bottom" method="POST" data-netlify="true" data-netlify-honeypot="bot-field" class="js-form" action="/">
-      <input type="hidden" name="form-name" value="waitlist-bottom">
-      <input type="hidden" name="source" value="bottom">
-      <p class="sr-only"><label>Don't fill this out if you're human: <input name="bot-field"></label></p>
-      <div class="form-row">
-        <label class="sr-only" for="email-bottom">Email address</label>
-        <input class="field" id="email-bottom" type="email" name="email" placeholder="you@example.com" autocomplete="email" required>
-        <button class="btn btn-primary btn-lg" type="submit">Get early access</button>
-      </div>
-      <p class="form-note">No spam. One email when your spot opens.</p>
-      <p class="form-msg" role="status" aria-live="polite"></p>
-    </form>
+    <p class="lead">Add Walkaway to Chrome, click Scan, and see what you could save. Free.</p>
+    <a class="btn btn-primary btn-lg" href="install.html">Add to Chrome</a>
   </div>
 </section>
 
 </main>
 
-<!-- ===== FOOTER ===== -->
 <footer>
   <div class="container">
     <div>
-      <a class="logo" href="#top" aria-label="Walkaway home">
-        <span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 32h24M32 20l12 12-12 12"/></svg></span>
-        Walkaway
-      </a>
+      <a class="logo" href="#top" aria-label="Walkaway home"><span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 32h24M32 20l12 12-12 12"/></svg></span>Walkaway</a>
       <p class="disc">Results vary and depend on each service's current retention offers; some services make none. Savings shown are illustrative until verified on your billing page. Walkaway is not affiliated with or endorsed by any service named. © <span id="yr">2026</span> Walkaway.</p>
     </div>
-    <ul>
-      <li><a href="#how">How it works</a></li>
-      <li><a href="#pricing">Pricing</a></li>
-      <li><a href="#safety">Safety</a></li>
-      <li><a href="#faq">FAQ</a></li>
-    </ul>
+    <ul><li><a href="#how">How it works</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#safety">Safety</a></li><li><a href="#faq">FAQ</a></li></ul>
   </div>
 </footer>
 
@@ -599,71 +409,17 @@ footer a:hover{color:var(--paper)}
 (function(){
   document.documentElement.classList.replace('no-js','js');
   var reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  /* Footer year */
   var yr = document.getElementById('yr'); if (yr) yr.textContent = new Date().getFullYear();
-
-  /* Hero mock: stagger rows in */
   var rows = document.querySelectorAll('.mock .row');
   rows.forEach(function(r,i){ setTimeout(function(){ r.classList.add('in'); }, reduce ? 0 : 250 + i*140); });
-
-  /* Hero ticker */
-  var lines = [
-    "Checking which services you're signed into…",
-    "Found 5 subscriptions · 4 make offers",
-    "Opening SiriusXM in a background tab…",
-    "Reached the loyalty-offer screen",
-    "Accepted: 70% off for 6 months",
-    "Verified on your billing page ✓",
-    "Saved ~$498 on upcoming renewals. Nothing cancelled."
-  ];
+  var lines = ["Checking which services you're signed into…","Found 5 subscriptions · 4 make offers","Opening SiriusXM in a background tab…","Reached the loyalty-offer screen","Accepted: 70% off for 6 months","Verified on your billing page ✓","Saved ~$498 on upcoming renewals. Nothing cancelled."];
   var tick = document.getElementById('tick'), li = 0;
-  if (tick && !reduce) {
-    setInterval(function(){
-      tick.classList.add('fade');
-      setTimeout(function(){ li = (li+1) % lines.length; tick.textContent = lines[li]; tick.classList.remove('fade'); }, 300);
-    }, 2300);
-  }
-
-  /* Reveal on scroll */
+  if (tick && !reduce) setInterval(function(){ tick.classList.add('fade'); setTimeout(function(){ li = (li+1) % lines.length; tick.textContent = lines[li]; tick.classList.remove('fade'); }, 300); }, 2300);
   var els = document.querySelectorAll('.reveal');
   if ('IntersectionObserver' in window && !reduce) {
-    var io = new IntersectionObserver(function(entries){
-      entries.forEach(function(e){ if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } });
-    }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
+    var io = new IntersectionObserver(function(entries){ entries.forEach(function(e){ if (e.isIntersecting) { e.target.classList.add('in'); io.unobserve(e.target); } }); }, { rootMargin: '0px 0px -8% 0px', threshold: 0.08 });
     els.forEach(function(el){ io.observe(el); });
   } else { els.forEach(function(el){ el.classList.add('in'); }); }
-
-  /* Estimator */
-  var spend = document.getElementById('spend');
-  if (spend) {
-    var out = document.getElementById('spend-out'), s = document.getElementById('est-save'), f = document.getElementById('est-fee'), k = document.getElementById('est-keep');
-    var money = function(n){ return '$' + n.toFixed(2); };
-    var update = function(){
-      var v = Number(spend.value);
-      var save = v * (1/3) * 0.45 * 6;             // 1 in 3 services has an offer, ~45% off, ~6-month term — illustrative
-      var fee = Math.max(1, save * 0.10);
-      out.textContent = '$' + v;
-      s.textContent = money(save); f.textContent = money(fee); k.textContent = money(Math.max(0, save - fee));
-    };
-    spend.addEventListener('input', update); update();
-  }
-
-  /* Waitlist forms → Netlify Forms via fetch, with graceful fallback */
-  document.querySelectorAll('form.js-form').forEach(function(form){
-    form.addEventListener('submit', function(ev){
-      ev.preventDefault();
-      var msg = form.querySelector('.form-msg'), btn = form.querySelector('button[type=submit]');
-      var email = form.querySelector('input[type=email]');
-      if (!email.checkValidity()) { email.reportValidity(); return; }
-      var data = new URLSearchParams(new FormData(form)).toString();
-      btn.disabled = true; msg.className = 'form-msg'; msg.textContent = 'Adding you…';
-      fetch('/', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: data })
-        .then(function(r){ if (!r.ok) throw new Error(r.status); msg.className = 'form-msg ok'; msg.textContent = "You're on the list. We'll be in touch."; form.reset(); })
-        .catch(function(){ msg.className = 'form-msg err'; msg.textContent = 'Something went wrong — please try again.'; })
-        .finally(function(){ btn.disabled = false; });
-    });
-  });
 })();
 </script>
 </body>

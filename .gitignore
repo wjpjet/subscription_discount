@@ -19,3 +19,6 @@ build/
 
 # Logs
 *.log
+
+# suite output
+results/
