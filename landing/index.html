@@ -222,6 +222,7 @@ footer a:hover{color:var(--paper)}
 .trickline .yes{background:rgba(31,169,113,.16);border:1px solid rgba(31,169,113,.5);border-radius:12px;padding:.7rem 1rem;font-weight:700;font-size:.92rem}
 .trickline .no{background:rgba(255,255,255,.03);border:1px solid var(--line-dark);border-radius:12px;padding:.7rem 1rem;font-size:.92rem;color:rgba(246,243,236,.6)}
 .trickline .no s{text-decoration-color:rgba(255,92,57,.9);text-decoration-thickness:2px;color:rgba(246,243,236,.85)}
+@media (max-width:640px){.trickline{flex-direction:column;align-items:flex-start;gap:.3rem}.trickline .arrow{transform:rotate(90deg);padding-left:1.2rem;line-height:1}.trickline .chip,.trickline .yes{width:auto}}
 .cta-row{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;margin-top:2rem}
 .cta-note{font-size:.88rem;color:rgba(246,243,236,.6)}
 .see{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,4rem);align-items:center}
@@ -260,21 +261,20 @@ footer a:hover{color:var(--paper)}
     <div class="hero-copy">
       <span class="eyebrow">Every subscription has a second price</span>
       <h1>Get the <em class="hl">leaving price.</em> Keep the subscription.</h1>
-      <p class="lead">There's the price you pay, and the price they offer people who are about to leave. Walkaway goes through the cancel steps for you, holds out for the real offer, takes it, and stops. <strong>You keep the subscription. Next month's bill is lower.</strong></p>
+      <p class="lead">Keeping you is cheaper than finding a new customer — so every subscription has a second, lower price, offered only when you go to cancel. That's the leaving price. Walkaway AI goes and gets it, then stops. <strong>You keep the subscription. Next month's bill is lower.</strong></p>
 
       <div class="trickline" aria-label="How Walkaway gets the leaving price">
         <span class="chip">Settings</span><span class="arrow" aria-hidden="true">→</span>
         <span class="chip">Cancel subscription</span><span class="arrow" aria-hidden="true">→</span>
         <span class="chip">“Why are you leaving?”</span><span class="arrow" aria-hidden="true">→</span>
         <span class="chip offer">“Wait — 50% off for 6 months?”</span><span class="arrow" aria-hidden="true">→</span>
-        <span class="yes">✓ Takes it. Stops.</span>
-        <span class="no"><s>Confirm cancellation</s> — it can’t press this</span>
+        <span class="yes">✓ Walkaway AI takes it</span>
       </div>
 
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href="install.html">Add to Chrome</a>
         <a class="btn btn-ghost" href="#how">How it works</a>
-        <span class="cta-note">Free to scan · then 10% of what you save, once · $0 if nothing</span>
+        <span class="cta-note">Free to scan. You pay 10% of what you save. Once.</span>
       </div>
     </div>
   </div>
@@ -306,12 +306,22 @@ footer a:hover{color:var(--paper)}
   </div>
 </section>
 
+<section class="section" style="padding-top:0">
+  <div class="container">
+    <div class="sec-head reveal" style="max-width:820px">
+      <span class="eyebrow">Why it works</span>
+      <h2>We're experts at cancelling.</h2>
+      <p class="lead" style="margin-top:1rem">Cancellation flows are built to keep you: decoy offers, buried buttons, guilt screens. We've mapped them. Walkaway AI moves through each one the way that gets you the most money — and because we only get paid when you save, we hold out for the best offer, not the fastest one.</p>
+    </div>
+  </div>
+</section>
+
 <section class="section" style="background:var(--white);border-top:1px solid var(--line);border-bottom:1px solid var(--line)">
   <div class="container see">
     <div class="reveal">
       <span class="eyebrow">What you'll see</span>
       <h2>Which of your services have a leaving price, and what it adds up to.</h2>
-      <p class="lead" style="margin-top:1rem">Offers like half off for six months are common in streaming, news, and software. Some services — Netflix, for one — never make one; we know which, and leave those alone. Exact numbers show up in your summary after the run.</p>
+      <p class="lead" style="margin-top:1rem">Offers like half off for six months are common in streaming, news, and software. Sometimes a company won't make one — we leave those alone. Exact numbers show up in your summary after the run.</p>
       <div class="pills" style="justify-content:flex-start">
         <span class="pill">Streaming</span><span class="pill">News</span><span class="pill">Music &amp; audio</span><span class="pill">Software</span><span class="pill">VPNs</span><span class="pill">Telecom</span><span class="pill">Fitness &amp; apps</span>
       </div>
@@ -340,7 +350,7 @@ footer a:hover{color:var(--paper)}
   <div class="container">
     <div class="sec-head reveal">
       <span class="eyebrow">Pricing</span>
-      <h2>Free to scan. 10% of what you save — once.</h2>
+      <h2>You pay 10% of what you save. Once.</h2>
     </div>
     <div class="tiles">
       <div class="tile hero-tile reveal"><div class="big">10%</div><div class="lab">of verified savings</div><div class="sub">On the discounts we actually secured, over the term of each offer. Charged once. $1 minimum.</div></div>
@@ -376,7 +386,7 @@ footer a:hover{color:var(--paper)}
       <details class="reveal"><summary>Will it ever actually cancel something?</summary><p>It's built so it can't: the “confirm cancellation” button isn't an action it can take. Every screen is checked before any click, and on anything unclear it backs out. Rare services cancel with no confirmation step at all; we track those and skip them.</p></details>
       <details class="reveal"><summary>What's a “leaving price”?</summary><p>The offer a company makes when you go to cancel — a discount or free months to keep you. Most people never see it because they never start cancelling. Walkaway starts, gets it, and stops.</p></details>
       <details class="reveal"><summary>So what does it actually do?</summary><p>The same thing a savvy person does by hand: go to cancel, sit through the “are you sure?” screens, and take the offer the company makes to keep you. Then it stops. Your plan stays exactly as it was — just cheaper.</p></details>
-      <details class="reveal"><summary>Which services work?</summary><p>Any that make a loyalty offer when you go to leave — streaming, news, music, software, VPNs, telecom, fitness apps. Some (Netflix, for example) never do; we skip those.</p></details>
+      <details class="reveal"><summary>Which services work?</summary><p>Any that make an offer when you go to leave — streaming, news, music, software, VPNs, telecom, fitness apps. Sometimes a company won't make one; we leave those alone.</p></details>
       <details class="reveal"><summary>What if there's no discount?</summary><p>You pay nothing. The $1 card hold is released and there's no fee.</p></details>
       <details class="reveal"><summary>Is this a one-time thing?</summary><p>Mostly. Offers run for a set term — months to a year — and most services won't offer again for a while. Run Walkaway again when an offer ends.</p></details>
       <details class="reveal"><summary>How is the fee calculated?</summary><p>10% of the verified savings over each offer's term, added up, charged once, $1 minimum. Example: $24 → $7 a month for six months is $102 saved, so the fee is $10.20.</p></details>
@@ -402,7 +412,7 @@ footer a:hover{color:var(--paper)}
       <a class="logo" href="#top" aria-label="Walkaway home"><span class="logo-mark" aria-hidden="true"><svg viewBox="0 0 64 64" fill="none" stroke="#0E1116" stroke-width="7" stroke-linecap="round" stroke-linejoin="round"><path d="M18 32h24M32 20l12 12-12 12"/></svg></span>Walkaway</a>
       <p class="disc">Results vary and depend on each service's current retention offers; some services make none. Savings shown are illustrative until verified on your billing page. Walkaway is not affiliated with or endorsed by any service named. © <span id="yr">2026</span> Walkaway.</p>
     </div>
-    <ul><li><a href="#how">How it works</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#safety">Safety</a></li><li><a href="#faq">FAQ</a></li></ul>
+    <ul><li><a href="#how">How it works</a></li><li><a href="#pricing">Pricing</a></li><li><a href="#faq">FAQ</a></li><li><a href="privacy.html">Privacy</a></li><li><a href="terms.html">Terms</a></li></ul>
   </div>
 </footer>
 

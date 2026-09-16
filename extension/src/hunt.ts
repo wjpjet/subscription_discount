@@ -10,6 +10,7 @@ import { openTab, waitForLoad, runInTab, closeTab, sleep, tabUrl, navigateTab } 
 import type { Settings } from './settings';
 import type { ScanItem } from './scan';
 import type { AgentAction, Decision, FinishDetails, PageClass, StepResponse } from './types';
+import { isBlocked, hostOf } from './lists';
 
 export interface HuntStep { step: number; url: string; state: string; action: AgentAction; target?: string; ok?: boolean; note?: string; guardrails?: string[]; ts: number }
 export interface HuntResult { domain: string; name: string; outcome: string; reason?: string | null; details?: FinishDetails | null; before?: PageClass | null; after?: PageClass | null; savingsUsd: number | null; termMonths: number | null; steps: HuntStep[]; error?: string }
@@ -37,6 +38,7 @@ export async function huntOne(item: ScanItem, settings: Settings, onEvent: (e: H
   const result: HuntResult = { domain: item.domain, name: item.name, outcome: 'error', before: item.before, savingsUsd: null, termMonths: null, steps };
   try {
     if (!(await apiAvailable())) throw new Error('No API URL configured — open Settings (⚙).');
+    if (isBlocked(item.domain, settings.extraBlock) || isBlocked(hostOf(item.accountUrl), settings.extraBlock)) throw new Error('blocklisted site — never explored');
     tabId = await openTab(item.accountUrl, settings.watch);
     onEvent({ type: 'start', item, tabId });
     await waitForLoad(tabId); await sleep(1200);
@@ -44,6 +46,7 @@ export async function huntOne(item: ScanItem, settings: Settings, onEvent: (e: H
     for (let step = 0; step <= maxSteps; step++) {
       if (stopRequested) { result.outcome = 'error'; result.reason = 'stopped by user'; break; }
       const snapshot = await runInTab(tabId, snapshotPage, [{ maxElements: 100, textChars: 3000 }]);
+      if (isBlocked(hostOf(snapshot.url), settings.extraBlock)) { result.outcome = 'error'; result.reason = 'landed on a blocklisted site — stopped'; break; }
       const res = await stepWithRetry({ runId: `${item.domain}-${Date.now()}`, merchant, goal: 'hunt', step, maxSteps, history, snapshot });
       // Defense in depth: re-apply the guardrails locally too.
       const local = applyGuardrails({ decision: res.decision as Decision, snapshot, history, merchantDomain: item.domain, step, maxSteps, goal: 'hunt' });

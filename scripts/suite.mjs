@@ -5,7 +5,7 @@
 //   A/B models & thinking:  --model=gemini-3.5-flash-lite  --fast-model=gemini-3.5-flash-lite  --thinking=off|low|512  --fast-thinking=off
 import fs from 'node:fs'; import path from 'node:path'; import vm from 'node:vm'; import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
-import { hunt, classifyPage, sleep } from './lib/driver.mjs';
+import { hunt, classifyPage, sleep, loginTestbed } from './lib/driver.mjs';
 import { serveTestbed } from './lib/testbed-server.mjs';
 import { preflight } from './lib/preflight.mjs';
 import { isFinalizeText } from '../shared/guardrails.js';
@@ -47,9 +47,7 @@ async function runOne(browser, s) {
   const acc = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
   const rec = { id: s.id, name: s.name, difficulty: s.difficulty, expected: s.expected, guardrailLimited: guardrailLimited(s), knownLimitation: !!s.knownLimitation, note: s.note || '', usage: acc };
   try {
-    await page.goto(`${BASE}/login`, { waitUntil: 'load' });
-    await page.type('#email', 'suite@example.com'); await page.type('#password', 'walkaway');
-    await Promise.all([page.waitForNavigation({ timeout: 5000 }).catch(() => {}), page.click('button[type=submit]')]);
+    await loginTestbed(page, BASE);
     await page.goto(`${BASE}/?scenario=${s.id}`, { waitUntil: 'load' }); await sleep(150);
     const before = await classifyPage(page, merchant, acc);
     await page.goto(s.start === 'home' ? `${BASE}/` : merchant.accountUrl, { waitUntil: 'load' });

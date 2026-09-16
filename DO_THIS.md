@@ -385,3 +385,97 @@ FULL 100-SCENARIO RUNS (2026-09-14, real API, ~$3.40 total) + COST PER USER RUN
   costs ~$0.25–0.65 and returns tens of dollars. Cheaper models cost 30–40 points of win rate,
   which is the money. Use 3.8 with default thinking; cap hunts at the top 10 by estimated savings
   (extension setting "Max services per run", default 10) — that is the cost cap.
+
+
+TRY IT NOW — END TO END ON THE HOSTED TESTBED (2026-09-15)
+=========================================================
+  What changed for this: the testbed login is now email -> password -> 6-digit code and sets a REAL
+  session cookie (streamly_session) — that cookie is what the extension's signed-in check sees.
+  The extension ships in RESTRICTED MODE (only sites in extension/allowlist.json + Settings) and
+  PAYMENT IS REQUIRED by default (Stripe test mode). There's a blocklist too (extension/blocklist.json,
+  empty; applies in every mode — sites it must never explore).
+
+  1. HOST STREAMLY (the testbed) on Netlify as a second site
+       Netlify -> Add new site -> Import from Git -> this repo -> Base directory: testbed -> Deploy.
+       Note the host, e.g. streamly-testbed.netlify.app  (rename the site in Site settings if you like).
+     Put that host in extension/allowlist.json (the file already has streamly-testbed.netlify.app —
+     edit if yours differs), or add it later in the panel's Settings box "Extra allowed sites":
+       streamly-testbed.netlify.app | Streamly | https://streamly-testbed.netlify.app/settings/subscription
+
+  2. BACKEND ENV (landing site in Netlify -> Site configuration -> Environment variables)
+       GEMINI_API_KEY      = your key
+       STRIPE_SECRET_KEY   = sk_test_...      (test mode)
+       SITE_URL            = https://<landing site>.netlify.app
+     Deploys -> Trigger deploy. Check the deploy log for the functions.
+     (Local alternative: `npm run api:dev` — it reads .env and now also serves the checkout pages, so
+      the API URL in the extension can be http://127.0.0.1:8787 for a fully local run.)
+
+  3. INSTALL THE EXTENSION
+       cp extension/.env.example extension/.env      # set WXT_API_BASE=https://<landing site>.netlify.app
+       npm run package:extension                     # builds + zips + copies to landing/downloads
+       # or just:  cd extension && npm install && npm run build
+     Chrome -> chrome://extensions -> Developer mode ON -> Load unpacked -> extension/.output/chrome-mv3
+     Pin the icon (puzzle piece -> pin). Click it -> the side panel opens.
+     (The install page on the landing site offers the same zip for people who don't have the repo.)
+
+  4. SIGN IN TO STREAMLY in this Chrome profile
+       https://<testbed host>/login -> any email -> password  walkaway  -> code  424242
+       Then /scenarios -> Load S001 (a clean flow with an offer). The yellow bar shows scenario + status.
+
+  5. RUN IT
+       Panel -> gear: API URL (prefilled if WXT_API_BASE was set), Restricted mode ON (default),
+       Skip payment OFF (default) -> Save.
+       Scan my subscriptions -> "Before we start" -> I agree -> Chrome asks for access to the testbed
+       host -> Allow -> Reveal shows Streamly + the estimate -> Get these discounts.
+       A Stripe Checkout tab opens: card 4242 4242 4242 4242, any future expiry, any CVC/ZIP, any email.
+       Back in the panel it continues on its own: hunt -> verify -> Done shows the saving, the fee, and
+       a receipt link. Streamly's yellow bar should read "promo price $8.99 × 3 months".
+     Stripe dashboard -> Payments: the $1 shows canceled (hold released), the fee shows succeeded.
+
+  6. RERUN / VARY
+       Streamly: Reset state (yellow bar) or Load another scenario (S019 = no offer -> must back out;
+       X05/X06/X09 = adversarial labels). Panel: Rescan -> Get these discounts.
+       Watch mode (Settings) puts the tab in front so you can see it click.
+
+  7. TRY A REAL SERVICE (still restricted): add it in Settings "Extra allowed sites", e.g.
+       suno.com | Suno | https://suno.com/account
+     Rescan. Only that site is touched. Anything in the blocklist is never touched, in any mode.
+
+CHROME WEB STORE — WILL IT PASS? WHAT IT NEEDS
+============================================
+  Sources: Chrome Web Store program policies, the "Troubleshooting violations" page, and the user-data
+  FAQ (fetched 2026-09-15). The relevant rules and what we did about each:
+
+  1. Prominent disclosure + affirmative consent (violation "Purple Nickel"): before collecting
+     browsing-related or website-content data, the product itself must disclose it prominently and the
+     user must take a specific action to agree. DONE: the side panel now shows a "Before we start"
+     screen on first use (what's read, what's sent, what it does, payment) with an "I agree" button.
+     Nothing runs before agreement.
+  2. Privacy policy (Purple Lithium): required whenever user data is handled; must match the manifest
+     permissions and the Privacy-practices form exactly, and disclose every third party. DONE (draft):
+     landing/privacy.html — names Google Gemini/Anthropic, Stripe, Netlify; states what is never read
+     (cookie values, passwords, history). Put the URL in the Developer Dashboard. Replace the
+     placeholder email before publishing. terms.html added too (Stripe live mode wants it).
+  3. Narrowest permissions (Purple Potassium): DONE: dropped the `tabs` permission (not needed);
+     `<all_urls>` stays OPTIONAL and is requested only at first scan; in restricted mode only the
+     allowlisted sites are requested. Every remaining permission has a written justification in
+     store/LISTING.md — paste those into the review form. Expect the "in-depth review" warning for
+     broad host permissions; the justification + consent screen is what gets it through.
+  4. Remote code (Blue Argon): we're clean — the extension runs only bundled code; the backend returns
+     DATA (JSON decisions), not code. Say so explicitly in the review notes (it's in LISTING.md).
+  5. Single purpose: one clear statement, used consistently (LISTING.md). Scan, run, and checkout all
+     serve it. Don't add unrelated features (e.g. a general "subscription manager") to the same listing.
+  6. Limited use: no ads, no selling, transfers only to providers needed for the single purpose
+     (AI, Stripe). Our data flow already satisfies this; the policy says it.
+  7. Wording: no "trick/fake/pretend" anywhere (done). Describe it as accepting the retention offer the
+     service itself presents; never as circumventing anything.
+  8. Payments: allowed; be transparent in the listing about the 10% fee and the $1 hold (done).
+  RISK, HONESTLY: automating third-party sites + broad host access + cookies = manual review, likely
+  one round of questions. The consent screen, restricted mode, the blocklist, and the "cannot press
+  confirm cancellation" design are your answers. A short demo video (scan -> consent -> run on the
+  testbed) in the reviewer notes helps a lot.
+  Still to do before submitting: real contact email in privacy/terms, 3–5 screenshots (1280×800) of the
+  panel, a 440×280 tile, and a Developer account ($5 one-time).
+  Sources: https://developer.chrome.com/docs/webstore/program-policies/ ·
+           https://developer.chrome.com/docs/webstore/troubleshooting ·
+           https://developer.chrome.com/docs/webstore/program-policies/user-data-faq

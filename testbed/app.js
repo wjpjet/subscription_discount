@@ -2,13 +2,16 @@
 (function () {
   var KEY = 'streamly.state';
   var SC = (window.WALKAWAY_SCENARIOS || []);
-  var DEFAULTS = { loggedIn: false, email: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
+  var DEFAULTS = { loggedIn: false, email: '', loginStep: 'creds', pendingEmail: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
   var S = load();
   function load() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return Object.assign({}, DEFAULTS); } }
   function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
   function scn() { return SC.find(function (s) { return s.id === S.scenarioId; }) || SC[0] || { entry: { where: 'subscription', label: 'Cancel subscription' }, steps: [], offer: null, confirm: { label: 'Confirm cancellation', keep: 'Keep my subscription' }, noise: {}, id: '?', name: '?' }; }
-  function setCookie() { document.cookie = 'streamly_session=' + Math.random().toString(36).slice(2) + '; path=/; max-age=2592000; SameSite=Lax'; }
-  function clearCookie() { document.cookie = 'streamly_session=; path=/; max-age=0'; }
+  var SECURE = location.protocol === 'https:' ? '; Secure' : '';
+  function setCookie() { var id = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2); document.cookie = 'streamly_session=' + id + '; path=/; max-age=2592000; SameSite=Lax' + SECURE; document.cookie = 'streamly_uid=u_' + id.slice(0, 8) + '; path=/; max-age=31536000; SameSite=Lax' + SECURE; }
+  function clearCookie() { document.cookie = 'streamly_session=; path=/; max-age=0'; document.cookie = 'streamly_uid=; path=/; max-age=0'; }
+  function hasSessionCookie() { return /(^|;\s*)streamly_session=/.test(document.cookie); }
+  var TEST_CODE = '424242';
   function money(n) { return '$' + Number(n).toFixed(2); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   var NEXT_BILLING = 'October 10, 2026', OFFER_END = 'January 10, 2027';
@@ -30,7 +33,12 @@
 
   // ---- views ----
   function loginView(reauth) {
-    return '<div class="narrow"><div class="card"><h1>' + (reauth ? 'Please sign in again' : 'Sign in to Streamly') + '</h1><p>' + (reauth ? 'Your session expired. Sign in to continue.' : 'Any email works. Password: <b>walkaway</b>') + '</p>' +
+    if (!reauth && S.loginStep === 'code') {
+      return '<div class="narrow"><div class="card"><h1>Check your email</h1><p>We sent a 6-digit code to <b>' + esc(S.pendingEmail) + '</b>. Enter it to finish signing in.</p><p class="muted" style="font-size:13px">Test site: the code is always <b>' + TEST_CODE + '</b>.</p>' +
+        '<form id="code-form"><div class="field"><label for="code">Verification code</label><input id="code" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" required placeholder="6-digit code"></div>' +
+        '<div id="code-error" class="notice" hidden>That code isn’t right. Try ' + TEST_CODE + '.</div><div class="row"><button class="btn primary" type="submit">Verify</button><button class="btn" type="button" data-action="login-back">Back</button></div></form></div></div>';
+    }
+    return '<div class="narrow"><div class="card"><h1>' + (reauth ? 'Please sign in again' : 'Sign in to Streamly') + '</h1><p>' + (reauth ? 'Your session expired. Sign in to continue.' : 'Any email works. Password: <b>walkaway</b>. Then a code (always ' + TEST_CODE + ').') + '</p>' +
       '<form id="login-form" data-reauth="' + (reauth ? '1' : '') + '"><div class="field"><label for="email">Email</label><input id="email" name="email" type="email" required placeholder="you@example.com" autocomplete="username"></div>' +
       '<div class="field"><label for="password">Password</label><input id="password" name="password" type="password" required autocomplete="current-password"></div>' +
       '<div id="login-error" class="notice" hidden>Wrong password. Hint: walkaway</div><div class="row"><button class="btn primary" type="submit">Sign in</button></div></form></div></div>';
@@ -139,6 +147,7 @@
     var q = new URLSearchParams(location.search).get('scenario');
     if (q && SC.some(function (s) { return s.id === q; })) { if (q !== S.scenarioId) { Object.assign(S, { scenarioId: q, offerApplied: false, cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} }); save(); } history.replaceState({}, '', location.pathname); }
     var path = currentPath();
+    if (S.loggedIn && !hasSessionCookie()) { S.loggedIn = false; S.loginStep = 'creds'; save(); } // the cookie IS the session
     if (!S.loggedIn && path !== '/login' && path !== '/scenarios') { history.replaceState({}, '', '/login'); path = '/login'; }
     if (S.loggedIn && path === '/login') { history.replaceState({}, '', '/'); path = '/'; }
     var m = path.match(/^\/cancel\/step\/(\d+)$/);
@@ -163,7 +172,8 @@
     var btn = e.target.closest('[data-action]');
     if (!btn) { if (!e.target.closest('.account')) document.getElementById('avatar-menu').hidden = true; return; }
     var a = btn.getAttribute('data-action');
-    if (a === 'signout') { S.loggedIn = false; S.email = ''; clearCookie(); save(); go('/login', true); }
+    if (a === 'signout') { S.loggedIn = false; S.email = ''; S.loginStep = 'creds'; clearCookie(); save(); go('/login', true); }
+    else if (a === 'login-back') { S.loginStep = 'creds'; save(); render(); }
     else if (a === 'reset') { Object.assign(S, { offerApplied: false, offerPrice: null, offerMonths: null, cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} }); save(); go('/settings/subscription'); }
     else if (a === 'immediate-cancel') { e.preventDefault(); S.cancelled = true; save(); go('/cancel/done'); }
     else if (a === 'survey-input') { var c = document.getElementById('step-continue'); if (c) c.disabled = false; }
@@ -182,11 +192,16 @@
   document.addEventListener('change', function (e) { if (e.target.matches('[data-action="survey-input"]')) { var c = document.getElementById('step-continue'); if (c) c.disabled = !(e.target.value || e.target.checked); } });
   document.getElementById('avatar-btn').addEventListener('click', function () { var m = document.getElementById('avatar-menu'); m.hidden = !m.hidden; this.setAttribute('aria-expanded', String(!m.hidden)); });
   document.addEventListener('submit', function (e) {
+    if (e.target.id === 'code-form') {
+      e.preventDefault();
+      if (document.getElementById('code').value.trim() !== TEST_CODE) { document.getElementById('code-error').hidden = false; return; }
+      S.loggedIn = true; S.email = S.pendingEmail; S.loginStep = 'creds'; save(); setCookie(); go('/', true); return;
+    }
     if (e.target.id !== 'login-form') return; e.preventDefault();
     var pw = document.getElementById('password').value;
     if (pw !== 'walkaway') { document.getElementById('login-error').hidden = false; return; }
     if (e.target.getAttribute('data-reauth')) { S.reauthed = true; save(); render(); return; }
-    S.loggedIn = true; S.email = document.getElementById('email').value.trim(); save(); setCookie(); go('/', true);
+    S.pendingEmail = document.getElementById('email').value.trim(); S.loginStep = 'code'; save(); render();
   });
   window.addEventListener('popstate', render);
   render();

@@ -11,7 +11,7 @@ import type { PageClass } from './types';
 export type ItemStatus = 'signed_in' | 'login_wall' | 'no_paid_plan' | 'unknown' | 'error';
 export interface ScanItem { id: string; domain: string; name: string; accountUrl: string; source: string; status: ItemStatus; hasOffer: boolean; monthlyPrice: number | null; planName: string | null; offerApplied: boolean; estSavings: number; termMonths: number; discountPct: number; confidence: number; url?: string; note?: string; before: PageClass | null }
 export interface ScanProgress { phase: 'discover' | 'pages' | 'done'; done: number; total: number; current?: string; message?: string }
-export interface ScanResult { at: number; testMode: boolean; domainsChecked: number; items: ScanItem[]; found: number; withOffers: number; totalEstSavings: number }
+export interface ScanResult { at: number; restrictedMode: boolean; domainsChecked: number; items: ScanItem[]; found: number; withOffers: number; totalEstSavings: number }
 
 const CONCURRENCY = 4, SETTLE_MS = 1500, PAGE_TIMEOUT_MS = 20000;   // 4 background tabs + classify calls in flight
 
@@ -37,7 +37,7 @@ export async function runScan(settings: Settings, onProgress: (p: ScanProgress) 
     items.sort((a, b) => b.estSavings - a.estSavings || a.name.localeCompare(b.name));
     const found = items.filter((i) => i.status === 'signed_in' || i.status === 'unknown');
     const offers = found.filter((i) => i.hasOffer);
-    const result: ScanResult = { at: Date.now(), testMode: settings.testMode, domainsChecked, items, found: found.length, withOffers: offers.length, totalEstSavings: Math.round(offers.reduce((s, i) => s + i.estSavings, 0)) };
+    const result: ScanResult = { at: Date.now(), restrictedMode: settings.restrictedMode, domainsChecked, items, found: found.length, withOffers: offers.length, totalEstSavings: Math.round(offers.reduce((s, i) => s + i.estSavings, 0)) };
     await browser.storage.local.set({ scanResult: result });
     onProgress({ phase: 'done', done: candidates.length, total: candidates.length });
     return result;

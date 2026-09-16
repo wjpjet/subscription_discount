@@ -12,7 +12,9 @@ sure?* (*Keep my subscription* / **Confirm cancellation**) → Cancelled.
 Accepting the offer changes the Subscription page to **$8.99/month for 3 months, then $17.99/month**
 with a "Loyalty offer applied" badge — that's what the extension's verification step reads.
 
-**Sign in:** any email, password `walkaway`.
+**Sign in:** any email, password `walkaway`, then the verification code `424242`. A real session cookie
+(`streamly_session`) is set — that's what the extension's signed-in check sees — and signing out or
+clearing cookies logs you out.
 
 **Scenarios.** The flow is driven by a scenario config (`scenarios.js`, ~100 variations: where the
 cancel link lives, survey types, pause/downgrade traps, offer styles incl. dark patterns, hidden/

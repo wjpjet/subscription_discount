@@ -11,12 +11,14 @@ import { etld1, isInfra, AUTH_COOKIE_RE } from '../../shared/domains.js';
 import { apiPost, apiAvailable } from './api';
 import type { Settings } from './settings';
 import type { DiscoveredService } from './types';
+import { allowlist, isBlocked } from './lists';
 
-export interface Candidate { domain: string; name: string; accountUrl: string; source: 'ai' | 'test'; typicalPrice: number | null; makesOffers: 'likely' | 'unlikely' | 'unknown'; discountPct: number; termMonths: number; confidence: number; notes?: string }
+export interface Candidate { domain: string; name: string; accountUrl: string; source: 'ai' | 'allowlist'; typicalPrice: number | null; makesOffers: 'likely' | 'unlikely' | 'unknown'; discountPct: number; termMonths: number; confidence: number; notes?: string }
 export interface DomainFeatures { domain: string; cookies: number; httpOnly: number; authLike: number }
 
 export function originsFor(settings: Settings): string[] {
-  return settings.testMode && settings.testDomain ? [`*://${settings.testDomain}/*`] : ['<all_urls>'];
+  if (!settings.restrictedMode) return ['<all_urls>'];
+  return allowlist(settings.extraAllow).flatMap((e) => [`*://${e.domain}/*`, `*://*.${e.domain}/*`]);
 }
 
 export async function signedInDomains(): Promise<DomainFeatures[]> {
@@ -33,9 +35,12 @@ export async function signedInDomains(): Promise<DomainFeatures[]> {
 }
 
 export async function discoverCandidates(settings: Settings, onProgress: (msg: string) => void): Promise<{ candidates: Candidate[]; domainsChecked: number }> {
-  if (settings.testMode) {
-    if (!settings.testDomain || !settings.testAccountUrl) throw new Error('Test mode needs a test domain and an account URL — open Settings (⚙).');
-    return { domainsChecked: 1, candidates: [{ domain: settings.testDomain, name: settings.testName || 'Test service', accountUrl: settings.testAccountUrl, source: 'test', typicalPrice: null, makesOffers: 'likely', discountPct: 0.5, termMonths: 3, confidence: 1 }] };
+  if (settings.restrictedMode) {
+    const entries = allowlist(settings.extraAllow).filter((e) => !isBlocked(e.domain, settings.extraBlock));
+    if (!entries.length) throw new Error('Restricted mode is on but the allowlist is empty — edit extension/allowlist.json or add sites in Settings (⚙).');
+    onProgress(`Restricted mode: checking ${entries.length} allowlisted site${entries.length === 1 ? '' : 's'}…`);
+    // Every allowlisted site is probed; the account page decides whether you're signed in and what you pay.
+    return { domainsChecked: entries.length, candidates: entries.map((e) => ({ domain: e.domain, name: e.name || e.domain, accountUrl: e.accountUrl || `https://${e.domain}/account`, source: 'allowlist' as const, typicalPrice: null, makesOffers: 'likely' as const, discountPct: 0.5, termMonths: 3, confidence: 1 })) };
   }
   if (!(await apiAvailable())) throw new Error('Scan needs the API URL — open Settings (⚙) and enter your Netlify site URL (or run `npm run api:dev` and use http://127.0.0.1:8787).');
   onProgress("Checking which sites you're signed into…");
@@ -55,7 +60,7 @@ export async function discoverCandidates(settings: Settings, onProgress: (msg: s
       onProgress(`Asking the brain which of ${domains.length} sites are subscription services… (${done}/${chunks.length})`);
     }
   }));
-  const candidates: Candidate[] = services.filter((s) => s.isSubscription).map((s) => ({
+  const candidates: Candidate[] = services.filter((s) => s.isSubscription && !isBlocked(s.domain, settings.extraBlock)).map((s) => ({
     domain: s.domain, name: s.name || s.domain, accountUrl: s.accountUrl || `https://www.${s.domain}/account`, source: 'ai' as const,
     typicalPrice: s.typicalMonthlyPriceUsd ?? null, makesOffers: s.makesRetentionOffers,
     discountPct: s.typicalOfferDiscountPct ?? 0.5, termMonths: s.typicalOfferTermMonths ?? 3, confidence: s.confidence, notes: s.notes,

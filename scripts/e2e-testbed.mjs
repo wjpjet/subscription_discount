@@ -1,6 +1,6 @@
 // Quick 3-scenario smoke test on the testbed (offer on / offer off / from home). `npm run e2e:testbed[:mock]`
 import puppeteer from 'puppeteer-core';
-import { hunt, classifyPage, sleep } from './lib/driver.mjs';
+import { hunt, classifyPage, sleep, loginTestbed } from './lib/driver.mjs';
 import { serveTestbed } from './lib/testbed-server.mjs';
 import { preflight } from './lib/preflight.mjs';
 process.env.WALKAWAY_RATE_LIMIT = '0'; // in-process: the whole run looks like one IP
@@ -9,8 +9,7 @@ const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Conte
 async function scenario(browser, name, id, startAt, expectOffer) {
   const context = await browser.createBrowserContext(); const page = await context.newPage(); await page.setViewport({ width: 1100, height: 800 });
   const merchant = { name: 'Streamly (testbed)', domain: '127.0.0.1', accountUrl: `${BASE}/settings/subscription` };
-  await page.goto(`${BASE}/login`, { waitUntil: 'load' }); await page.type('#email', 'e2e@example.com'); await page.type('#password', 'walkaway');
-  await Promise.all([page.waitForNavigation({ timeout: 5000 }).catch(() => {}), page.click('button[type=submit]')]);
+  await loginTestbed(page, BASE, 'e2e@example.com');
   await page.goto(`${BASE}/?scenario=${id}`, { waitUntil: 'load' }); await sleep(150);
   const acc = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
   const before = await classifyPage(page, merchant, acc);

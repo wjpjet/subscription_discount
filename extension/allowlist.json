@@ -1,0 +1,4 @@
+[
+  { "domain": "streamly-testbed.netlify.app", "name": "Streamly (testbed)", "accountUrl": "https://streamly-testbed.netlify.app/settings/subscription" },
+  { "domain": "localhost", "name": "Streamly (local)", "accountUrl": "http://localhost:8081/settings/subscription" }
+]

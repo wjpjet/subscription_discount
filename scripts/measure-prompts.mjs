@@ -8,7 +8,7 @@ const PORT = 8791, BASE = `http://127.0.0.1:${PORT}`; const MIME = { '.html': 't
 const srv = http.createServer((req, res) => { let f = path.join(TB, new URL(req.url, BASE).pathname); if (!fs.existsSync(f) || fs.statSync(f).isDirectory()) f = path.join(TB, 'index.html'); res.writeHead(200, { 'Content-Type': MIME[path.extname(f)] || 'text/plain' }); fs.createReadStream(f).pipe(res); }).listen(PORT);
 const browser = await puppeteer.launch({ executablePath: process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', headless: true, args: ['--no-sandbox'] });
 const page = await browser.newPage(); await page.setViewport({ width: 1100, height: 800 });
-await page.goto(`${BASE}/login`); await page.type('#email', 'x@y.com'); await page.type('#password', 'walkaway'); await Promise.all([page.waitForNavigation().catch(() => {}), page.click('button[type=submit]')]);
+const { loginTestbed } = await import('./lib/driver.mjs'); await loginTestbed(page, BASE, 'x@y.com');
 for (const p of ['/', '/settings/subscription', '/cancel', '/cancel/offer', '/cancel/confirm']) {
   await page.goto(`${BASE}${p}`, { waitUntil: 'load' });
   const snap = await page.evaluate(snapshotPage, {});

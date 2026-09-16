@@ -6,7 +6,7 @@ export default defineConfig({
   manifest: {
     name: 'Walkaway',
     description: "Finds the subscription services you're signed into and gets you their loyalty discounts — without cancelling anything.",
-    permissions: ['cookies', 'tabs', 'scripting', 'sidePanel', 'storage'],
+    permissions: ['cookies', 'scripting', 'sidePanel', 'storage'],   // no `tabs`: we never read tab URLs/titles without host permission
     // Requested at first Scan (contextual), never at install. Test mode requests only the test domain.
     optional_host_permissions: ['<all_urls>'],
     action: { default_title: 'Walkaway' },

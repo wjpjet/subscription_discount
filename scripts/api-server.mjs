@@ -11,9 +11,18 @@ const routes = {
 };
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '127.0.0.1';
+import fs from 'node:fs'; import path from 'node:path'; import { fileURLToPath } from 'node:url';
+const LANDING = path.join(path.dirname(path.dirname(fileURLToPath(import.meta.url))), 'landing');
+const MIME = { '.html': 'text/html', '.css': 'text/css', '.js': 'text/javascript', '.zip': 'application/zip', '.png': 'image/png' };
 http.createServer(async (req, res) => {
   const url = new URL(req.url, 'http://localhost');
   const load = routes[url.pathname];
+  if (!load && req.method === 'GET') {
+    // Serve the landing site locally (so Stripe's /checkout/success.html and the install page work in dev).
+    const rel = url.pathname === '/' ? '/index.html' : url.pathname;
+    const file = path.join(LANDING, path.normalize(rel));
+    if (file.startsWith(LANDING) && fs.existsSync(file) && fs.statSync(file).isFile()) { res.writeHead(200, { 'Content-Type': MIME[path.extname(file)] || 'application/octet-stream' }); fs.createReadStream(file).pipe(res); return; }
+  }
   if (!load) { res.writeHead(404, { 'Content-Type': 'application/json' }); res.end('{"error":"not found"}'); return; }
   const chunks = []; for await (const c of req) chunks.push(c);
   const headers = {}; for (const [k, v] of Object.entries(req.headers)) headers[k] = Array.isArray(v) ? v.join(', ') : String(v);

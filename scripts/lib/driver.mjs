@@ -5,6 +5,16 @@ export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const ZERO = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
 function add(acc, u) { if (acc && u) { acc.inputTokens += u.inputTokens || 0; acc.outputTokens += u.outputTokens || 0; acc.thinkingTokens += u.thinkingTokens || 0; acc.calls += u.calls || 1; } }
+/** Sign in to the testbed (email → password → code) with a clean state. */
+export async function loginTestbed(page, base, email = 'suite@example.com') {
+  await page.goto(`${base}/login`, { waitUntil: 'load' });
+  await page.evaluate(() => { localStorage.clear(); document.cookie = 'streamly_session=; path=/; max-age=0'; document.cookie = 'streamly_uid=; path=/; max-age=0'; });
+  await page.goto(`${base}/login`, { waitUntil: 'load' });
+  await page.type('#email', email); await page.type('#password', 'walkaway'); await page.click('#login-form button[type=submit]');
+  await page.waitForSelector('#code', { timeout: 5000 });
+  await page.type('#code', '424242');
+  await Promise.all([page.waitForNavigation({ timeout: 5000 }).catch(() => {}), page.click('#code-form button[type=submit]')]);
+}
 export async function callFn(name, body, acc) {
   const mod = await import(`../../netlify/functions/${name}.mjs`);
   const res = await mod.default(new Request(`http://local/api/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), {});

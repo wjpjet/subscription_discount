@@ -9,7 +9,9 @@ import { focusTab } from '@/src/tabs';
 import { money, outcomeLabel } from '@/src/format';
 import type { CheckoutResult, Settlement } from '@/src/types';
 
-type Screen = 'idle' | 'scanning' | 'reveal' | 'checkout' | 'hunting' | 'done' | 'settings' | 'error';
+type Screen = 'idle' | 'consent' | 'scanning' | 'reveal' | 'checkout' | 'hunting' | 'done' | 'settings' | 'error';
+const SITE = ((import.meta as any).env?.WXT_API_BASE || '').replace(/\/+$/, '');
+const PRIVACY_URL = (SITE || 'https://walkaway.netlify.app') + '/privacy.html';
 interface HuntState { current: ScanItem | null; tabId: number | null; log: HuntStep[]; results: HuntResult[]; total: number; verifying: boolean; settlement: Settlement | null }
 const EMPTY_HUNT: HuntState = { current: null, tabId: null, log: [], results: [], total: 0, verifying: false, settlement: null };
 
@@ -21,18 +23,21 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [checkoutMsg, setCheckoutMsg] = useState('');
   const [hunt, setHunt] = useState<HuntState>(EMPTY_HUNT);
+  const [consented, setConsented] = useState<boolean>(false);
   const returnTo = useRef<Screen>('idle');
   const cancelCheckout = useRef(false);
 
   useEffect(() => {
     (async () => {
       setSettings(await getSettings());
-      const v = await browser.storage.local.get(['scanResult', 'huntResults', 'previewHunt']);
+      const v = await browser.storage.local.get(['scanResult', 'huntResults', 'previewHunt', 'consentAt']);
+      setConsented(!!v.consentAt);
       if (v.huntResults) setHunt((h) => ({ ...h, results: v.huntResults as HuntResult[] }));
       if (v.scanResult) { setResult(v.scanResult as ScanResult); setScreen('reveal'); }
       // Design previews only (sidepanel.html?preview=…); never used in the real flow.
       const pv = new URLSearchParams(location.search).get('preview');
       if (pv === 'settings') setScreen('settings');
+      else if (pv === 'consent') setScreen('consent');
       else if (pv === 'done' && v.huntResults) setScreen('done');
       else if (pv === 'hunting' && v.previewHunt) { setHunt(v.previewHunt as HuntState); setScreen('hunting'); }
     })();
@@ -40,12 +45,29 @@ export default function App() {
 
   async function startScan() {
     setError(null);
+    if (!consented) { setScreen('consent'); return; }
     try {
       const s = await getSettings(); setSettings(s);
       const origins = originsFor(s);
       if (!(await browser.permissions.contains({ origins }))) {
         const ok = await browser.permissions.request({ origins });
         if (!ok) { setError("Walkaway needs permission to check which sites you're signed into. Nothing runs without it."); return; }
+      }
+      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…' });
+      const r = await runScan(s, setProgress);
+      setResult(r); setScreen('reveal');
+    } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
+  }
+  async function agreeAndScan() {
+    await browser.storage.local.set({ consentAt: Date.now() });
+    setConsented(true);
+    setError(null);
+    try {
+      const s = await getSettings(); setSettings(s);
+      const origins = originsFor(s);
+      if (!(await browser.permissions.contains({ origins }))) {
+        const ok = await browser.permissions.request({ origins });
+        if (!ok) { setError("Walkaway needs permission to check which sites you're signed into. Nothing runs without it."); setScreen('idle'); return; }
       }
       setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…' });
       const r = await runScan(s, setProgress);
@@ -92,7 +114,7 @@ export default function App() {
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
 
-  const right: Record<Screen, string> = { idle: settings.testMode ? 'Test mode' : 'No account needed', scanning: 'Scanning…', reveal: settings.testMode ? 'Test mode' : 'Scan complete', checkout: 'Checkout', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
+  const right: Record<Screen, string> = { consent: 'Before we start', idle: settings.restrictedMode ? 'Restricted mode' : 'No account needed', scanning: 'Scanning…', reveal: settings.restrictedMode ? 'Restricted mode' : 'Scan complete', checkout: 'Checkout', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
   const openSettings = () => { returnTo.current = screen === 'settings' ? 'idle' : screen; setScreen('settings'); };
 
   return (
@@ -103,9 +125,10 @@ export default function App() {
         <span className="r">{right[screen]}</span>
         <button className="gear" title="Settings" onClick={openSettings} aria-label="Settings">⚙</button>
       </div>
-      {screen === 'idle' && <Idle onScan={startScan} error={error} testMode={settings.testMode} />}
+      {screen === 'idle' && <Idle onScan={startScan} error={error} restricted={settings.restrictedMode} />}
+      {screen === 'consent' && <Consent onAgree={agreeAndScan} onBack={() => setScreen('idle')} />}
       {screen === 'scanning' && <Scanning progress={progress} />}
-      {screen === 'reveal' && result && <Reveal result={result} onHunt={startHunt} onRescan={rescan} testMode={settings.testMode} skipPayment={settings.skipPayment} />}
+      {screen === 'reveal' && result && <Reveal result={result} onHunt={startHunt} onRescan={rescan} restricted={settings.restrictedMode} skipPayment={settings.skipPayment} />}
       {screen === 'checkout' && <Checkout msg={checkoutMsg} onCancel={() => { cancelCheckout.current = true; }} />}
       {screen === 'hunting' && <Hunting hunt={hunt} watch={settings.watch} />}
       {screen === 'done' && <Done hunt={hunt} onRescan={rescan} onAgain={startHunt} />}
@@ -115,15 +138,34 @@ export default function App() {
   );
 }
 
-function Idle({ onScan, error, testMode }: { onScan: () => void; error: string | null; testMode: boolean }) {
+function Idle({ onScan, error, restricted }: { onScan: () => void; error: string | null; restricted: boolean }) {
   return (
     <div className="body">
       <h1>Find your <em>loyalty discounts.</em></h1>
-      <p>{testMode ? 'Test mode: only your configured test site will be scanned and hunted.' : "We'll check which subscription services you're signed into — locally in your browser, sending only the site names to identify subscriptions — and show you what you could save on your upcoming renewals."}</p>
+      <p>{restricted ? 'Restricted mode: only the sites in your allowlist are scanned and hunted.' : "We'll check which subscription services you're signed into — locally in your browser, sending only the site names to identify subscriptions — and show you what you could save on your upcoming renewals."}</p>
       {error && <p className="err">{error}</p>}
       <div className="spacer" />
       <button className="btn" onClick={onScan}>Scan my subscriptions</button>
       <p className="fine">Takes about a minute. No passwords, cookies, or history are ever uploaded. Nothing gets cancelled — ever.</p>
+    </div>
+  );
+}
+
+function Consent({ onAgree, onBack }: { onAgree: () => void; onBack: () => void }) {
+  return (
+    <div className="body">
+      <h1>Before we <em>start.</em></h1>
+      <p>Here's exactly what Walkaway does with your data. Please read it, then agree to continue.</p>
+      <ul className="consent">
+        <li><b>Finding subscriptions:</b> it checks which sites you're signed into by looking at cookie <i>names</i> on this device. Cookie values, passwords, and your browsing history never leave your browser.</li>
+        <li><b>Sent to our AI service:</b> the names of those sites, and the text of the account and cancellation pages it works on, so it can decide what to click. Nothing else.</li>
+        <li><b>Acting on your behalf:</b> it opens those sites in background tabs and goes through their cancellation flows to reach the loyalty offer. It cannot press a final “confirm cancellation.”</li>
+        <li><b>Payment:</b> if you continue to checkout, Stripe collects your card and email; we place a $1 hold and charge 10% of verified savings, once.</li>
+      </ul>
+      <p className="fine left">We don't sell data or use it for ads. Full details: <a href={PRIVACY_URL} target="_blank" rel="noreferrer">privacy policy</a>.</p>
+      <div className="spacer" />
+      <button className="btn" onClick={onAgree}>I agree — scan my subscriptions</button>
+      <button className="btn ghost" onClick={onBack}>Not now</button>
     </div>
   );
 }
@@ -141,7 +183,7 @@ function Scanning({ progress }: { progress: ScanProgress | null }) {
   );
 }
 
-function Reveal({ result, onHunt, onRescan, testMode, skipPayment }: { result: ScanResult; onHunt: () => void; onRescan: () => void; testMode: boolean; skipPayment: boolean }) {
+function Reveal({ result, onHunt, onRescan, restricted, skipPayment }: { result: ScanResult; onHunt: () => void; onRescan: () => void; restricted: boolean; skipPayment: boolean }) {
   const [details, setDetails] = useState(false);
   const found = result.items.filter((i) => i.status === 'signed_in' || i.status === 'unknown');
   const offers = found.filter((i) => i.hasOffer);
@@ -151,7 +193,7 @@ function Reveal({ result, onHunt, onRescan, testMode, skipPayment }: { result: S
       {found.length === 0 ? (
         <>
           <h1>Nothing found <em>yet.</em></h1>
-          <p>{testMode ? "The test site didn't look signed in. Sign in to it in this browser, then rescan." : `We checked ${result.domainsChecked} sites you're signed into and didn't find a paid subscription we can work with. Sign in to a service in this browser and scan again.`}</p>
+          <p>{restricted ? "None of the allowlisted sites looked signed in. Sign in to one in this browser, then rescan." : `We checked ${result.domainsChecked} sites you're signed into and didn't find a paid subscription we can work with. Sign in to a service in this browser and scan again.`}</p>
         </>
       ) : (
         <>
@@ -241,11 +283,10 @@ function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; on
       <h1>Settings</h1>
       <label>API URL <span className="hint">your Netlify site, e.g. https://walkaway-api.netlify.app</span><input {...f('apiBase')} placeholder="https://…netlify.app" /></label>
       <label>Client key <span className="hint">only if WALKAWAY_CLIENT_KEY is set on the backend</span><input {...f('clientKey')} /></label>
-      <label className="check"><input type="checkbox" checked={s.testMode} onChange={(e) => setS({ ...s, testMode: e.target.checked })} /> Test mode — scan and hunt <b>only</b> the test site below</label>
-      <label>Test domain<input {...f('testDomain')} placeholder="streamly-testbed.netlify.app" /></label>
-      <label>Test account URL<input {...f('testAccountUrl')} placeholder="https://streamly-testbed.netlify.app/settings/subscription" /></label>
-      <label>Test service name<input {...f('testName')} /></label>
-      <label className="check"><input type="checkbox" checked={s.skipPayment} onChange={(e) => setS({ ...s, skipPayment: e.target.checked })} /> Skip payment (testing) — no $1 hold, no fee</label>
+      <label className="check"><input type="checkbox" checked={s.restrictedMode} onChange={(e) => setS({ ...s, restrictedMode: e.target.checked })} /> Restricted mode — scan and hunt <b>only</b> allowlisted sites (allowlist.json + below)</label>
+      <label>Extra allowed sites <span className="hint">one per line: domain | name | account URL</span><textarea rows={3} value={s.extraAllow} onChange={(e) => setS({ ...s, extraAllow: e.target.value })} placeholder="streamly-testbed.netlify.app | Streamly | https://streamly-testbed.netlify.app/settings/subscription" /></label>
+      <label>Never explore <span className="hint">one domain per line; also blocklist.json. Applies in every mode.</span><textarea rows={2} value={s.extraBlock} onChange={(e) => setS({ ...s, extraBlock: e.target.value })} placeholder="bank.com" /></label>
+      <label className="check"><input type="checkbox" checked={s.skipPayment} onChange={(e) => setS({ ...s, skipPayment: e.target.checked })} /> Skip payment — no $1 hold, no fee (testing only)</label>
       <label className="check"><input type="checkbox" checked={s.watch} onChange={(e) => setS({ ...s, watch: e.target.checked })} /> Watch mode — open the hunt tab in front and leave it open</label>
       <label>Max services per run <span className="hint">highest estimated savings first</span><input type="number" min={1} max={30} {...f('maxHunts')} /></label>
       <label>Max steps per service<input type="number" min={5} max={40} {...f('maxSteps')} /></label>
