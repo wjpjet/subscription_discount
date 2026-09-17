@@ -8,6 +8,7 @@ const routes = {
   '/api/checkout': () => import('../netlify/functions/checkout.mjs'),
   '/api/checkout-status': () => import('../netlify/functions/checkout-status.mjs'),
   '/api/settle': () => import('../netlify/functions/settle.mjs'),
+  '/api/timeout-probe': () => import('../netlify/functions/timeout-probe.mjs'),
 };
 const PORT = Number(process.env.PORT || 8787);
 const HOST = process.env.HOST || '127.0.0.1';

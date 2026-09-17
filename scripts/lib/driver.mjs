@@ -15,10 +15,20 @@ export async function loginTestbed(page, base, email = 'suite@example.com') {
   await page.type('#code', '424242');
   await Promise.all([page.waitForNavigation({ timeout: 5000 }).catch(() => {}), page.click('#code-form button[type=submit]')]);
 }
+/** Wall-clock ms for every function call this process has made: { name, ms, ok }. Read by scripts/latency.mjs. */
+export const timings = [];
 export async function callFn(name, body, acc) {
   const mod = await import(`../../netlify/functions/${name}.mjs`);
-  const res = await mod.default(new Request(`http://local/api/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), {});
-  const j = await res.json(); if (j.error) throw new Error(`${name}: ${j.error}`); add(acc, j.usage); return j;
+  const t0 = Date.now();
+  let ok = true, res;
+  try {
+    res = await mod.default(new Request(`http://local/api/${name}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }), {});
+  } catch (e) { ok = false; timings.push({ name, ms: Date.now() - t0, ok }); throw e; }
+  const j = await res.json();
+  if (j.error) ok = false;
+  timings.push({ name, ms: Date.now() - t0, ok });
+  if (j.error) throw new Error(`${name}: ${j.error}`);
+  add(acc, j.usage); return j;
 }
 async function settle(page) { await Promise.race([page.waitForNavigation({ timeout: 2500 }).catch(() => {}), sleep(900)]); await sleep(400); }
 
