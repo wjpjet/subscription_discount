@@ -75,6 +75,8 @@ Only if the probe says so. Measured p95 is 9.48s and about 4% of calls run past 
 
 - Supabase. Nothing needs a database until there is order history or emailed summaries.
 - Lightsail. See HISTORY.md — it does not autoscale and would make the service less stable, not more.
+- Moving the backend to Cloudflare, Supabase or anywhere else. Hosting is under 2% of what a run
+  costs; the model is the other 98%. HISTORY.md has the priced comparison.
 - Gmail and Plaid intake. Later features, not part of this.
 
 ---

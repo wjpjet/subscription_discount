@@ -1,8 +1,8 @@
 # Walkaway — history
 
 What was built, what was measured, and why each decision went the way it did. Nothing here is a
-to-do. For what to do next see **[TODO.md](TODO.md)**; for the architecture see
-**[IMPLEMENTATION_PLAN.md](IMPLEMENTATION_PLAN.md)**.
+to-do. For what to do next see **[TODO.md](TODO.md)**; for how the pieces fit see
+**[ARCHITECTURE.md](ARCHITECTURE.md)**.
 
 ---
 
@@ -88,6 +88,30 @@ Share of all calls exceeding each budget: 13.0% over 6s, 3.9% over 10s, 0% over 
 This is the number that matters for platform choice. A 10-second ceiling would cut off about one
 call in 25. A 15-second ceiling would cut off none.
 
+### Where the hosting bill would come from, 2026-09-17
+
+Measured, so the hosting comparison is not guesswork.
+
+| Quantity | Value |
+|---|---|
+| Our own CPU per `agent-step` request, model call excluded | 0.29ms p50, 1.54ms max |
+| Wall-clock per `agent-step` request, model call included | 2.80s p50 |
+
+Every request spends essentially all of its life idle, awaiting Gemini. The ratio between wall-clock
+and actual compute is about four orders of magnitude.
+
+Function-seconds consumed per user run, derived from the latency run above:
+
+| Services hunted | Scan | Hunt and verify | Total |
+|---|---|---|---|
+| 5 | 32.8s | 102.8s | 136s |
+| 10 | 32.8s | 205.7s | 238s |
+| 20 | 32.8s | 411.4s | 444s |
+
+A 10-service run is therefore about 238 billed seconds on a platform that charges for wall-clock
+duration, and about 32 milliseconds of real compute on one that charges for CPU. Real sites have
+larger pages than the testbed, so treat these as a floor.
+
 ### Verified list prices, 2026-09-14
 
 Per million tokens, input / output. Thinking tokens bill at the output rate on every Gemini model.
@@ -130,6 +154,57 @@ rather than read from the docs. `scripts/probe-timeout.mjs` does that.
 Sources: <https://docs.netlify.com/build/functions/configuration/> ·
 <https://docs.netlify.com/build/functions/background-functions/> ·
 <https://answers.netlify.com/t/synchronous-function-timeout/168727>
+
+### Is another host cheaper? Yes, and it does not matter
+
+Priced 2026-09-17 against the measured 238 function-seconds, 87 calls and 25ms of CPU that one
+10-service run consumes.
+
+| Platform | Billing unit | $ per run | Share of what the run costs |
+|---|---|---|---|
+| Netlify Functions | wall-clock GB-hour | $0.0044 | 1.8% |
+| AWS Lambda | wall-clock GB-second | $0.0040 | 1.7% |
+| Vercel Fluid | active CPU, plus memory during I/O | $0.0015 | 0.6% |
+| Supabase Edge Functions | per invocation, no time component | $0.00017 | 0.07% |
+| Cloudflare Workers | CPU-ms, idle await explicitly not billed | $0.00003 | 0.01% |
+
+The share column is against the Gemini cost of the same run, $0.24 on testbed pages and up to $0.65
+on real ones.
+
+Netlify is the most expensive option in the table and it is still under two percent of what a run
+costs. Moving to the cheapest saves about $4.39 per thousand runs. The model calls for those same
+thousand runs cost $240 to $650. Any effort spent on hosting cost is effort not spent on the thing
+that is 98% of the bill.
+
+The reason for the spread is that every request spends its life awaiting Gemini. Netlify, Lambda and
+Vercel's memory component bill for that idle time. Cloudflare Workers bills CPU only and documents
+that waiting on `fetch()` does not count. Supabase charges per invocation with no time component at
+all, which has the same effect here.
+
+Free allowances, in runs per month:
+
+| Plan | Runs |
+|---|---|
+| Netlify free, 300 credits | ~450 |
+| Netlify Personal, $9 | ~1,500 |
+| Netlify Pro, $20 | ~4,500 |
+| Supabase free, 500k invocations | ~5,700 |
+| Cloudflare free | ~1,100 per day |
+
+Netlify's free tier covers roughly 450 runs a month, and those credits are shared with builds. That
+is the number to watch, not the per-run price. If it is ever exceeded, the cheapest fix is the $9
+plan, not a migration.
+
+Two caveats if this is ever revisited. Supabase would mean adopting a database platform for its
+functions alone, and free Supabase projects pause after about a week of inactivity. Cloudflare
+Workers is the technically correct shape for an LLM proxy, with no duration limit at all, but moving
+there means leaving the single-repo, single-deploy setup where the landing page and the API ship
+together.
+
+Sources: <https://docs.netlify.com/build/functions/usage-and-billing/> ·
+<https://developers.cloudflare.com/workers/platform/pricing/> ·
+<https://supabase.com/pricing> · <https://vercel.com/docs/functions/usage-and-pricing> ·
+<https://aws.amazon.com/lambda/pricing/>
 
 ### Why not Lightsail
 
