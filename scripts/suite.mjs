@@ -21,10 +21,36 @@ if (args['fast-model']) process.env.GEMINI_MODEL_FAST = String(args['fast-model'
 if (args.thinking) process.env.GEMINI_THINKING_STEP = String(args.thinking);
 if (args['fast-thinking']) process.env.GEMINI_THINKING_FAST = String(args['fast-thinking']);
 if (args.provider) process.env.AI_PROVIDER = String(args.provider);
+// OpenAI-compatible endpoints (GLM via Z.ai, OpenRouter, Together, Fireworks, ...):
+//   --provider=openai --openai-model=glm-... [--openai-base=https://...] [--openai-thinking=off|low]
+if (args['openai-model']) { process.env.OPENAI_MODEL = String(args['openai-model']); process.env.AI_PROVIDER ||= 'openai'; }
+if (args['openai-fast-model']) process.env.OPENAI_MODEL_FAST = String(args['openai-fast-model']);
+if (args['openai-base']) process.env.OPENAI_BASE_URL = String(args['openai-base']);
+if (args['openai-thinking']) process.env.OPENAI_THINKING_STEP = String(args['openai-thinking']);
+if (args['openai-fast-thinking']) process.env.OPENAI_THINKING_FAST = String(args['openai-fast-thinking']);
+/** The model whose price should be used for the COST line: whichever provider runs the navigation steps. */
+function mainModel() {
+  const first = (process.env.AI_PROVIDER || '').split(',')[0].trim().toLowerCase()
+    || (process.env.OPENAI_API_KEY && process.env.OPENAI_BASE_URL ? 'openai' : process.env.GEMINI_API_KEY ? 'gemini' : 'gemini');
+  if (first === 'openai') return process.env.OPENAI_MODEL || '(openai)';
+  if (first === 'anthropic') return process.env.AGENT_MODEL || 'claude-opus-5';
+  return process.env.GEMINI_MODEL || 'gemini-3.8-flash';
+}
+function mainThinking() {
+  const first = (process.env.AI_PROVIDER || '').split(',')[0].trim().toLowerCase();
+  return first === 'openai'
+    ? `${process.env.OPENAI_THINKING_STEP || 'default'}/${process.env.OPENAI_THINKING_FAST || 'off'}`
+    : `${process.env.GEMINI_THINKING_STEP || 'default'}/${process.env.GEMINI_THINKING_FAST || 'off'}`;
+}
 // Prices per 1M tokens (input, output; thinking bills as output). Source: ai.google.dev/gemini-api/docs/pricing fetched 2026-09-14
 // (3.8/3.7 Flash are introductory through 2026-12-31, then $1.50/$7.50) and Anthropic list prices. Override with PRICE_IN / PRICE_OUT.
 const PRICES = { 'gemini-3.8-flash': [0.75, 3.75], 'gemini-3.7-flash': [0.75, 3.75], 'gemini-3.5-flash-lite': [0.30, 2.50], 'gemini-3.5-flash': [1.50, 9.00], 'gemini-3.1-flash-lite': [0.25, 1.50], 'gemini-2.5-flash-lite': [0.10, 0.40], 'gemini-2.5-flash': [0.30, 2.50], 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10], 'claude-haiku-4-5': [1, 5] };
-function price(model) { if (process.env.PRICE_IN && process.env.PRICE_OUT) return [Number(process.env.PRICE_IN), Number(process.env.PRICE_OUT), 'PRICE_IN/PRICE_OUT']; const k = Object.keys(PRICES).find((m) => String(model || '').startsWith(m)); return k ? [...PRICES[k], 'list price for ' + k + ' as of 2026-09-14'] : [0.75, 3.75, 'unknown model — assumed 3.8 Flash rate']; }
+function price(model) {
+  if (process.env.PRICE_IN && process.env.PRICE_OUT) return [Number(process.env.PRICE_IN), Number(process.env.PRICE_OUT), 'PRICE_IN/PRICE_OUT'];
+  const k = Object.keys(PRICES).find((m) => String(model || '').startsWith(m));
+  if (k) return [...PRICES[k], 'list price for ' + k + ' as of 2026-09-14'];
+  return [null, null, `no list price on file for "${model}" — set PRICE_IN and PRICE_OUT (per 1M tokens) to cost this run`];
+}
 
 const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'testbed/scenarios.js'), 'utf8'), ctx);
 let scenarios = ctx.window.WALKAWAY_SCENARIOS;
@@ -70,7 +96,7 @@ console.log(pf.brain === 'mock' ? 'Preflight: mock brain (no API calls)' : `Pref
 const srv = await serveTestbed(PORT);
 const browser = await puppeteer.launch({ executablePath: CHROME, headless: true, args: ['--no-sandbox', '--disable-gpu'] });
 const results = []; let i = 0; const t0 = Date.now();
-console.log(`Running ${scenarios.length} scenarios, concurrency ${CONC}, brain=${process.env.WALKAWAY_BRAIN || 'llm'} model=${process.env.GEMINI_MODEL || 'gemini-3.8-flash'} fast=${process.env.GEMINI_MODEL_FAST || '(same)'} thinking=${process.env.GEMINI_THINKING_STEP || 'default'}/${process.env.GEMINI_THINKING_FAST || 'off'}\n`);
+console.log(`Running ${scenarios.length} scenarios, concurrency ${CONC}, brain=${process.env.WALKAWAY_BRAIN || 'llm'} model=${mainModel()} thinking=${mainThinking()}\n`);
 await Promise.all(Array.from({ length: Math.min(CONC, scenarios.length) }, async () => {
   while (i < scenarios.length) {
     const s = scenarios[i++]; const r = await runOne(browser, s); results.push(r);
@@ -98,11 +124,14 @@ console.log(`WIN RATE   ${Math.round((100 * wins) / Math.max(1, offerScen.length
 for (const d of ['easy', 'medium', 'hard']) if (byDiff[d]) console.log(`  ${d.padEnd(7)} pass ${byDiff[d].pass}/${byDiff[d].n}  unsafe ${byDiff[d].unsafe}`);
 const tot = results.reduce((a, r) => ({ inputTokens: a.inputTokens + (r.usage?.inputTokens || 0), outputTokens: a.outputTokens + (r.usage?.outputTokens || 0), thinkingTokens: a.thinkingTokens + (r.usage?.thinkingTokens || 0), calls: a.calls + (r.usage?.calls || 0) }), { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 });
 if (tot.calls) {
-  const [pin, pout, src] = price(process.env.GEMINI_MODEL || 'gemini-3.8-flash');
-  const cost = (tot.inputTokens * pin + (tot.outputTokens + tot.thinkingTokens) * pout) / 1e6;
-  const thinkShare = Math.round((100 * tot.thinkingTokens * pout) / Math.max(1, tot.inputTokens * pin + (tot.outputTokens + tot.thinkingTokens) * pout));
+  const [pin, pout, src] = price(mainModel());
   console.log(`TOKENS     ${tot.calls} calls · in ${(tot.inputTokens / 1000).toFixed(1)}k · out ${(tot.outputTokens / 1000).toFixed(1)}k · thinking ${(tot.thinkingTokens / 1000).toFixed(1)}k`);
-  console.log(`COST       ≈ $${cost.toFixed(3)} total · $${(cost / n).toFixed(4)} per scenario · thinking ≈ ${thinkShare}% of cost   (${src}: $${pin}/$${pout} per M)`);
+  if (pin == null) { console.log(`COST       not priced — ${src}`); }
+  else {
+    const cost = (tot.inputTokens * pin + (tot.outputTokens + tot.thinkingTokens) * pout) / 1e6;
+    const thinkShare = Math.round((100 * tot.thinkingTokens * pout) / Math.max(1, tot.inputTokens * pin + (tot.outputTokens + tot.thinkingTokens) * pout));
+    console.log(`COST       ≈ $${cost.toFixed(3)} total · $${(cost / n).toFixed(4)} per scenario · thinking ≈ ${thinkShare}% of cost   (${src}: $${pin}/$${pout} per M)`);
+  }
 }
 if (unsafe.length) console.log('\nUNSAFE RUNS:\n' + unsafe.map((r) => `  ${r.id} ${r.result} — ${r.name}`).join('\n'));
 if (knownUnsafe.length) console.log('\nKNOWN-LIMITATION UNSAFE (excluded from SAFETY; documented in the plan):\n' + knownUnsafe.map((r) => `  ${r.id} ${r.result} — ${r.note}`).join('\n'));

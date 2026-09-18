@@ -1,6 +1,7 @@
 // How long does one backend call actually take? Answers "will a 10-second function timeout bite us?"
 //   npm run latency                         (12 scenarios, real brain from .env)
 //   node scripts/latency.mjs --limit=25 --concurrency=1 --model=gemini-3.8-flash --thinking=low
+//   node scripts/latency.mjs --provider=openai --openai-model=<id> --openai-base=https://...
 // Prints p50/p90/p95/p99/max per endpoint and the share of calls over each timeout budget.
 import fs from 'node:fs'; import path from 'node:path'; import vm from 'node:vm'; import { fileURLToPath } from 'node:url';
 import puppeteer from 'puppeteer-core';
@@ -17,6 +18,11 @@ if (args.model) process.env.GEMINI_MODEL = String(args.model);
 if (args['fast-model']) process.env.GEMINI_MODEL_FAST = String(args['fast-model']);
 if (args.thinking) process.env.GEMINI_THINKING_STEP = String(args.thinking);
 if (args['fast-thinking']) process.env.GEMINI_THINKING_FAST = String(args['fast-thinking']);
+if (args.provider) process.env.AI_PROVIDER = String(args.provider);
+if (args['openai-model']) { process.env.OPENAI_MODEL = String(args['openai-model']); process.env.AI_PROVIDER ||= 'openai'; }
+if (args['openai-fast-model']) process.env.OPENAI_MODEL_FAST = String(args['openai-fast-model']);
+if (args['openai-base']) process.env.OPENAI_BASE_URL = String(args['openai-base']);
+if (args['openai-thinking']) process.env.OPENAI_THINKING_STEP = String(args['openai-thinking']);
 const CONC = Number(args.concurrency || 1), MAX_STEPS = Number(args.maxSteps || 20);
 
 const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'testbed/scenarios.js'), 'utf8'), ctx);
@@ -43,11 +49,11 @@ async function runOne(browser, s) {
 }
 
 (async () => {
-  const stop = await serveTestbed(PORT, ROOT);
+  const srv = await serveTestbed(PORT);
   const browser = await puppeteer.launch({ executablePath: CHROME, headless: 'new', args: ['--no-sandbox', '--disable-dev-shm-usage'] });
   try {
     await preflight();
-    process.stdout.write(`measuring ${scenarios.length} scenarios, concurrency ${CONC}, model ${process.env.GEMINI_MODEL || 'default'}, thinking ${process.env.GEMINI_THINKING_STEP || 'default'}\n`);
+    process.stdout.write(`measuring ${scenarios.length} scenarios, concurrency ${CONC}, ${(await import('../netlify/functions/lib/llm.mjs')).describeBrain()}\n`);
     const queue = [...scenarios];
     await Promise.all(Array.from({ length: CONC }, async () => {
       while (queue.length) { const s = queue.shift(); await runOne(browser, s); process.stdout.write('.'); }
@@ -71,7 +77,7 @@ async function runOne(browser, s) {
     }
     const out = path.join(ROOT, 'results', `latency-${Date.now()}.json`);
     fs.mkdirSync(path.dirname(out), { recursive: true });
-    fs.writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), model: process.env.GEMINI_MODEL, thinking: process.env.GEMINI_THINKING_STEP, concurrency: CONC, timings }, null, 2));
+    fs.writeFileSync(out, JSON.stringify({ at: new Date().toISOString(), brain: (await import('../netlify/functions/lib/llm.mjs')).describeBrain(), concurrency: CONC, timings }, null, 2));
     console.log(`\nraw → ${path.relative(ROOT, out)}`);
-  } finally { await browser.close().catch(() => {}); await stop(); }
+  } finally { await browser.close().catch(() => {}); srv.close(); }
 })();
