@@ -204,6 +204,7 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
       ) : (
         <>
           <div className="count">{found.length} subscription{found.length === 1 ? '' : 's'} found · {offers.length} make{offers.length === 1 ? 's' : ''} loyalty offers</div>
+          {offers.length > 0 && <p className="sub hint">All ticked. <b>Untick any subscription you'd rather we leave alone.</b> We only go for the discount on the ones left ticked.</p>}
           <div className="card">
             {offers.map((i) => { const on = !excluded.includes(i.id); return (
               <label className={`row pick${on ? '' : ' off'}`} key={i.id}>

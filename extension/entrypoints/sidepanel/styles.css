@@ -79,3 +79,6 @@ ul.consent i{font-style:italic}
 .rowmain .sub{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .row.pick.off{opacity:.5}
 .row.pick.off .amt{text-decoration:line-through;color:var(--muted)}
+
+.hint{margin:6px 0 10px;line-height:1.4}
+.hint b{color:var(--ink);font-weight:700}
