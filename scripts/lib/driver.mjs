@@ -32,20 +32,27 @@ export async function callFn(name, body, acc) {
 }
 async function settle(page) { await Promise.race([page.waitForNavigation({ timeout: 2500 }).catch(() => {}), sleep(900)]); await sleep(400); }
 
-export async function hunt(page, merchant, maxSteps = 20, acc) {
-  const history = [], log = []; let t0 = Date.now();
-  for (let step = 0; step <= maxSteps; step++) {
-    const snapshot = await page.evaluate(snapshotPage, { maxElements: 100, textChars: 3000 });
-    const { decision, guardrails, proposed } = await callFn('agent-step', { runId: 'suite', merchant, goal: 'hunt', step, maxSteps, history, snapshot }, acc);
+/**
+ * Drive one loop the way the extension does. goal 'find' pauses in front of the accept button and returns
+ * outcome offer_found with acceptId/acceptText (nothing accepted); goal 'hunt' accepts and finishes.
+ */
+export async function hunt(page, merchant, maxSteps = 20, acc, opts = {}) {
+  const goal = opts.goal || 'hunt';
+  const history = opts.history ? [...opts.history] : [], log = opts.log ? [...opts.log] : []; let t0 = Date.now();
+  for (let step = opts.startStep || 0; step <= maxSteps; step++) {
+    const snapshot = await page.evaluate(snapshotPage, {});
+    const { decision, guardrails, proposed } = await callFn('agent-step', { runId: 'suite', merchant, goal, step, maxSteps, history, snapshot, priorPath: opts.priorPath || null }, acc);
     const a = decision.action;
     const target = a.id != null ? (snapshot.elements.find((e) => e.id === a.id) || {}).text : undefined;
-    log.push(`  step ${step} [${decision.state}] ${proposed.type}${proposed.id != null ? ' #' + proposed.id : ''} → ${a.type}${target ? ` "${target}"` : ''}${guardrails.length ? '  ⛔ ' + guardrails.join('; ') : ''}  @ ${new URL(snapshot.url).pathname}`);
+    log.push(`  step ${step} [${decision.state}] ${proposed.type}${proposed.id != null ? ' #' + proposed.id : ''} → ${a.type}${a.outcome ? ':' + a.outcome : ''}${target ? ` "${target}"` : ''}${guardrails.length ? '  ⛔ ' + guardrails.join('; ') : ''}  @ ${new URL(snapshot.url).pathname}`);
     let ok = true, note = '';
     if (a.type === 'finish' || a.type === 'back_out') {
       history.push({ step, url: snapshot.url, state: decision.state, action: a, target, note: guardrails.join('; ') });
       let outcome = a.type === 'finish' ? a.outcome : 'no_offer_backed_out';
       if (a.type === 'back_out' && /^ai_declined/.test(a.reason || '')) outcome = 'ai_declined';
-      return { outcome, details: a.details || null, reason: a.reason || null, history, log, steps: step + 1, ms: Date.now() - t0 };
+      const base = { outcome, details: a.details || null, reason: a.reason || null, offer: a.offer || null, history, log, steps: step + 1, ms: Date.now() - t0 };
+      if (outcome === 'offer_found') return { ...base, acceptId: a.id ?? null, acceptText: target || '', url: snapshot.url };
+      return base;
     }
     if (a.type === 'click' || a.type === 'accept_offer') {
       const live = await page.evaluate(readElement, a.id);
@@ -57,6 +64,23 @@ export async function hunt(page, merchant, maxSteps = 20, acc) {
     history.push({ step, url: snapshot.url, state: decision.state, action: a, target, ok, note });
   }
   return { outcome: 'error', reason: 'loop exhausted', history, log, steps: maxSteps + 1, ms: Date.now() - t0 };
+}
+
+/** Phase two on the same page: press the recorded accept button (guarded), then let the hunt loop finish. */
+export async function acceptPaused(page, merchant, found, maxSteps = 20, acc) {
+  const t0 = Date.now();
+  const snapshot = await page.evaluate(snapshotPage, {});
+  const want = (found.acceptText || '').trim();
+  const el = snapshot.elements.find((e) => e.id === found.acceptId && (e.text || '').trim() === want) || snapshot.elements.find((e) => want && (e.text || '').trim() === want);
+  const log = [...found.log];
+  if (!el || isFinalizeClick(el.text, snapshot.text)) { log.push(`  accept: recorded button not found or refused ("${want}")`); return { outcome: 'error', reason: 'accept button not found on the paused screen', history: found.history, log, steps: found.steps, ms: Date.now() - t0, phase: 'accept' }; }
+  const live = await page.evaluate(readElement, el.id);
+  if (!live || isFinalizeClick(live.text, snapshot.text)) { log.push('  accept: client guard refused click'); return { outcome: 'no_offer_backed_out', reason: 'client guard refused click', history: found.history, log, steps: found.steps, ms: Date.now() - t0, phase: 'accept' }; }
+  const r = await page.evaluate(performAction, { type: 'click', id: el.id }); await settle(page);
+  log.push(`  accept: clicked "${el.text}" (${r.ok ? 'ok' : r.note})`);
+  const rec = { step: found.steps, url: snapshot.url, state: 'save_offer_presented', action: { type: 'accept_offer', id: el.id, offer: found.offer || null }, target: el.text, ok: r.ok, note: 'accepted from pause' };
+  const res = await hunt(page, merchant, maxSteps, acc, { goal: 'hunt', startStep: found.steps + 1, history: [...found.history.filter((h) => h.action && h.action.type !== 'finish'), rec], log });
+  return { ...res, phase: 'accept', ms: Date.now() - t0 };
 }
 
 export async function classifyPage(page, merchant, acc) {

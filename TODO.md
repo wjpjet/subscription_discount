@@ -48,8 +48,11 @@ The scan itself is fine. What is long is everything around it.
 - [ ] **Keep checkout inside the panel.** The card is now saved without a charge, and the run
       charges only what was verified. The remaining rough edge is the Stripe tab opening and closing;
       Stripe's embedded checkout would keep it in the panel.
-- [ ] **Remember the scan.** Re-scanning from scratch on every open is slow and costs money. Cache the
-      result and offer a rescan.
+- [ ] **Remember the scan.** Re-scanning from scratch on every open is slow and costs money. The
+      result is already cached; add an age and a one-tap rescan.
+- [ ] **Paused tabs are fragile.** The find pass leaves one tab open per offer. Chrome's tab discarding,
+      a restart, or the user closing them forces the re-walk fallback. Consider re-finding on demand
+      when the reveal is older than a few minutes.
 
 ## Before real users
 

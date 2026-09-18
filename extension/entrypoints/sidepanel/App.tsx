@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import { DEFAULTS, getSettings, saveSettings, type Settings } from '@/src/settings';
 import { originsFor } from '@/src/discovery';
-import { runScan, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
-import { huntAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
+import { runScan, discardScan, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
+import { acceptAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
 import { startCheckout, waitForCheckout, settle } from '@/src/payment';
-import { focusTab } from '@/src/tabs';
+import { focusTab, closeTab } from '@/src/tabs';
 import { money, outcomeLabel } from '@/src/format';
 import type { CheckoutResult, Settlement } from '@/src/types';
 
@@ -75,16 +75,20 @@ export default function App() {
       setResult(r); setScreen('reveal');
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
-  async function rescan() { await browser.storage.local.remove(['scanResult', 'huntResults']); setResult(null); setHunt(EMPTY_HUNT); setExcluded([]); await startScan(); }
+  async function rescan() { await discardScan(result); setResult(null); setHunt(EMPTY_HUNT); setExcluded([]); await startScan(); }
   const toggle = (id: string) => setExcluded((x) => (x.includes(id) ? x.filter((v) => v !== id) : [...x, id]));
 
   async function startHunt() {
     if (!result) return;
     const s = await getSettings(); setSettings(s);
-    // Only the services still ticked on the reveal screen (all are ticked by default), highest estimated savings first, capped.
-    const targets = result.items.filter((i) => (i.status === 'signed_in' || i.status === 'unknown') && i.hasOffer && !excluded.includes(i.id)).slice(0, Math.max(1, s.maxHunts || 10));
-    const estimate = Math.round(targets.reduce((sum, i) => sum + i.estSavings, 0));
+    // The services still ticked (all are ticked by default), best offer first, capped. Every figure was observed during the scan.
+    const offers = result.items.filter((i) => i.hasOffer);
+    const targets = offers.filter((i) => !excluded.includes(i.id)).slice(0, Math.max(1, s.maxHunts || 10));
+    const skipped = offers.filter((i) => !targets.includes(i));
+    const estimate = +targets.reduce((sum, i) => sum + i.estSavings, 0).toFixed(2);
     setError(null); setHunt({ ...EMPTY_HUNT, total: targets.length });
+    // Tabs paused on offers the user did not pick are simply closed. Nothing is clicked in them.
+    for (const i of skipped) if (i.paused) { await closeTab(i.paused.tabId); i.paused = null; }
 
     let pay: CheckoutResult | null = null;
     if (!s.skipPayment) {
@@ -105,11 +109,11 @@ export default function App() {
       else if (e.type === 'done') setHunt((h) => ({ ...h, results: [...h.results, e.result], verifying: false }));
     };
     try {
-      const results = await huntAll(targets, s, onEvent);
-      await browser.storage.local.set({ huntResults: results });
+      const results = await acceptAll(targets, s, onEvent);
+      await browser.storage.local.set({ huntResults: results, scanResult: result });   // the paused tabs were consumed; persist that
       let settlement: Settlement | null = null;
       if (pay) {
-        // Charged now, and only now: 10% of what the billing pages actually showed, never the estimate.
+        // Charged now, and only now: 10% of what the billing pages actually showed.
         const verified = results.reduce((sum, r) => sum + (r.outcome === 'discount_applied' ? (r.savingsUsd || 0) : 0), 0);
         settlement = await settle(pay, verified, estimate).catch((e: any) => ({ feeCents: 0, estimatedFeeCents: 0, adjusted: false, charged: false, error: String(e?.message || e) }));
       }
@@ -176,13 +180,13 @@ function Consent({ onAgree, onBack }: { onAgree: () => void; onBack: () => void 
 
 function Scanning({ progress }: { progress: ScanProgress | null }) {
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 5;
-  const label = !progress || progress.phase === 'discover' ? (progress?.message || 'Discovering…') : progress.phase === 'pages' ? `Checking ${progress.current ?? 'your accounts'}… (${progress.done} of ${progress.total})` : 'Almost done…';
+  const label = !progress || progress.phase === 'discover' ? (progress?.message || 'Discovering…') : progress.phase === 'pages' ? `Checking ${progress.current ?? 'your accounts'}… (${progress.done} of ${progress.total})` : progress.phase === 'find' ? `Looking for offers${progress.current ? ` at ${progress.current}` : ''}… (${progress.done} of ${progress.total})` : 'Almost done…';
   return (
     <div className="body">
       <div className="prog"><i style={{ width: `${Math.max(5, pct)}%` }} /></div>
       <h1>Scanning.</h1>
       <p>{label}</p>
-      <p className="fine left">Account pages open briefly in background tabs and close on their own. Keep doing what you were doing.</p>
+      <p className="fine left">{progress?.phase === 'find' ? 'This is the slow part: it walks each cancellation flow up to the loyalty offer and stops there, three services at a time. Nothing is accepted yet.' : 'Account pages open briefly in background tabs and close on their own. Keep doing what you were doing.'}</p>
     </div>
   );
 }
@@ -203,7 +207,7 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
         </>
       ) : (
         <>
-          <div className="count">{found.length} subscription{found.length === 1 ? '' : 's'} found · {offers.length} make{offers.length === 1 ? 's' : ''} loyalty offers</div>
+          <div className="count">{found.length} subscription{found.length === 1 ? '' : 's'} found · {offers.length} made an offer</div>
           {offers.length > 0 && <p className="sub hint">All ticked. <b>Untick any subscription you'd rather we leave alone.</b> We only go for the discount on the ones left ticked.</p>}
           <div className="card">
             {offers.map((i) => { const on = !excluded.includes(i.id); return (
@@ -211,13 +215,13 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
                 <input type="checkbox" checked={on} onChange={() => onToggle(i.id)} aria-label={`Include ${i.name}`} />
                 <div className="rowmain">
                   <div className="rowline"><span>{i.name}</span><b className="amt">~{money(i.estSavings)}</b></div>
-                  <span className="sub">{[i.email, estText(i)].filter(Boolean).join(' · ')}</span>
+                  <span className="sub">{[i.email, i.offerText].filter(Boolean).join(' · ')}</span>
                 </div>
               </label>
             ); })}
-            {kept.map((i) => <div className="row skip" key={i.id}>{i.name}<span className="tag skip">{i.offerApplied ? 'Promo active · kept' : 'No offers · kept'}</span></div>)}
+            {kept.map((i) => <div className="row skip" key={i.id}>{i.name}<span className="tag skip">{keptLabel(i)}</span></div>)}
           </div>
-          {offers.length > 0 && <div className="total"><small>{picked.length === offers.length ? 'You could save about' : `${picked.length} of ${offers.length} selected — you could save about`}</small><b>~{money(total)}</b><span>on your upcoming renewals — by not cancelling. Untick any service to leave it alone. Exact amounts appear after the run.</span></div>}
+          {offers.length > 0 && <div className="total"><small>{picked.length === offers.length ? 'You could save about' : `${picked.length} of ${offers.length} selected — you could save about`}</small><b>~{money(total)}</b><span>on your upcoming renewals — by not cancelling. These are the offers each service actually showed; the exact charge is confirmed on your billing page after the run.</span></div>}
         </>
       )}
       <div className="spacer" />
@@ -228,12 +232,13 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
     </div>
   );
 }
-/** "50% off for 3 months on $17.99/mo" — the terms behind each estimate, in the service's own shape. */
-function estText(i: { discountPct: number; termMonths: number; monthlyPrice: number | null }): string {
-  const pct = i.discountPct ? Math.round(i.discountPct * 100) : 0;
-  if (pct && i.termMonths) return `${pct}% off for ${i.termMonths} month${i.termMonths === 1 ? '' : 's'}${i.monthlyPrice != null ? ` on ${money(i.monthlyPrice)}/mo` : ''}`;
-  if (i.monthlyPrice != null) return `${money(i.monthlyPrice)}/mo · offer terms shown after the run`;
-  return 'offer terms shown after the run';
+/** Why a subscription is listed without an offer. */
+function keptLabel(i: ScanItem): string {
+  if (i.offerApplied) return 'Promo active · kept';
+  if (i.findOutcome === 'no_offer_backed_out') return 'No offer this time · left alone';
+  if (i.findOutcome === 'blocked_needs_you') return 'Needs you to sign in';
+  if (i.findOutcome == null) return 'Not checked';
+  return "Couldn't check · left alone";
 }
 
 function Checkout({ msg, onCancel }: { msg: string; onCancel: () => void }) {
@@ -253,7 +258,7 @@ function Hunting({ hunt, watch }: { hunt: HuntState; watch: boolean }) {
   return (
     <div className="body">
       <div className="prog"><i style={{ width: `${Math.max(4, Math.round((done / total) * 100))}%` }} /></div>
-      <div className="count">{hunt.current ? `${hunt.verifying ? 'Verifying' : 'Hunting'} ${Math.min(done + 1, hunt.total)} of ${hunt.total} — ${hunt.current.name}` : 'Starting…'}</div>
+      <div className="count">{hunt.current ? `${hunt.verifying ? 'Verifying' : 'Accepting'} ${Math.min(done + 1, hunt.total)} of ${hunt.total} — ${hunt.current.name}` : 'Starting…'}</div>
       <div className="log">
         {hunt.log.slice(-10).map((s) => (
           <div className={`step ${s.action.type === 'back_out' ? 'warn' : s.action.type === 'finish' ? 'done' : 'now'}`} key={s.step}>
@@ -261,7 +266,7 @@ function Hunting({ hunt, watch }: { hunt: HuntState; watch: boolean }) {
             <div><b>{s.state.replace(/_/g, ' ')}</b><span>{s.action.type}{s.target ? ` → “${s.target.slice(0, 50)}”` : ''}{s.guardrails && s.guardrails.length ? ` · ⛔ ${s.guardrails[0]}` : ''}</span></div>
           </div>
         ))}
-        {hunt.log.length === 0 && <p className="fine left">Opening the account page…</p>}
+        {hunt.log.length === 0 && <p className="fine left">Accepting the offer that was found…</p>}
       </div>
       <div className="spacer" />
       {hunt.tabId != null && <button className="btn ghost" onClick={() => focusTab(hunt.tabId!)}>Watch this tab</button>}

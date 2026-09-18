@@ -69,21 +69,26 @@ later, an emailed summary, or the same account on two machines. None of that exi
 
 ## The flow, end to end
 
-### 1. Scan — which services is this person paying for?
+### 1. Scan — what is this person paying for, and what will each service offer?
 
 The extension reads the browser's cookies and reduces them to a list of domains where a
 **session-like cookie** exists. It reads cookie *names and flags only*, never values. That's the
 "sites you're signed into" signal.
 
-That domain list goes to **`/api/discover`** in chunks of 25, four chunks at a time. Gemini answers,
-per domain: is this a subscription service, what is it called, where is its account page, roughly
-what does it cost. Most domains come back as "not a subscription" and are dropped.
+That domain list goes to **`/api/discover`** in chunks of 25, four chunks at a time. The model answers,
+per domain: is this a subscription service, what is it called, where is its account page. Most
+domains come back as "not a subscription" and are dropped.
 
 For the survivors, the extension **opens each account page in a background tab**, takes a text
-snapshot, and sends it to **`/api/classify`**. That confirms the real thing: is there actually a paid
-plan here, what is the price, when does it renew. Four tabs at a time.
+snapshot, and sends it to **`/api/classify`**: is there a paid plan, what does it cost, when does it
+renew, which email is signed in. Four tabs at a time.
 
-The user sees a list of services and one total estimated saving.
+Then, for each confirmed subscription, the **find pass**: the same agent loop as the hunt below, in
+`find` mode, three services at a time. It walks the cancellation flow until an offer is on screen,
+then pauses with the tab left open. The model proposes accepting exactly as it would in a hunt; the
+guardrail turns that into "offer found" and records the button. Nothing is clicked.
+
+The user sees every service with its email, the offer it actually made, and a checkbox, all ticked.
 
 ### 2. Pay — save the card, charge nothing yet
 
@@ -94,9 +99,14 @@ and its terms, each ticked by default. Unticking one drops it from the total and
 nothing is charged. The extension opens that page in a tab and polls **`/api/checkout-status`**,
 backing off from 2 to 10 seconds, until the card is saved or 20 minutes pass.
 
-### 3. Hunt — the part that does the work
+### 3. Accept — one press in the tab that was left open
 
-For each service, the extension runs this loop, capped at 25 steps:
+For each ticked service, the extension re-reads the recorded accept button in the paused tab, runs
+the same click-time guard as every other click, presses it, and continues the loop to the
+confirmation screen. That is usually one or two steps. Unticked services get their tab closed.
+
+If the tab is gone or the screen changed, it re-walks from the account page, with the route the find
+pass took given to the model as a hint. Same loop, same guardrails:
 
 ```
   read the page  ──▶  POST /api/agent-step  ──▶  one decision  ──▶  check it  ──▶  do it
@@ -107,9 +117,8 @@ For each service, the extension runs this loop, capped at 25 steps:
 Each `/api/agent-step` call sends the current page snapshot plus the history so far, and gets back
 exactly **one** action: click this, type that, scroll, navigate, accept the offer, or back out.
 
-**The loop is in the extension, not the backend.** This is the single most important structural fact.
-A hunt is 25 short requests, not one long one, so no request ever needs to run for more than a few
-seconds. It is also why a serverless host is fine.
+**The loop is in the extension, not the backend.** A walk is many short requests, not one long one,
+and the backend remembers nothing between them.
 
 Two things guard every step:
 
@@ -117,7 +126,7 @@ Two things guard every step:
   action doesn't exist in its vocabulary.
 - Deterministic code checks the decision anyway, on the server and again in the extension, and the
   extension **re-reads the live button text at the moment of clicking**. If that text looks like a
-  final cancel, the click is refused and the run ends.
+  final cancel, or the page announces itself as the final confirmation, the click is refused.
 
 The loop stops when an offer is accepted, when there's nothing to accept, or when anything at all is
 ambiguous. No decision means no click.

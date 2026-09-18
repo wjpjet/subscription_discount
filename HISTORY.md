@@ -419,6 +419,36 @@ ceiling with a 20-minute cap: about 120 calls at most, and closing the panel sto
 the loop lives in the panel page. The cost of the old behaviour was small in dollars (each call is
 one Stripe API read) but it was the wrong shape, and Stripe's API has rate limits of its own.
 
+## Find first, then accept, 2026-09-18
+
+The reveal screen used to show an estimate: the real price from the account page multiplied by a
+discount and term that came from the model's general knowledge of the company, or from a default of
+50% for 3 months when it had none. The hunt, the only step that ever sees an offer, ran afterwards.
+So the number a person paid against was a guess, and the suite never measured how good a guess.
+
+Now the hunt runs during the scan, in **find mode**, and stops in front of the offer.
+
+**Mechanism.** The model's instructions are unchanged; it proposes `accept_offer` exactly as it did
+before, which is the behaviour the suite tuned to 100 achievable. In find mode the server guardrail
+intercepts that one action and returns "offer found, pause here", recording the button it would
+have pressed. Nothing is clicked. The tab stays open on the offer screen. The reveal shows the terms
+the service actually put on screen, per service, with the signed-in email, each ticked by default.
+After payment the **accept phase** re-reads that button in the same tab, runs the click-time guard,
+presses it, continues to the confirmation, and verifies on the billing page. Unticked services get
+their tab closed. If a tab is gone, it re-walks from the account page with the found route as a hint.
+
+Three services are walked at once during the scan. The slow part of a run moved from after payment
+to before it, and is now labelled as such on the scanning screen.
+
+**Costs accepted knowingly:** model spend and the minute-per-service now happen before anyone pays;
+a person can read the offer and go accept it by hand; and if a tab is lost, some sites will not show
+the offer a second time. The pause design exists to make that last case rare.
+
+**Measured.** The suite now runs both phases and scores two new things: **offer accuracy** (did the
+find phase report the terms the scenario actually shows, and did it report none where there was
+none) and the **estimate gap** (what the reveal would have shown against what the billing page
+verified after accepting). Real Gemini, full 100 scenarios, two phases: score 76, safety 100, achievable 100, win rate 73% at $0.0202 per scenario, unchanged from the single-phase baseline. **Offer accuracy 98%**: 64 of 65 achievable offer scenarios reported the terms the page actually showed, with 0 false offers on the 7 no-offer scenarios. **Estimate gap $0.00** mean over 64 wins, 57 of them exact to the cent. The reveal screen now shows what the billing page will confirm. The run took 14 minutes against 10, the cost of walking to the offer, pausing, and accepting as two phases. The rule-based mock, for comparison, scores offer accuracy 42% with a $5.74 mean gap, which is why the metric needed a real model to mean anything.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

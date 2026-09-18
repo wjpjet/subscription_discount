@@ -25,3 +25,5 @@ export async function focusTab(tabId: number) {
 }
 export async function tabUrl(tabId: number): Promise<string> { try { return (await browser.tabs.get(tabId)).url || ''; } catch { return ''; } }
 export async function navigateTab(tabId: number, url: string) { await browser.tabs.update(tabId, { url }); await waitForLoad(tabId); }
+/** Is a tab we paused on still there? Users close tabs; the extension may have been reloaded. */
+export async function tabAlive(tabId: number): Promise<boolean> { try { await browser.tabs.get(tabId); return true; } catch { return false; } }

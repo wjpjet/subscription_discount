@@ -15,7 +15,7 @@ export const Decision = z.object({
     direction: z.enum(['up', 'down']).nullable(),
     reason: z.string().nullable().describe('Why (back_out / wait).'),
     offer: z.object({ description: z.string(), newMonthlyPriceUsd: z.number().nullable(), discountPct: z.number().nullable(), termMonths: z.number().nullable(), freeMonths: z.number().nullable() }).nullable().describe('The offer being accepted (accept_offer only).'),
-    outcome: z.enum(OUTCOMES).nullable().describe('finish only.'),
+    outcome: z.enum(OUTCOMES).nullable().describe('finish only. Never choose offer_found; the system assigns it.'),
     details: z.object({ beforeMonthlyPriceUsd: z.number().nullable(), afterMonthlyPriceUsd: z.number().nullable(), termMonths: z.number().nullable(), savingsUsd: z.number().nullable(), summary: z.string() }).nullable().describe('finish only.'),
   }),
 });
@@ -105,11 +105,14 @@ const NULLS = { id: null, text: null, value: null, url: null, direction: null, r
 
 export async function decide(input) {
   if (BRAIN === 'mock') return mockDecide(input);
-  const { merchant, goal, step, maxSteps, history, snapshot } = input;
+  const { merchant, goal, step, maxSteps, history, snapshot, priorPath } = input;
+  // 'find' uses the hunt instructions unchanged: the model proposes the accept, the guardrail turns it into a pause.
   const user = [
     `SERVICE: ${merchant.name || merchant.domain} (${merchant.domain})`,
     `GOAL: ${goal === 'verify' ? 'VERIFY — this is the account/billing page after the run. Do not act; call finish with the current monthly price and whether a promotional price is applied.' : 'HUNT — reach the loyalty offer and accept it; never finalize a cancellation.'}`,
-    `STEP: ${step} of ${maxSteps}`, `HISTORY:\n${renderHistory(history)}`, `CURRENT PAGE:\n${renderSnapshot(snapshot)}`,
+    `STEP: ${step} of ${maxSteps}`,
+    ...(Array.isArray(priorPath) && priorPath.length ? [`PRIOR PATH (an earlier walk reached the offer this way; prefer the same route):\n${priorPath.map((p) => '- ' + p).join('\n')}`] : []),
+    `HISTORY:\n${renderHistory(history)}`, `CURRENT PAGE:\n${renderSnapshot(snapshot)}`,
   ].join('\n\n');
   try {
     const { output, provider, model, usage } = await generateStructured({ system: HUNT_SYSTEM, user, schema: Decision, maxTokens: 8000, tier: 'main' });

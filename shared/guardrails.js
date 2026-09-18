@@ -2,7 +2,7 @@
 // Used by the backend (authoritative) and re-applied in the extension (defense in depth).
 export const STATES = ['login','account_home','settings','subscription_page','cancel_entry','reason_survey','save_offer_presented','offer_accepted_confirmation','about_to_finalize_cancel','cancellation_completed','other','ambiguous'];
 export const ACTIONS = ['click','type','select','scroll','navigate','wait','accept_offer','back_out','finish'];
-export const OUTCOMES = ['discount_applied','no_offer_backed_out','blocked_needs_you','error'];
+export const OUTCOMES = ['discount_applied','no_offer_backed_out','blocked_needs_you','offer_found','error'];   // offer_found is assigned by the guardrail in find mode
 
 /** Text that finalizes a cancellation, declines an offer, or destroys the account. Never clickable. */
 export const FINALIZE_RE = /\b(confirm (my |the |your )?cancel(l)?ation|confirm (and |& )?cancel|yes,? (please )?cancel|cancel anyway|complete (my |the )?cancel(l)?ation|finish cancel(l)?ing|end (my |the )?(subscription|membership|plan)|cancel (my |the |your )?(subscription|membership|plan) now|turn off (auto[- ]?renew(al)?|automatic renewal)|proceed (with|to) cancel(l)?ation|continue (to |with )?cancel(l)?ing|continue cancel(l)?ation|no thanks|no,? thanks|i still want to cancel|yes,? i('| a)m sure|i('| a)m sure|delete (my )?account|close (my )?account|deactivate)\b/i;
@@ -92,6 +92,14 @@ export function applyGuardrails(ctx) {
   if (a.type === 'accept_offer' && d.state !== 'save_offer_presented' && !isAcceptText(text)) {
     setWait('accept_offer on something that does not look like an offer'); return { decision: d, notes };
   }
+  // FIND mode (the scan): the model behaves exactly as in a hunt, but its accept is intercepted here and
+  // becomes "offer found, pause on this screen". The button it would have pressed is recorded (id) so
+  // the accept phase can press it later, after the user has chosen and paid. Nothing is clicked now.
+  if (ctx.goal === 'find' && a.type === 'accept_offer') {
+    notes.push('find mode: offer located — pausing here instead of accepting');
+    d.action = { type: 'finish', outcome: 'offer_found', id: a.id, offer: a.offer || null, reason: null, details: null };
+    return { decision: d, notes };
+  }
   if (a.type === 'type' || a.type === 'select') {
     if (!el) { setWait('target element not found in snapshot'); return { decision: d, notes }; }
     if (el.type === 'password' || SENSITIVE_FIELD_RE.test(`${el.name || ''} ${el.placeholder || ''} ${el.label || ''}`)) {
@@ -100,6 +108,15 @@ export function applyGuardrails(ctx) {
   }
   if (a.type === 'navigate') {
     if (!a.url || !sameSite(a.url, merchantDomain)) { setBackOut(`refused to navigate off-site: ${a.url}`); return { decision: d, notes }; }
+  }
+  if (a.type === 'finish' && a.outcome === 'offer_found') {
+    // Only the guardrail above should produce this. If the model chose it itself, allow it only in find
+    // mode, on an offer screen, pointing at a real accept-looking button; otherwise back out.
+    const okTarget = !!el && !isFinalizeClick(text, snapshot && snapshot.text) && (isAcceptText(text) || d.state === 'save_offer_presented');
+    if (ctx.goal !== 'find') { setBackOut('offer_found is reserved for find mode'); return { decision: d, notes }; }
+    if (!okTarget) { setBackOut('offer_found without a valid accept button'); return { decision: d, notes }; }
+    a.details = null;
+    return { decision: d, notes };
   }
   if (a.type === 'finish') {
     a.details = a.details || { summary: '' };

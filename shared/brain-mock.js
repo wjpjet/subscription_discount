@@ -45,8 +45,17 @@ export function mockDecide(input) {
   if (state === 'save_offer_presented') {
     const btn = find(/accept/i) || find(ACCEPT_RE);
     if (btn) {
-      const m = (snapshot.text || '').match(/\$\s?(\d+(?:\.\d{2})?)\s*\/\s*month[^.]*?(\d+)\s*months?/i);
-      return { state, reasoning, action: act('accept_offer', { id: btn.id, offer: { description: btn.text || 'offer', newMonthlyPriceUsd: m ? +m[1] : null, discountPct: null, termMonths: m ? +m[2] : null, freeMonths: null } }) };
+      // Read the offer's terms the way a person would: the button first, then the page. Percent, free months, or a fixed price.
+      const bt = btn.text || '', src = bt + ' ' + (snapshot.text || '');
+      const pm = bt.match(/(\d+)%\s*off\s*(?:for\s*)?(\d+)\s*months?/i) || src.match(/(\d+)%\s*off\s*(?:for\s*)?(\d+)\s*months?/i);
+      const fm = src.match(/(\d+)\s*(?:free\s+months?|months?\s+free)/i);
+      const dm = src.match(/\$\s?(\d+(?:\.\d{2})?)\s*\/\s*(?:mo|month)\b[^.]*?(\d+)\s*months?/i);
+      const base = { description: bt || 'offer', newMonthlyPriceUsd: null, discountPct: null, termMonths: null, freeMonths: null };
+      const offer = pm ? { ...base, discountPct: +pm[1] / 100, termMonths: +pm[2] }
+        : fm ? { ...base, freeMonths: +fm[1] }
+        : dm ? { ...base, newMonthlyPriceUsd: +dm[1], termMonths: +dm[2] }
+        : base;
+      return { state, reasoning, action: act('accept_offer', { id: btn.id, offer }) };
     }
     return { state, reasoning, action: act('back_out', { reason: 'offer seen but no accept button found' }) };
   }
