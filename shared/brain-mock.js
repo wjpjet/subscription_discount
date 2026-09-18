@@ -93,7 +93,7 @@ export function mockClassify(snapshot) {
   const monthly = monthlyFromPrices(snapshot.prices);
   const signedIn = !snapshot.hasPassword && (/(sign out|log out|your (subscription|plan|membership)|manage|billing)/.test(t));
   const offerApplied = /(offer applied|loyalty offer)/.test(t);
-  return { signedIn, hasPaidPlan: signedIn ? (monthly != null) : null, planName: null, monthlyPriceUsd: monthly, cadence: monthly != null ? 'month' : 'unknown', renewalDate: null, offerApplied, offerText: null, confidence: 0.5, notes: 'mock classify' };
+  return { signedIn, hasPaidPlan: signedIn ? (monthly != null) : null, planName: null, accountEmail: (String(snapshot.text || '').match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/) || [null])[0], monthlyPriceUsd: monthly, cadence: monthly != null ? 'month' : 'unknown', renewalDate: null, offerApplied, offerText: null, confidence: 0.5, notes: 'mock classify' };
 }
 
 /** Mock discovery knows nothing about the world; it only works in test mode. */

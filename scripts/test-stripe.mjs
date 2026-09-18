@@ -1,5 +1,7 @@
 // Integration test for the payment functions against Stripe TEST mode. `npm run test:stripe`
-// Simulates what Checkout does (a $1 manual-capture hold with a saved test card), then exercises settle.
+// Simulates what setup-mode Checkout produces (a succeeded SetupIntent holding a saved test card),
+// then exercises settle: full fee, adjusted-down fee, the $1 minimum, no charge, idempotency, and the
+// path where Checkout left no customer behind.
 import Stripe from 'stripe';
 process.env.WALKAWAY_RATE_LIMIT = '0'; // in-process: the whole run looks like one IP
 const key = process.env.STRIPE_SECRET_KEY;
@@ -13,37 +15,49 @@ const call = async (name, body) => {
   const res = await mod.default(new Request(`http://localhost/api/${name}`, { method: 'POST', headers: { 'content-type': 'application/json', host: '127.0.0.1:8787' }, body: JSON.stringify(body) }), {});
   return res.json();
 };
-const newHold = (customer) => stripe.paymentIntents.create({ amount: 100, currency: 'usd', customer, payment_method: 'pm_card_visa', payment_method_types: ['card'], confirm: true, capture_method: 'manual', setup_future_usage: 'off_session', description: 'walkaway test $1 hold' });
+/** What Checkout leaves behind in setup mode: a succeeded SetupIntent with the card attached to a customer. */
+const savedCard = (customer) => stripe.setupIntents.create({ ...(customer ? { customer } : {}), payment_method: 'pm_card_visa', payment_method_types: ['card'], confirm: true, usage: 'off_session', description: 'walkaway test saved card' });
 
-console.log('1) Checkout session');
-const co = await call('checkout', { estimatedSavingsUsd: 498 });
+console.log('1) Checkout session (setup mode: card saved, nothing charged)');
+const co = await call('checkout', { estimatedSavingsUsd: 498, email: 'stripe-test@walkaway.test' });
 check('checkout returns a session + hosted URL', !!co.sessionId && /^https:\/\/checkout\.stripe\.com/.test(co.url || ''), co.sessionId || JSON.stringify(co));
+check('estimated fee is 10% of the estimate', co.estimatedFeeUsd === 49.8, `estimatedFeeUsd=${co.estimatedFeeUsd}`);
+const sess = await stripe.checkout.sessions.retrieve(co.sessionId);
+check('session is setup mode with no amount', sess.mode === 'setup' && sess.amount_total == null, `mode=${sess.mode} amount_total=${sess.amount_total}`);
 const st = await call('checkout-status', { sessionId: co.sessionId });
-check('checkout-status is open / not complete before the customer pays', st.status === 'open' && st.complete === false, JSON.stringify(st));
+check('checkout-status is open / not complete before the customer finishes', st.status === 'open' && st.complete === false, JSON.stringify(st));
 
-console.log('2) Simulated hold (what Checkout produces)');
+console.log('2) Simulated saved card (what Checkout produces)');
 const customer = await stripe.customers.create({ email: 'stripe-test@walkaway.test', description: 'Walkaway integration test' });
-const hold = await newHold(customer.id);
-check('$1 hold is authorized, not captured (requires_capture)', hold.status === 'requires_capture', hold.status);
+const si = await savedCard(customer.id);
+check('setup intent succeeded with a saved payment method', si.status === 'succeeded' && !!si.payment_method, si.status);
 
-console.log('3) Settle: $27 verified → release hold, charge $2.70');
-const s1 = await call('settle', { paymentIntentId: hold.id, customerId: customer.id, verifiedSavingsUsd: 27 });
-check('hold released', s1.holdReleased === true, JSON.stringify(s1));
+console.log('3) Settle: estimated $27, verified $27 → charge $2.70, not adjusted');
+const s1 = await call('settle', { setupIntentId: si.id, customerId: customer.id, verifiedSavingsUsd: 27, estimatedSavingsUsd: 27 });
 check('fee = 10% = 270¢ and charged', s1.feeCents === 270 && s1.charged === true, `feeCents=${s1.feeCents} status=${s1.status}`);
+check('not marked adjusted', s1.adjusted === false && s1.estimatedFeeCents === 270, JSON.stringify(s1));
 check('receipt URL present', !!s1.receiptUrl, s1.receiptUrl || '');
-check('hold shows canceled in Stripe', (await stripe.paymentIntents.retrieve(hold.id)).status === 'canceled');
 
-console.log('4) $1 minimum: $5 verified → 100¢');
-const s2 = await call('settle', { paymentIntentId: (await newHold(customer.id)).id, customerId: customer.id, verifiedSavingsUsd: 5 });
-check('minimum fee applied', s2.feeCents === 100 && s2.charged === true, `feeCents=${s2.feeCents}`);
+console.log('4) Adjusted down: estimated $27, verified $12 → charge $1.20 and say so');
+const s2 = await call('settle', { setupIntentId: (await savedCard(customer.id)).id, customerId: customer.id, verifiedSavingsUsd: 12, estimatedSavingsUsd: 27 });
+check('fee = 120¢, adjusted=true, estimate remembered as 270¢', s2.feeCents === 120 && s2.adjusted === true && s2.estimatedFeeCents === 270 && s2.charged === true, JSON.stringify(s2));
 
-console.log('5) Nothing verified → release, no charge');
-const s3 = await call('settle', { paymentIntentId: (await newHold(customer.id)).id, customerId: customer.id, verifiedSavingsUsd: 0 });
-check('no charge when nothing saved', s3.holdReleased === true && s3.feeCents === 0 && s3.charged === false, JSON.stringify(s3));
+console.log('5) $1 minimum: $5 verified → 100¢');
+const s3 = await call('settle', { setupIntentId: (await savedCard(customer.id)).id, customerId: customer.id, verifiedSavingsUsd: 5, estimatedSavingsUsd: 5 });
+check('minimum fee applied', s3.feeCents === 100 && s3.charged === true, `feeCents=${s3.feeCents}`);
 
-console.log('6) Idempotency: settling the same hold twice must not double-charge');
-const s1b = await call('settle', { paymentIntentId: hold.id, customerId: customer.id, verifiedSavingsUsd: 27 });
+console.log('6) Nothing verified → no charge at all');
+const s4 = await call('settle', { setupIntentId: (await savedCard(customer.id)).id, customerId: customer.id, verifiedSavingsUsd: 0, estimatedSavingsUsd: 40 });
+check('no charge when nothing saved', s4.feeCents === 0 && s4.charged === false && s4.adjusted === true, JSON.stringify(s4));
+
+console.log('7) Idempotency: settling the same run twice must not double-charge');
+const s1b = await call('settle', { setupIntentId: si.id, customerId: customer.id, verifiedSavingsUsd: 27, estimatedSavingsUsd: 27 });
 check('second settle returns the same charge', s1b.paymentIntentId === s1.paymentIntentId, `${s1.paymentIntentId} / ${s1b.paymentIntentId}`);
+
+console.log('8) No customer left by Checkout → settle attaches the card to a new one and still charges');
+const orphan = await savedCard(null);
+const s5 = await call('settle', { setupIntentId: orphan.id, email: 'orphan@walkaway.test', verifiedSavingsUsd: 30, estimatedSavingsUsd: 30 });
+check('charged via a freshly created customer', s5.charged === true && s5.feeCents === 300, JSON.stringify(s5));
 
 await stripe.customers.del(customer.id).catch(() => {});
 console.log(`\n${pass} passed, ${fail} failed`);

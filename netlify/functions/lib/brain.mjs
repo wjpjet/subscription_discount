@@ -24,6 +24,7 @@ export const PageClass = z.object({
   signedIn: z.boolean(),
   hasPaidPlan: z.boolean().nullable(),
   planName: z.string().nullable(),
+  accountEmail: z.string().nullable().describe('The signed-in account email address if the page shows one, else null.'),
   monthlyPriceUsd: z.number().nullable().describe('Current recurring price normalized to per month.'),
   cadence: z.enum(['month', 'year', 'week', 'unknown']),
   renewalDate: z.string().nullable(),
@@ -69,7 +70,7 @@ HARD RULES
 OUTPUT
 Return exactly one decision: the screen state, a one-sentence reasoning, and one action. Element ids refer to the numbered elements in the snapshot.`;
 
-const CLASSIFY_SYSTEM = `You read a snapshot of a subscription service's account/billing page and report the signed-in subscription state precisely. Normalize prices to USD per month. If the page is a login wall, signedIn=false. If signed in but there is no paid plan, hasPaidPlan=false. Report an applied promotional/loyalty price when the page shows one.`;
+const CLASSIFY_SYSTEM = `You read a snapshot of a subscription service's account/billing page and report the signed-in subscription state precisely. Normalize prices to USD per month. If the page is a login wall, signedIn=false. If signed in but there is no paid plan, hasPaidPlan=false. Report an applied promotional/loyalty price when the page shows one. If the page shows the signed-in account's email address, report it as accountEmail; otherwise null.`;
 
 const DISCOVER_SYSTEM = `You classify website domains. For each domain, decide whether it is a consumer service with recurring paid subscriptions (streaming, news, software, VPN, fitness, dating, cloud storage, memberships, etc.). Use your knowledge of the company. Infrastructure, ad-tech, banks, retailers without memberships, social networks without paid tiers, and unknown domains are not subscriptions. For real services give your best-guess signed-in account/subscription page URL, a typical monthly price in USD, whether the service is known to present a discount or loyalty offer during its cancellation flow, and if known the typical discount fraction and term in months.`;
 

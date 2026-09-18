@@ -131,7 +131,7 @@
   function settingsShell(active, body) {
     var s = scn();
     var items = [['profile', '/settings', 'Profile'], ['playback', '/settings', 'Playback'], ['notifications', '/settings', 'Notifications'], ['subscription', '/settings/subscription', 'Subscription'], ['billing', '/settings/billing', 'Billing'], ['devices', '/settings', 'Devices']];
-    return '<h1>Settings</h1><div class="layout"><nav class="side">' + items.map(function (i) { return '<a href="' + i[1] + '" data-link class="' + (i[0] === active ? 'active' : '') + '">' + i[2] + '</a>'; }).join('') + '</nav><section>' + body + '</section></div>' + footerLinks();
+    return '<h1>Settings</h1><p class="muted">Signed in as <b>' + esc(S.email || 'you@example.com') + '</b></p><div class="layout"><nav class="side">' + items.map(function (i) { return '<a href="' + i[1] + '" data-link class="' + (i[0] === active ? 'active' : '') + '">' + i[2] + '</a>'; }).join('') + '</nav><section>' + body + '</section></div>' + footerLinks();
   }
   function noiseHtml() {
     var s = scn(), h = '';

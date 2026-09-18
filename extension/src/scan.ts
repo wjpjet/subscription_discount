@@ -9,7 +9,7 @@ import type { Settings } from './settings';
 import type { PageClass } from './types';
 
 export type ItemStatus = 'signed_in' | 'login_wall' | 'no_paid_plan' | 'unknown' | 'error';
-export interface ScanItem { id: string; domain: string; name: string; accountUrl: string; source: string; status: ItemStatus; hasOffer: boolean; monthlyPrice: number | null; planName: string | null; offerApplied: boolean; estSavings: number; termMonths: number; discountPct: number; confidence: number; url?: string; note?: string; before: PageClass | null }
+export interface ScanItem { id: string; domain: string; name: string; accountUrl: string; source: string; status: ItemStatus; hasOffer: boolean; monthlyPrice: number | null; planName: string | null; email: string | null; offerApplied: boolean; estSavings: number; termMonths: number; discountPct: number; confidence: number; url?: string; note?: string; before: PageClass | null }
 export interface ScanProgress { phase: 'discover' | 'pages' | 'done'; done: number; total: number; current?: string; message?: string }
 export interface ScanResult { at: number; restrictedMode: boolean; domainsChecked: number; items: ScanItem[]; found: number; withOffers: number; totalEstSavings: number }
 
@@ -45,7 +45,7 @@ export async function runScan(settings: Settings, onProgress: (p: ScanProgress) 
 }
 
 async function probe(c: Candidate, useApi: boolean): Promise<ScanItem> {
-  const base: ScanItem = { id: c.domain, domain: c.domain, name: c.name, accountUrl: c.accountUrl, source: c.source, status: 'unknown', hasOffer: c.makesOffers === 'likely', monthlyPrice: null, planName: null, offerApplied: false, estSavings: 0, termMonths: c.termMonths, discountPct: c.discountPct, confidence: c.confidence, before: null };
+  const base: ScanItem = { id: c.domain, domain: c.domain, name: c.name, accountUrl: c.accountUrl, source: c.source, status: 'unknown', hasOffer: c.makesOffers === 'likely', monthlyPrice: null, planName: null, email: null, offerApplied: false, estSavings: 0, termMonths: c.termMonths, discountPct: c.discountPct, confidence: c.confidence, before: null };
   let tabId: number | undefined;
   try {
     tabId = await openTab(c.accountUrl, false);
@@ -58,7 +58,7 @@ async function probe(c: Candidate, useApi: boolean): Promise<ScanItem> {
     if (!cls.signedIn) return { ...base, status: 'login_wall', hasOffer: false };
     if (cls.hasPaidPlan === false) return { ...base, status: 'no_paid_plan', hasOffer: false };
     base.status = 'signed_in';
-    base.monthlyPrice = cls.monthlyPriceUsd; base.planName = cls.planName; base.offerApplied = cls.offerApplied;
+    base.monthlyPrice = cls.monthlyPriceUsd; base.planName = cls.planName; base.email = cls.accountEmail ?? null; base.offerApplied = cls.offerApplied;
     if (cls.offerApplied) { base.hasOffer = false; base.note = 'a promotional price is already applied'; }
     if (base.hasOffer) { const price = cls.monthlyPriceUsd ?? c.typicalPrice ?? 15; base.estSavings = Math.round(price * base.discountPct * base.termMonths); }
     return base;

@@ -45,9 +45,9 @@ The scan itself is fine. What is long is everything around it.
 - [ ] **Merge consent into the first screen.** Right now it is Scan, then agree, then allow. It can be
       one screen that explains and has a single button, with Chrome's permission prompt following
       immediately.
-- [ ] **Ask for payment after the scan, not before the hunt.** The card is already collected at the
-      right moment, but the checkout tab opening and closing is the roughest edge in the flow. Look
-      at Stripe's embedded checkout so it stays inside the panel.
+- [ ] **Keep checkout inside the panel.** The card is now saved without a charge, and the run
+      charges only what was verified. The remaining rough edge is the Stripe tab opening and closing;
+      Stripe's embedded checkout would keep it in the panel.
 - [ ] **Remember the scan.** Re-scanning from scratch on every open is slow and costs money. Cache the
       result and offer a rescan.
 

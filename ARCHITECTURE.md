@@ -61,7 +61,7 @@ looks like a workflow is in the extension.
 | What | Where | Survives? |
 |---|---|---|
 | Consent, settings, scan results, hunt logs | Extension storage, in the browser | Until the user clears it |
-| Payment, hold, fee, receipt | Stripe | Permanently |
+| Saved card, fee, receipt | Stripe | Permanently |
 | Anything else | Nowhere | It's all in memory during the run |
 
 This is why Supabase isn't needed. It becomes useful when you want order history a user can look up
@@ -85,11 +85,14 @@ plan here, what is the price, when does it renew. Four tabs at a time.
 
 The user sees a list of services and one total estimated saving.
 
-### 2. Pay — the $1 hold
+### 2. Pay — save the card, charge nothing yet
 
-**`/api/checkout`** creates a Stripe Checkout session for $1 with `capture_method: manual`, which
-means the money is held but never taken. The point is only to prove the card works. The extension
-opens that URL in a tab and polls **`/api/checkout-status`** until the user has paid.
+The reveal screen lists every offer-making service with the signed-in email, the estimated saving
+and its terms, each ticked by default. Unticking one drops it from the total and from the run.
+
+**`/api/checkout`** creates a Stripe Checkout session in **setup mode**: the card is saved and
+nothing is charged. The extension opens that page in a tab and polls **`/api/checkout-status`**,
+backing off from 2 to 10 seconds, until the card is saved or 20 minutes pass.
 
 ### 3. Hunt — the part that does the work
 
@@ -125,8 +128,10 @@ The extension revisits the billing page, snapshots it, and sends it to `/api/cla
 compares the price before and after. That difference is the **verified** saving. It is not the
 model's estimate, and it is not what a confirmation page claimed.
 
-**`/api/settle`** then cancels the $1 hold and charges one off-session payment of 10% of the verified
-saving, with a $1 minimum. If nothing was verified, nothing is charged.
+**`/api/settle`** then makes the one and only charge: 10% of the verified saving, $1 minimum, to the
+saved card, off-session. If the run verified less than the estimate, the charge is lower and the
+reply says so, which the panel turns into "adjusted down from about $X because 2 of 5 didn't come
+through." If nothing was verified, nothing is charged.
 
 ## The fourth part: Streamly
 

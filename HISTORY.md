@@ -25,8 +25,8 @@ re-read of the live button text at click time.
 | Chrome extension, not a web app | Only an extension can act inside the user's logged-in sessions. |
 | Cookies, not history, for discovery | History feels invasive to users, and "sites you're signed into" is both narrower and more accurate. Never described as browsing history anywhere. |
 | No user accounts | The card is the spam gate. An account is friction with no benefit at this size. |
-| $1 hold, not a larger one | The hold exists to prove the card works, nothing more. Settlement charges the real fee afterwards. |
-| One total, not per-service amounts | Per-service numbers invite arguing with the estimate before the work is done. |
+| Card saved at checkout, charged only after the run | Reversed 2026-09-18, replacing a $1 hold. Stripe Checkout in setup mode saves the card and charges nothing; the one charge afterwards is 10% of what the billing pages verified. A run that saves less than estimated charges less, and says so. |
+| Per-service amounts and terms, each one switchable | Reversed 2026-09-18, replacing a single total. Every offer-making service shows its estimate and terms and starts ticked; unticking it drops it from the total and from the run. |
 | Curated playbooks deleted | The 18 hand-written site playbooks were unverified invention. Discovery is now entirely model-driven. |
 | Cloudflare Workers, not a VPS | Serverless, no ops. Workers bills CPU rather than wall clock, which suits a service that spends its life awaiting a model, and it has no request duration limit. |
 | Gemini 3.8 Flash with default thinking | Measured. It is the only configuration that wins every winnable scenario. |
@@ -390,6 +390,34 @@ and a full real-Gemini run afterwards: score 75, safety 100, achievable 100, win
 
 The general lesson: the mock brain is worth running at full scale precisely because it is stupid.
 It exercises the deterministic layer in ways a capable model never will.
+
+## Payment without a hold, per-service picks, and a polling fix, 2026-09-18
+
+**The hold is gone.** Checkout now runs in Stripe's setup mode: the card is saved, nothing is
+charged, and the only charge happens after the run, for 10% of what the billing pages verified. If
+fewer services came through than estimated, the charge is lower and the panel says so: "adjusted
+down from about $X because 2 of 5 didn't come through." Two facts from Stripe's docs shaped the
+implementation: setup mode requires a `currency` even for cards, and it does **not** create a
+Customer when none is passed, so settle attaches the saved card to a new Customer before charging
+off-session. Verified against test mode with 13 checks: full fee, adjusted fee, the $1 minimum, no
+charge when nothing was verified, idempotency (a second settle for the same run returns the same
+charge), and the no-customer path.
+
+The trade: a $0 setup does not prove the card has funds the way a hold did, so a later off-session
+charge can fail. It fails closed: the panel reports it, and nothing else happens.
+
+**The reveal screen shows each service** with the signed-in email, the estimated saving and the terms
+behind it ("50% off for 3 months on $17.99/mo"), and a checkbox that starts ticked. Unticking
+subtracts from the total and leaves that service out of the run. The email comes from the classify
+step, which already read the account page; the testbed's settings pages now show one, as real ones
+do. Verified with the mock brain and with Gemini on the local testbed.
+
+**Polling backoff.** The panel polls checkout status while the customer is on the Stripe page. It
+was every 3 seconds with a 10-minute cap: 200 calls per checkout, and a panel left open on that
+screen for the whole window would make all of them. It now backs off from 2 seconds to a 10-second
+ceiling with a 20-minute cap: about 120 calls at most, and closing the panel stops it at once since
+the loop lives in the panel page. The cost of the old behaviour was small in dollars (each call is
+one Stripe API read) but it was the wrong shape, and Stripe's API has rate limits of its own.
 
 ## Bugs fixed along the way
 
