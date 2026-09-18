@@ -1,0 +1,40 @@
+{
+  // Cloudflare Worker: the API and the landing page in one deploy.
+  //
+  //   npx wrangler dev           local, on the real runtime (workerd), port 8787
+  //   npx wrangler deploy        publish
+  //   npx wrangler tail          live logs
+  //
+  // Secrets are NOT listed here — they would be plaintext in git. Set them once with:
+  //   npx wrangler secret put GEMINI_API_KEY
+  //   npx wrangler secret put STRIPE_SECRET_KEY
+  //   npx wrangler secret put OPENAI_API_KEY        (only if testing an OpenAI-compatible model)
+  // For local dev, put the same names in .dev.vars (gitignored).
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "walkaway",
+  "main": "worker/index.mjs",
+
+  // >= 2025-04-01 is what makes process.env populated from vars and secrets, including at module
+  // scope. nodejs_compat is what lets the Anthropic and Stripe SDKs resolve their node/workerd builds.
+  "compatibility_date": "2026-09-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  "vars": {
+    "SITE_URL": "https://walkaway.example.workers.dev"
+  },
+
+  // Static assets are served directly and are FREE and unlimited; only /api/* invokes the Worker.
+  // Without run_worker_first an asset would shadow an API route of the same name.
+  "assets": {
+    "directory": "./landing/",
+    "binding": "ASSETS",
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/*"]
+  },
+
+  // Wall clock is unlimited for HTTP Workers; this is CPU only, and we measured 0.29ms per request.
+  // 30s is the default and is here to be explicit, not because we are near it.
+  "limits": { "cpu_ms": 30000 },
+
+  "observability": { "enabled": true }
+}

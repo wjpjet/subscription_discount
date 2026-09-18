@@ -10,7 +10,7 @@ of them is Stripe.
 ```
    ┌──────────────────────────────┐        ┌──────────────────────────────┐
    │  CHROME EXTENSION            │        │  BACKEND                     │
-   │  runs on the user's machine  │        │  walkaway.netlify.app        │
+   │  runs on the user's machine  │        │  one Cloudflare Worker       │
    │                              │        │                              │
    │  • reads cookies             │──────▶ │  /api/discover               │
    │  • opens background tabs     │        │  /api/classify               │
@@ -23,9 +23,12 @@ of them is Stripe.
                                            ┌──────────────┴───────────────┐
                                            │                              │
                                      ┌─────▼─────┐                 ┌──────▼──────┐
-                                     │  GEMINI   │                 │   STRIPE    │
+                                     │   MODEL   │                 │   STRIPE    │
                                      │  decides  │                 │   charges   │
                                      └───────────┘                 └─────────────┘
+
+   The Worker also serves the landing page as static assets, in the same deploy.
+   Asset requests are free and never invoke the Worker; only /api/* does.
 ```
 
 **The extension is the hands.** It does every action: reading cookies, opening tabs, reading the
@@ -35,6 +38,9 @@ page, clicking buttons. It also holds every piece of state and runs every loop.
 one decision. It remembers nothing between requests. It has no database, no sessions, no user
 records. Restart it mid-run and nothing is lost, because nothing was stored there.
 
+Because it remembers nothing, it is also cheap to host and impossible to corrupt. There is no
+state to migrate, back up, or get wrong.
+
 **Stripe is the ledger.** Who paid, how much, whether the hold was released. That is the only durable
 record of anything, and Stripe keeps it.
 
@@ -42,7 +48,7 @@ record of anything, and Stripe keeps it.
 
 Two reasons, both about things that must not live on the user's machine.
 
-1. **The Gemini API key.** An extension is just files on disk. Anyone who installs it can read them.
+1. **The model API key.** An extension is just files on disk. Anyone who installs it can read them.
    A key shipped inside it is a published key, and the bill is yours.
 2. **The Stripe secret key.** Same problem, worse consequences.
 
@@ -136,18 +142,34 @@ and prints a score.
 
 | Piece | Hosted at | What it is |
 |---|---|---|
-| Landing page + backend | walkaway.netlify.app | Static HTML plus Netlify Functions from `netlify/functions/` |
+| Landing page + backend | one Cloudflare Worker | `landing/` as static assets plus `/api/*` from `worker/index.mjs` |
 | Testbed | streamly-testbed.netlify.app | Static site, no backend, no secrets |
 | Extension | The user's Chrome | Loaded unpacked, or from the Web Store later |
-| Local backend | `npm run api:dev` | The same functions as a plain Node server on port 8787 |
+| Local backend | `npm run cf:dev` | The real Cloudflare runtime locally, port 8787 |
+| Local backend, plain Node | `npm run api:dev` | The same handlers as an ordinary Node server |
 
-Both Netlify sites deploy from this one repo. The landing site builds from the root and picks up the
-functions. The testbed builds from the `testbed/` directory and has no functions at all, which is why
-API keys do nothing there.
+The testbed is a static site with no functions at all, which is why API keys do nothing there.
 
-`scripts/api-server.mjs` runs the identical function files as an ordinary Node server. That's what
-makes local development possible without deploying, and it means the backend is not locked to
-Netlify.
+**The same handler files run in three places.** They take a Web-standard Request and return a
+Response, which is what Cloudflare Workers, Netlify Functions and a plain Node server all speak.
+`worker/index.mjs` routes them on Cloudflare, `scripts/api-server.mjs` serves them from Node, and the
+files in `netlify/functions/` are the handlers themselves. Nothing is locked to one host.
+
+## Which model answers
+
+The provider layer in `netlify/functions/lib/llm.mjs` speaks to three kinds of backend, chosen by
+`AI_PROVIDER` or by whichever API key exists:
+
+| Provider | What it is |
+|---|---|
+| `gemini` | Google's API. The default, and what the 100-scenario suite was tuned on. |
+| `anthropic` | Claude, via the official SDK. |
+| `openai` | Any OpenAI-compatible endpoint: Z.ai, Together, Fireworks, Baseten, DeepInfra, OpenRouter. |
+
+Every call is the same shape regardless: a system prompt, a user message, and a zod schema the reply
+must satisfy. Providers disagree about how to request schema-constrained JSON and how to control
+reasoning, so the `openai` path tries several request shapes in order and remembers which one each
+model accepted. Swapping models is configuration, not code.
 
 ## What the backend never sees
 

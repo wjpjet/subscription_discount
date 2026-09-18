@@ -6,35 +6,57 @@ The short list. Background and measurements live in **[HISTORY.md](HISTORY.md)**
 
 ## Now
 
-The backend is deployed at <https://walkaway.netlify.app> and its Gemini key works. Verified live:
-`/api/discover`, `/api/classify` and `/api/agent-step` all answer correctly. Stripe is the gap.
+The backend now runs as a single Cloudflare Worker that serves the landing page and `/api/*`
+together. Verified locally against the real runtime with `npm run cf:dev`: landing page, a live
+Gemini call, a live Stripe session, CORS, and 404s all correct.
 
-- [ ] **Add the Stripe variables to walkaway.netlify.app.** `/api/checkout` currently returns
-      `STRIPE_SECRET_KEY not set`, so the payment step cannot run against the hosted backend. In
-      Netlify, Site configuration, Environment variables, add:
-      `STRIPE_SECRET_KEY` (the `sk_test_...` one) and `SITE_URL=https://walkaway.netlify.app`.
-      Then Deploys, Trigger deploy.
+- [ ] **Deploy the Worker.**
+
+      ```
+      npx wrangler login
+      npx wrangler secret put GEMINI_API_KEY
+      npx wrangler secret put STRIPE_SECRET_KEY
+      npm run cf:deploy
+      ```
+
+      Then set `SITE_URL` in `wrangler.jsonc` to the URL it prints and deploy once more, so Stripe
+      redirects land back on the right host.
+- [ ] **Point the extension at the Worker.** Set `WXT_API_BASE` in `extension/.env` to the new URL,
+      run `npm run package:extension`, and reload at `chrome://extensions`.
 - [ ] **Rotate the Gemini API key.** It was pasted into a chat, so treat it as public. New key into
-      `.env` locally and into the Netlify environment variables, then redeploy.
-- [ ] **Delete the environment variables from the Streamly site.** Streamly is a static site with no
-      backend, so `GEMINI_API_KEY` and `STRIPE_SECRET_KEY` do nothing there except sit in a build
-      config that did not need them.
-- [ ] **Point the extension at the hosted backend** once Stripe is set. Today `extension/.env` says
-      `http://127.0.0.1:8787`, which works fully but needs `npm run api:dev` running in a terminal.
-      To switch: set `WXT_API_BASE=https://walkaway.netlify.app`, run `npm run package:extension`,
-      and reload the extension at `chrome://extensions`.
-- [ ] **Measure the real function time limit.** The docs say 60 seconds; some sites are still cut off
-      at 10. You cannot tell which you have without checking, and it decides whether anything else
-      needs to change.
+      `.env`, `.dev.vars`, and `wrangler secret put`.
+- [ ] **Retire the Netlify sites when the Worker is confirmed.** Keep Streamly where it is; it is a
+      static testbed and costs nothing. The `netlify.toml` and `netlify/functions/` layout still work,
+      so this is reversible.
+- [ ] **Delete the environment variables from the Streamly site.** It is static and never used them.
+
+## Then — test GLM-5.3-Flash
+
+The model is real, is about 5x cheaper than Gemini 3.8 Flash, and may be comparable in quality. The
+provider layer and suite flags are ready. Two things about it decide how to test:
+
+- Its own API from Z.ai **cannot do strict JSON-schema output**, and every call here depends on
+  schema-conforming JSON. Use a host that can: Together, Fireworks, Baseten or DeepInfra.
+- Its thinking **cannot be turned off** and defaults to `max`, the slowest and dearest setting. Pass
+  a lower effort explicitly or the comparison is unfair and expensive.
+
+- [ ] Get a Together AI key. It supports strict schema, has 99.48% observed uptime, and is the only
+      host publishing an SLA. Fireworks is the fallback.
+- [ ] Run the head-to-head:
 
       ```
-      # set ALLOW_TIMEOUT_PROBE=1 on the site, redeploy, then:
-      node scripts/probe-timeout.mjs https://walkaway.netlify.app
+      npm run suite -- --provider=openai \
+        --openai-base=https://api.together.xyz/v1 \
+        --openai-model=zai-org/GLM-5.3-Flash \
+        --openai-thinking=low
       ```
 
-      Remove `ALLOW_TIMEOUT_PROBE` afterwards. If it reaches 15s or beyond, the timeout worry is
-      closed and nothing more is needed. If it stops at 10s, do the three fixes in "If the ceiling is
-      10 seconds" below.
+      Compare SCORE, ACHIEVABLE, WIN RATE and COST against the Gemini baseline of 75 / 100 / 73% at
+      $0.0202 per scenario. SAFETY must be 100 or the model is disqualified outright.
+- [ ] Then `npm run latency` with the same flags. GLM has much lower time-to-first-token but about a
+      third of Gemini's output speed, so per-call latency is genuinely unknown until measured.
+- [ ] Decide on evidence, not on price. Win rate is the revenue; a cheaper model that wins less is a
+      worse deal, which is exactly what the earlier Gemini ladder showed.
 
 ## Then — make it fewer steps
 
@@ -61,15 +83,12 @@ The scan itself is fine. What is long is everything around it.
 - [ ] Switch Stripe to live keys, which requires the account activated and the Terms and Privacy
       pages published.
 
-## If the ceiling is 10 seconds
+## Closed: the timeout question
 
-Only if the probe says so. Measured p95 is 9.48s and about 4% of calls run past ten seconds.
-
-- [ ] Give the model call its own deadline a second or two under the platform limit, and return a
-      structured retry signal instead of letting the platform kill the request with a 502.
-- [ ] On that retry, drop thinking to `low`. It is roughly three times faster and only loses on the
-      hard scenarios, which a retry is unlikely to be.
-- [ ] If both fail, end the run cleanly. It already does, and nothing is charged.
+Cloudflare Workers has **no wall-clock limit** for HTTP-triggered requests, and bills CPU rather than
+elapsed time. Measured CPU per request is 0.29ms against a 30-second default ceiling. The 10-second
+worry that prompted all this does not exist on Workers, so `scripts/probe-timeout.mjs` is now only
+useful if the backend ever moves back to a wall-clock-billed host.
 
 ## Not now
 
@@ -84,7 +103,10 @@ Only if the probe says so. Measured p95 is 9.48s and about 4% of calls run past 
 ## Commands worth remembering
 
 ```
-npm run api:dev            # backend on http://127.0.0.1:8787, reads .env
+npm run cf:dev             # the Worker locally on the real Cloudflare runtime, port 8787
+npm run cf:deploy          # publish the Worker
+npm run cf:tail            # live logs from the deployed Worker
+npm run api:dev            # the same handlers as a plain Node server, reads .env
 npm run suite              # all 100 scenarios, scored, real model
 npm run suite:mock         # same, no API key needed
 npm run latency            # p50/p95 per endpoint

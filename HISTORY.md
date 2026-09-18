@@ -28,8 +28,9 @@ re-read of the live button text at click time.
 | $1 hold, not a larger one | The hold exists to prove the card works, nothing more. Settlement charges the real fee afterwards. |
 | One total, not per-service amounts | Per-service numbers invite arguing with the estimate before the work is done. |
 | Curated playbooks deleted | The 18 hand-written site playbooks were unverified invention. Discovery is now entirely model-driven. |
-| Netlify Functions, not a VPS | Serverless, no ops, and every call is short by design. See the timeout section below. |
+| Cloudflare Workers, not a VPS | Serverless, no ops. Workers bills CPU rather than wall clock, which suits a service that spends its life awaiting a model, and it has no request duration limit. |
 | Gemini 3.8 Flash with default thinking | Measured. It is the only configuration that wins every winnable scenario. |
+| Provider layer, not a single vendor | Three providers behind one interface: Anthropic, Gemini, and any OpenAI-compatible endpoint. Swapping models is a config change, not a rewrite. |
 
 ## Measurements
 
@@ -155,7 +156,7 @@ Sources: <https://docs.netlify.com/build/functions/configuration/> ·
 <https://docs.netlify.com/build/functions/background-functions/> ·
 <https://answers.netlify.com/t/synchronous-function-timeout/168727>
 
-### Is another host cheaper? Yes, and it does not matter
+### Is another host cheaper? Yes, though that was not why we moved
 
 Priced 2026-09-17 against the measured 238 function-seconds, 87 calls and 25ms of CPU that one
 10-service run consumes.
@@ -195,11 +196,17 @@ Netlify's free tier covers roughly 450 runs a month, and those credits are share
 is the number to watch, not the per-run price. If it is ever exceeded, the cheapest fix is the $9
 plan, not a migration.
 
-Two caveats if this is ever revisited. Supabase would mean adopting a database platform for its
-functions alone, and free Supabase projects pause after about a week of inactivity. Cloudflare
-Workers is the technically correct shape for an LLM proxy, with no duration limit at all, but moving
-there means leaving the single-repo, single-deploy setup where the landing page and the API ship
-together.
+Supabase would have meant adopting a database platform for its functions alone, and free Supabase
+projects pause after about a week of inactivity, so it was never the right call.
+
+**We moved to Cloudflare Workers anyway, on 2026-09-18.** Not for the money. Three other reasons:
+
+1. **No request duration limit at all** for HTTP-triggered Workers. That retires the timeout question
+   permanently rather than leaving it dependent on which Netlify tier a site happens to be on.
+2. **Static assets are served free and unlimited**, and the same Worker can serve them. The landing
+   page and the API still ship as one deploy, which is what I expected moving to cost us.
+3. **The port was nearly free.** Netlify Functions and Workers both take a Web-standard Request and
+   return a Response, so not one handler changed.
 
 Sources: <https://docs.netlify.com/build/functions/usage-and-billing/> ·
 <https://developers.cloudflare.com/workers/platform/pricing/> ·
@@ -235,6 +242,95 @@ Not the host. Three properties of the design:
    end the run with nothing clicked. The rule is: no decision, no click.
 3. **Nothing is charged unless a saving is verified** on the billing page afterwards, so a stalled run
    costs the user nothing.
+
+## The move to Cloudflare Workers, 2026-09-18
+
+`worker/index.mjs` routes `/api/*` to the same files `netlify/functions/` already held. Everything
+else falls through to the static assets bound to the Worker. Verified against the real runtime with
+`wrangler dev`, which executes `workerd` locally rather than a simulation: the landing page served,
+a real Gemini call returned, a real Stripe checkout session was created, CORS preflight answered,
+and unknown paths 404'd.
+
+Three things needed care, and only one was a surprise.
+
+**Secrets and module scope.** Workers hands secrets to the `fetch` handler rather than putting them in
+the process environment. With `nodejs_compat` and a compatibility date at or after 2025-04-01,
+Cloudflare does populate `process.env`, and Cloudflare's own write-up says this works at any scope
+including module top level. I did not want the whole brain to depend on that one sentence being
+exactly right, because the failure would be silent: `BRAIN` is computed at import time from whether
+an API key exists, so if bindings were late the service would decide it had no model, fall back to
+the mock brain, and keep answering with plausible nonsense. The config constants are now `let` plus
+a `refreshConfig()` the Worker calls once per isolate. ESM live bindings mean every importer sees the
+updated values.
+
+**Stripe.** No code change in the end. The package declares a `workerd` export condition pointing at
+a fetch and SubtleCrypto build, so Wrangler resolves it automatically. I briefly added an explicit
+`createFetchHttpClient()` and then removed it, because an unnecessary override is its own risk. Worth
+remembering: if webhooks are ever added, Workers needs `constructEventAsync`, not `constructEvent`.
+
+**Assets shadowing routes.** By default a file matching the request path is served without invoking
+the Worker at all, so `run_worker_first: ["/api/*"]` is required or an asset could shadow an API
+route.
+
+Limits that matter, none of which we are near: CPU 30s default per request against a measured 0.29ms,
+10,000 subrequests against our one fetch per request, 128MB per isolate, and no wall-clock limit.
+The one ceiling worth remembering is **six simultaneous outbound connections**, which would matter
+only if a single request ever fanned out.
+
+Sources: <https://developers.cloudflare.com/workers/runtime-apis/nodejs/process/> ·
+<https://developers.cloudflare.com/workers/static-assets/binding/> ·
+<https://developers.cloudflare.com/workers/platform/limits/> ·
+<https://developers.cloudflare.com/workers/static-assets/billing-and-limitations/>
+
+## GLM-5.3-Flash, assessed 2026-09-17
+
+The model is real and the name was right: `glm-5.3-flash`, released 2026-08-26 by Z.ai, MIT-licensed
+open weights, 1M context.
+
+**Is it comparable to Gemini 3.8 Flash?** Roughly, with a caveat. On the Artificial Analysis
+Intelligence Index v4.3 it scores 42 against Gemini 3.8 Flash's 41. But Z.ai's own launch scorecard
+compares against Gemini 3.7 Flash, not 3.8, and Gemini wins the directly comparable agentic rows:
+Terminal-Bench 85.8 to 84.3, DeepSWE 65.3 to 63.4, AutomationBench 52.3 to 48.8. GLM wins on tool-use
+benchmarks. Since navigating a cancellation flow is an agentic task, treat "similar" as plausible but
+unproven, which is what the suite is for. No instruction-following head-to-head was published.
+
+It is 5x cheaper on input and 7.5x on output: $0.15 and $0.50 per million against Gemini's $0.75 and
+$3.75.
+
+**Two findings that shape how it must be used.**
+
+First, **Z.ai's own API cannot do strict JSON-schema output.** Its OpenAPI spec allows only
+`response_format: json_object`, and its structured-output guide passes the schema as prose and
+validates client-side afterwards. Its list of structured-output models does not include this model at
+all. Every brain call here depends on schema-conforming JSON, so first-party Z.ai is the weakest
+option. Because the weights are MIT, other hosts serve the same model *with* strict schema support:
+Together, Fireworks, Baseten and DeepInfra all do.
+
+Second, **thinking cannot be disabled on this model**, and its default `reasoning_effort` is `max`,
+the slowest and most expensive setting available. Thinking bills at the output rate. So the lever
+that saved money on Gemini does not exist here, and the default is the wrong end of the dial.
+
+**Where to run it.** Z.ai processes in Singapore and open.bigmodel.cn is the China-mainland endpoint,
+which is worth weighing for a consumer product handling US users' page content. Third-party hosts run
+the open weights on their own infrastructure with no Zhipu-side handling.
+
+| Host | Strict schema | Price in/out | Observed uptime | SLA |
+|---|---|---|---|---|
+| Together AI | yes | $0.15 / $0.50 | 99.48% | 99.9% stated |
+| Fireworks AI | yes | $0.15 / $0.50 | 99.32% | none |
+| Baseten | yes | $0.15 / $0.50 | 99.64–99.79% | none |
+| DeepInfra | yes | $0.075 / $0.25 | 98.36% | none |
+| Z.ai first-party | no | $0.15 / $0.50 | 99.12% | none |
+
+Together AI is the recommendation: it supports strict schema, has the highest uptime of the hosts
+that publish an SLA, and is the only one that publishes an SLA at all. No provider publishes
+per-model rate limits for this model, so throughput at scale is unverified until measured.
+
+Sources: <https://docs.z.ai/api-reference/llm/chat-completion.md> ·
+<https://docs.z.ai/guides/capabilities/struct-output.md> ·
+<https://docs.fireworks.ai/structured-responses/structured-response-formatting> ·
+<https://openrouter.ai/docs/features/structured-outputs> ·
+<https://artificialanalysis.ai/models/comparisons/gemini-3-8-flash-vs-glm-5-3-flash>
 
 ## Bugs fixed along the way
 

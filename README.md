@@ -16,6 +16,8 @@ $0 if nothing is saved.
 | `ARCHITECTURE.md` | How the pieces fit: what the extension does, what the backend does, where state lives. |
 | `HISTORY.md` | What was built and measured, and why each decision went the way it did. |
 | `IMPLEMENTATION_PLAN.md` | Architecture, decisions, phases, deploy steps. |
-| `netlify.toml` | Publishes `landing/`, bundles the functions, security headers. |
+| `worker/` | The Cloudflare Worker entry: routes `/api/*` to the handlers, serves `landing/` as assets. |
+| `wrangler.jsonc` | Worker config. `npm run cf:dev` runs it locally on the real runtime; `npm run cf:deploy` ships it. |
+| `netlify.toml` | The Netlify path, kept working as an alternative host. |
 
 **Quick start:** `npm install && npm run suite:mock` (no keys) runs all 100 scenarios and prints the score; `npm run suite` uses the real brain from `.env`.

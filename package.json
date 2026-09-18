@@ -11,7 +11,10 @@
     "test:stripe": "node --env-file-if-exists=.env scripts/test-stripe.mjs",
     "package:extension": "node scripts/package-extension.mjs",
     "models": "node --env-file-if-exists=.env scripts/list-models.mjs",
-    "latency": "node --env-file-if-exists=.env scripts/latency.mjs"
+    "latency": "node --env-file-if-exists=.env scripts/latency.mjs",
+    "cf:dev": "wrangler dev",
+    "cf:deploy": "wrangler deploy",
+    "cf:tail": "wrangler tail"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
@@ -20,6 +23,7 @@
     "zod-to-json-schema": "^3.24.0"
   },
   "devDependencies": {
-    "puppeteer-core": "^25.10.0"
+    "puppeteer-core": "^25.10.0",
+    "wrangler": "^4.134.0"
   }
 }

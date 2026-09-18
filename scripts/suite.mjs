@@ -45,10 +45,17 @@ function mainThinking() {
 // Prices per 1M tokens (input, output; thinking bills as output). Source: ai.google.dev/gemini-api/docs/pricing fetched 2026-09-14
 // (3.8/3.7 Flash are introductory through 2026-12-31, then $1.50/$7.50) and Anthropic list prices. Override with PRICE_IN / PRICE_OUT.
 const PRICES = { 'gemini-3.8-flash': [0.75, 3.75], 'gemini-3.7-flash': [0.75, 3.75], 'gemini-3.5-flash-lite': [0.30, 2.50], 'gemini-3.5-flash': [1.50, 9.00], 'gemini-3.1-flash-lite': [0.25, 1.50], 'gemini-2.5-flash-lite': [0.10, 0.40], 'gemini-2.5-flash': [0.30, 2.50], 'claude-opus-5': [5, 25], 'claude-sonnet-5': [2, 10], 'claude-haiku-4-5': [1, 5] };
+// Open-weight models are served by many hosts under many ids at different prices, so match loosely on
+// the model family and price at the common rate. Override with PRICE_IN / PRICE_OUT for your host.
+// glm-5.3-flash: $0.15/$0.50 first-party (Z.ai), Together and Fireworks; DeepInfra is $0.075/$0.25.
+// Verified 2026-09-17. Thinking bills at the output rate and CANNOT be disabled on this model.
+const FAMILY_PRICES = [[/glm-?5[.-]?3[-_]?flash|glm-5p3-flash/i, [0.15, 0.50], 'glm-5.3-flash at the common host rate (Z.ai/Together/Fireworks) as of 2026-09-17']];
 function price(model) {
   if (process.env.PRICE_IN && process.env.PRICE_OUT) return [Number(process.env.PRICE_IN), Number(process.env.PRICE_OUT), 'PRICE_IN/PRICE_OUT'];
   const k = Object.keys(PRICES).find((m) => String(model || '').startsWith(m));
   if (k) return [...PRICES[k], 'list price for ' + k + ' as of 2026-09-14'];
+  const fam = FAMILY_PRICES.find(([re]) => re.test(String(model || '')));
+  if (fam) return [...fam[1], fam[2]];
   return [null, null, `no list price on file for "${model}" — set PRICE_IN and PRICE_OUT (per 1M tokens) to cost this run`];
 }
 

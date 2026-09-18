@@ -4,6 +4,9 @@
 //   GEMINI_API_KEY   + GEMINI_MODEL (default gemini-3.8-flash)
 //   OPENAI_API_KEY   + OPENAI_BASE_URL + OPENAI_MODEL  — any OpenAI-compatible endpoint
 //     (Z.ai/GLM, OpenRouter, Together, Fireworks, Novita, SiliconFlow, DeepSeek...). Provider id: "openai".
+//     Z.ai's own API has no strict json_schema mode (json_object only), so we fall back to putting the
+//     schema in the prompt there. Together/Fireworks/Baseten/DeepInfra serve the same open weights WITH
+//     strict json_schema, and on US infrastructure. See HISTORY.md.
 import Anthropic from '@anthropic-ai/sdk';
 import { zodOutputFormat } from '@anthropic-ai/sdk/helpers/zod';
 import { zodToJsonSchema } from 'zod-to-json-schema';
@@ -153,11 +156,16 @@ const FORMAT_CANDIDATES = [
   () => ({ response_format: { type: 'json_object' } }),
   () => ({}),
 ];
+// NOTE on "off": some reasoning-only models cannot switch thinking off at all (GLM-5.3-Flash is one —
+// its thinking.type accepts only "enabled"). The chain therefore ends at reasoning_effort:"low"
+// rather than at null, because null means "provider default", and GLM's default is "max" — the most
+// expensive and slowest setting there is. Degrading to low is right; degrading to max is not.
 const OA_THINK_CANDIDATES = {
-  off: [{ thinking: { type: 'disabled' } }, { enable_thinking: false }, { reasoning_effort: 'minimal' }, { reasoning_effort: 'none' }, null],
+  off: [{ thinking: { type: 'disabled' } }, { enable_thinking: false }, { reasoning_effort: 'minimal' }, { reasoning_effort: 'none' }, { reasoning_effort: 'low' }],
   low: [{ reasoning_effort: 'low' }, { thinking: { type: 'enabled' } }, null],
-  medium: [{ reasoning_effort: 'medium' }, { thinking: { type: 'enabled' } }, null],
+  medium: [{ reasoning_effort: 'medium' }, { reasoning_effort: 'high' }, { thinking: { type: 'enabled' } }, null],
   high: [{ reasoning_effort: 'high' }, { thinking: { type: 'enabled' } }, null],
+  max: [{ reasoning_effort: 'max' }, { reasoning_effort: 'high' }, null],
 };
 function oaThinkingCandidates(mode) {
   if (!mode || mode === 'default') return [null];

@@ -2,9 +2,10 @@ import Stripe from 'stripe';
 let stripe;
 export function getStripe() {
   if (!process.env.STRIPE_SECRET_KEY) throw new Error('STRIPE_SECRET_KEY not set');
-  // The fetch HTTP client keeps this working on runtimes without Node's http module (Cloudflare
-  // Workers). Node 18+ has global fetch, so it is equally fine locally and on Netlify.
-  return (stripe ||= new Stripe(process.env.STRIPE_SECRET_KEY, { httpClient: Stripe.createFetchHttpClient() }));
+  // No httpClient override: the stripe package declares a "workerd" export condition, so Wrangler
+  // resolves its fetch + SubtleCrypto build on Cloudflare and its node build everywhere else.
+  // (If webhooks are added later, Workers needs constructEventAsync, not constructEvent.)
+  return (stripe ||= new Stripe(process.env.STRIPE_SECRET_KEY));
 }
 export function siteUrl(req) {
   if (process.env.SITE_URL) return process.env.SITE_URL.replace(/\/+$/, '');
