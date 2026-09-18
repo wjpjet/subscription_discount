@@ -172,8 +172,23 @@ function oaThinkingCandidates(mode) {
   return OA_THINK_CANDIDATES[mode] || [{ reasoning_effort: mode }, null];
 }
 
-/** Any OpenAI-compatible /chat/completions endpoint (Z.ai/GLM, OpenRouter, Together, Fireworks, ...). */
-async function callOpenAICompat({ system, user, schema, maxTokens, model, thinking }) {
+/** Any OpenAI-compatible /chat/completions endpoint (Z.ai/GLM, OpenRouter, Together, Fireworks, ...).
+ *  Reasoning models spend the output budget on thinking before any JSON appears, so a truncated
+ *  reply is retried once with double the budget rather than failing the whole step. */
+async function callOpenAICompat(opts) {
+  let budget = opts.maxTokens || 8000;
+  for (;;) {
+    try { return await callOpenAICompatOnce({ ...opts, maxTokens: budget }); }
+    catch (e) {
+      const truncated = /truncated before the JSON|empty content|not valid JSON/.test(String(e && e.message));
+      if (!truncated || budget >= 32000) throw e;
+      const bigger = Math.min(budget * 2, 32000);   // 8k -> 16k -> 32k, then give up
+      console.warn(`[openai] ${opts.model}: reply truncated at maxTokens=${budget}; retrying at ${bigger}`);
+      budget = bigger;
+    }
+  }
+}
+async function callOpenAICompatOnce({ system, user, schema, maxTokens, model, thinking }) {
   const key = process.env.OPENAI_API_KEY; if (!key) throw new Error('OPENAI_API_KEY not set');
   const baseUrl = OPENAI_BASE_URL; if (!baseUrl) throw new Error('OPENAI_BASE_URL not set');
   if (!model) throw new Error('OPENAI_MODEL not set');

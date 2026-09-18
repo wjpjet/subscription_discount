@@ -40,9 +40,8 @@
     "run_worker_first": ["/api/*"]
   },
 
-  // Wall clock is unlimited for HTTP Workers; this is CPU only, and we measured 0.29ms per request.
-  // 30s is the default and is here to be explicit, not because we are near it.
-  "limits": { "cpu_ms": 30000 },
+  // No CPU limit set: the Free plan rejects the field outright. Its fixed ceiling is 10ms of CPU per
+  // request (30s on Paid); we measured 0.29ms. Wall clock is unlimited on both plans.
 
   "observability": { "enabled": true }
 }

@@ -272,7 +272,7 @@ remembering: if webhooks are ever added, Workers needs `constructEventAsync`, no
 the Worker at all, so `run_worker_first: ["/api/*"]` is required or an asset could shadow an API
 route.
 
-Limits that matter, none of which we are near: CPU 30s default per request against a measured 0.29ms,
+Limits that matter, none of which we are near: CPU 10ms per request on the Free plan (30s on Paid, and the Free plan rejects any attempt to set the field) against a measured 0.29ms,
 10,000 subrequests against our one fetch per request, 128MB per isolate, and no wall-clock limit.
 The one ceiling worth remembering is **six simultaneous outbound connections**, which would matter
 only if a single request ever fanned out.
