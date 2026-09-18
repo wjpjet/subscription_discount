@@ -13,6 +13,10 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "walkaway",
   "main": "worker/index.mjs",
+  // The free <name>.<account>.workers.dev URL is the public address until a custom domain exists.
+  // Preview URLs would expose every uploaded version at its own public URL; off until needed.
+  "workers_dev": true,
+  "preview_urls": false,
 
   // >= 2025-04-01 is what makes process.env populated from vars and secrets, including at module
   // scope. nodejs_compat is what lets the Anthropic and Stripe SDKs resolve their node/workerd builds.
