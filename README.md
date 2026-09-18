@@ -13,6 +13,7 @@ $0 if nothing is saved.
 | `testbed/` | "Streamly": a fake subscription service driven by **100 scenario configs** (`scenarios.js`) — entry locations, survey types, pause/downgrade traps, dark-pattern offers, login walls, noise. Deploy as a second Netlify site (base dir `testbed`). |
 | `scripts/` | `api-server.mjs` (the functions as a standalone server), `suite.mjs` (**the 100-scenario suite, scored 0–100**), `latency.mjs` (p50/p95 per endpoint), `probe-timeout.mjs` (the real function time limit of a deployed site), `e2e-testbed.mjs` (3-scenario smoke), `test-stripe.mjs` (Stripe test-mode integration), `package-extension.mjs`. |
 | `TODO.md` | **Start here.** The short list of what to do next. |
+| `ARCHITECTURE.md` | How the pieces fit: what the extension does, what the backend does, where state lives. |
 | `HISTORY.md` | What was built and measured, and why each decision went the way it did. |
 | `IMPLEMENTATION_PLAN.md` | Architecture, decisions, phases, deploy steps. |
 | `netlify.toml` | Publishes `landing/`, bundles the functions, security headers. |

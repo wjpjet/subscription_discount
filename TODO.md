@@ -6,30 +6,35 @@ The short list. Background and measurements live in **[HISTORY.md](HISTORY.md)**
 
 ## Now
 
+The backend is deployed at <https://walkaway.netlify.app> and its Gemini key works. Verified live:
+`/api/discover`, `/api/classify` and `/api/agent-step` all answer correctly. Stripe is the gap.
+
+- [ ] **Add the Stripe variables to walkaway.netlify.app.** `/api/checkout` currently returns
+      `STRIPE_SECRET_KEY not set`, so the payment step cannot run against the hosted backend. In
+      Netlify, Site configuration, Environment variables, add:
+      `STRIPE_SECRET_KEY` (the `sk_test_...` one) and `SITE_URL=https://walkaway.netlify.app`.
+      Then Deploys, Trigger deploy.
 - [ ] **Rotate the Gemini API key.** It was pasted into a chat, so treat it as public. New key into
-      `.env`, then restart the API server.
+      `.env` locally and into the Netlify environment variables, then redeploy.
 - [ ] **Delete the environment variables from the Streamly site.** Streamly is a static site with no
       backend, so `GEMINI_API_KEY` and `STRIPE_SECRET_KEY` do nothing there except sit in a build
-      config that did not need them. They belong to the site that runs the functions.
-- [ ] **Deploy the backend.** There is no API deployed yet, only the testbed. In Netlify: add a new
-      site from this repo, base directory empty. That publishes the landing page and the functions
-      together. Then set, on that site:
-      `GEMINI_API_KEY`, `STRIPE_SECRET_KEY`, `SITE_URL=https://<that-site>.netlify.app`, and
-      trigger a deploy.
-- [ ] **Measure the real function time limit on that site.** The docs say 60 seconds; some sites are
-      still cut off at 10. You cannot tell which you have without checking, and it decides whether
-      anything else needs to change.
+      config that did not need them.
+- [ ] **Point the extension at the hosted backend** once Stripe is set. Today `extension/.env` says
+      `http://127.0.0.1:8787`, which works fully but needs `npm run api:dev` running in a terminal.
+      To switch: set `WXT_API_BASE=https://walkaway.netlify.app`, run `npm run package:extension`,
+      and reload the extension at `chrome://extensions`.
+- [ ] **Measure the real function time limit.** The docs say 60 seconds; some sites are still cut off
+      at 10. You cannot tell which you have without checking, and it decides whether anything else
+      needs to change.
 
       ```
       # set ALLOW_TIMEOUT_PROBE=1 on the site, redeploy, then:
-      node scripts/probe-timeout.mjs https://<that-site>.netlify.app
+      node scripts/probe-timeout.mjs https://walkaway.netlify.app
       ```
 
       Remove `ALLOW_TIMEOUT_PROBE` afterwards. If it reaches 15s or beyond, the timeout worry is
       closed and nothing more is needed. If it stops at 10s, do the three fixes in "If the ceiling is
       10 seconds" below.
-- [ ] **Point the extension at the deployed API.** Set `WXT_API_BASE` in `extension/.env` to that
-      site, run `npm run package:extension`, and reload the extension at `chrome://extensions`.
 
 ## Then — make it fewer steps
 
