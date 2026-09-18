@@ -49,7 +49,11 @@ const PRICES = { 'gemini-3.8-flash': [0.75, 3.75], 'gemini-3.7-flash': [0.75, 3.
 // the model family and price at the common rate. Override with PRICE_IN / PRICE_OUT for your host.
 // glm-5.3-flash: $0.15/$0.50 first-party (Z.ai), Together and Fireworks; DeepInfra is $0.075/$0.25.
 // Verified 2026-09-17. Thinking bills at the output rate and CANNOT be disabled on this model.
-const FAMILY_PRICES = [[/glm-?5[.-]?3[-_]?flash|glm-5p3-flash/i, [0.15, 0.50], 'glm-5.3-flash at the common host rate (Z.ai/Together/Fireworks) as of 2026-09-17']];
+const FAMILY_PRICES = [
+  [/glm-?5[.-]?3[-_]?flash|glm-5p3-flash/i, [0.15, 0.50], 'GLM-5.3-Flash, Together list price 2026-09-18'],
+  [/deepseek-?v?4\.1-?flash/i, [0.30, 1.20], 'DeepSeek-V4.1-Flash, Together list price 2026-09-18'],
+  [/deepseek-?v?4-?flash-?0731/i, [0.14, 0.28], 'DeepSeek-V4-Flash-0731, Together list price 2026-09-18'],
+];
 function price(model) {
   if (process.env.PRICE_IN && process.env.PRICE_OUT) return [Number(process.env.PRICE_IN), Number(process.env.PRICE_OUT), 'PRICE_IN/PRICE_OUT'];
   const k = Object.keys(PRICES).find((m) => String(model || '').startsWith(m));
