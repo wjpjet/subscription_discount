@@ -30,33 +30,11 @@ Gemini call, a live Stripe session, CORS, and 404s all correct.
       so this is reversible.
 - [ ] **Delete the environment variables from the Streamly site.** It is static and never used them.
 
-## Then — test GLM-5.3-Flash
+## Done: the model comparison
 
-The model is real, is about 5x cheaper than Gemini 3.8 Flash, and may be comparable in quality. The
-provider layer and suite flags are ready. Two things about it decide how to test:
-
-- Its own API from Z.ai **cannot do strict JSON-schema output**, and every call here depends on
-  schema-conforming JSON. Use a host that can: Together, Fireworks, Baseten or DeepInfra.
-- Its thinking **cannot be turned off** and defaults to `max`, the slowest and dearest setting. Pass
-  a lower effort explicitly or the comparison is unfair and expensive.
-
-- [ ] Get a Together AI key. It supports strict schema, has 99.48% observed uptime, and is the only
-      host publishing an SLA. Fireworks is the fallback.
-- [ ] Run the head-to-head:
-
-      ```
-      npm run suite -- --provider=openai \
-        --openai-base=https://api.together.xyz/v1 \
-        --openai-model=zai-org/GLM-5.3-Flash \
-        --openai-thinking=low
-      ```
-
-      Compare SCORE, ACHIEVABLE, WIN RATE and COST against the Gemini baseline of 75 / 100 / 73% at
-      $0.0202 per scenario. SAFETY must be 100 or the model is disqualified outright.
-- [ ] Then `npm run latency` with the same flags. GLM has much lower time-to-first-token but about a
-      third of Gemini's output speed, so per-call latency is genuinely unknown until measured.
-- [ ] Decide on evidence, not on price. Win rate is the revenue; a cheaper model that wins less is a
-      worse deal, which is exactly what the earlier Gemini ladder showed.
+Tested on the full suite through Together AI. Neither GLM-5.3-Flash nor DeepSeek V4.1 Flash is
+close: best achievable 72 against Gemini's 100, and win rate is the revenue. Gemini 3.8 Flash stays.
+Numbers and reasoning in HISTORY.md. The Together key in `.env` can be revoked.
 
 ## Then — make it fewer steps
 

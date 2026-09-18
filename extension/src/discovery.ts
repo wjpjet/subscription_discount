@@ -42,7 +42,7 @@ export async function discoverCandidates(settings: Settings, onProgress: (msg: s
     // Every allowlisted site is probed; the account page decides whether you're signed in and what you pay.
     return { domainsChecked: entries.length, candidates: entries.map((e) => ({ domain: e.domain, name: e.name || e.domain, accountUrl: e.accountUrl || `https://${e.domain}/account`, source: 'allowlist' as const, typicalPrice: null, makesOffers: 'likely' as const, discountPct: 0.5, termMonths: 3, confidence: 1 })) };
   }
-  if (!(await apiAvailable())) throw new Error('Scan needs the API URL — open Settings (⚙) and enter your Netlify site URL (or run `npm run api:dev` and use http://127.0.0.1:8787).');
+  if (!(await apiAvailable())) throw new Error('Scan needs the API URL — open Settings (⚙) and enter the backend URL, e.g. https://walkaway.<you>.workers.dev (or http://127.0.0.1:8787 under npm run cf:dev).');
   onProgress("Checking which sites you're signed into…");
   const feats = await signedInDomains();
   const domains = feats.map((f) => f.domain);

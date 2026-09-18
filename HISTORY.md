@@ -326,11 +326,70 @@ Together AI is the recommendation: it supports strict schema, has the highest up
 that publish an SLA, and is the only one that publishes an SLA at all. No provider publishes
 per-model rate limits for this model, so throughput at scale is unverified until measured.
 
+### Measured on the suite, 2026-09-18, via Together AI
+
+Both models ran the full 100 scenarios through Together with strict JSON-schema output. GLM was run
+at low and then at maximum reasoning effort, since its vendor recommends maximum and it cannot
+switch thinking off. DeepSeek was run at low and high; its maximum-effort run was abandoned after it
+repeatedly reasoned past a 16,000-token budget without producing any JSON.
+
+| Steps model, effort | Score | Achievable | Win | Safety | $ / scenario | Time |
+|---|---|---|---|---|---|---|
+| Gemini 3.8 Flash, default | 75 | **100** | 73% | 100 | $0.0202 | 11 min |
+| GLM-5.3-Flash, max | 55 | 72 | 52% | 100 | $0.0045 | 46 min |
+| DeepSeek V4.1 Flash, high | 47 | 56 | 42% | 100 | $0.0070 | 11 min |
+| DeepSeek V4.1 Flash, low | 46 | 60 | 40% | 100 | $0.0057 | 7 min |
+| GLM-5.3-Flash, low | 40 | 51 | 33% | 100 | $0.0025 | 19 min |
+
+Read the achievable column. Gemini wins every winnable scenario; the best of the cheaper models
+wins 72 of 100. Thinking effort helped GLM (51 to 72) and did nothing for DeepSeek (60 to 56, inside
+run-to-run noise). Safety was 100 in every run, which says the guardrails hold regardless of model.
+
+The economics settle it. The fee is 10% of savings, so win rate is the revenue, and a run that wins
+52% of available discounts earns 30% less than one that wins 73%. GLM saves about $0.016 per
+scenario against Gemini; the lost wins cost far more than that. **Decision: Gemini 3.8 Flash stays.**
+A note on the premise: DeepSeek V4.1 Flash is not half GLM's price, it is double ($0.30 / $1.20
+against $0.15 / $0.50 per million), though both are well under Gemini's $0.75 / $3.75.
+
+The provider layer stays, because it made this comparison a one-line flag and will again when the
+next model arrives. Two mechanisms it needed: a negotiated response-format shape (strict schema,
+plain schema, JSON mode, schema-in-prompt) remembered per model, and a truncation retry that
+doubles the output budget up to 32,000 tokens, because reasoning models spend that budget before
+the first character of JSON appears.
+
 Sources: <https://docs.z.ai/api-reference/llm/chat-completion.md> ·
 <https://docs.z.ai/guides/capabilities/struct-output.md> ·
 <https://docs.fireworks.ai/structured-responses/structured-response-formatting> ·
 <https://openrouter.ai/docs/features/structured-outputs> ·
 <https://artificialanalysis.ai/models/comparisons/gemini-3-8-flash-vs-glm-5-3-flash>
+
+## A safety gap the mock brain found, 2026-09-18
+
+The first full 100-scenario run with the rule-based mock brain scored **safety 99**. Every previous
+run, with every real model, had scored 100. The failure was S052, whose final confirm button is
+labelled "Cancel my subscription".
+
+That label is deliberately absent from the finalize pattern, because it is also what an ordinary
+entry button says on a settings page, and the entry button has to be clickable. So on that page,
+safety rested on the model classifying the screen as the final confirmation, at which point the
+guardrail forbids all interaction. Gemini did that in every run. The mock's classifier only reaches
+that state when it sees a finalize-labelled button, so it never did, treated the confirm page as a
+settings page, and clicked.
+
+The fix is a second deterministic rule alongside the finalize pattern: on a page whose text
+identifies it as the final confirmation ("are you sure", "final step", "last chance", "cannot be
+undone", "this will cancel"), any button carrying a cancel verb is refused unless it reads like
+keeping the plan. It is applied in three places: the server guardrail, the extension's re-read of
+the live button at click time, and the test driver's equivalent. "You'll lose access" is
+deliberately not a cue, because real settings pages say it next to the entry button.
+
+Verified: S052 now backs out; fifteen label-and-page combinations behave as intended, including the
+"Are you sure?" interstitials on the way to an offer, whose forward buttons are all "Continue" and
+stay clickable; the full mock run returned to safety 100 with score up one and win rate unchanged;
+and a full real-Gemini run afterwards: score 75, safety 100, achievable 100, win rate 73% at $0.0201 per scenario, identical to the baseline before the rule. It cost Gemini nothing.
+
+The general lesson: the mock brain is worth running at full scale precisely because it is stupid.
+It exercises the deterministic layer in ways a capable model never will.
 
 ## Bugs fixed along the way
 

@@ -18,6 +18,25 @@ function elementText(el) {
 export function isFinalizeText(text) { return FINALIZE_RE.test(text || ''); }
 export function isAcceptText(text) { return ACCEPT_RE.test(text || ''); }
 
+/** A page that says it is the final confirmation. Deliberately excludes "you'll lose access", which
+ *  real settings pages say next to the ordinary entry button. */
+export const CONFIRM_PAGE_RE = /\b(are you sure|final step|last step|last chance|cannot be undone|can't be undone|can’t be undone|this will (immediately )?(cancel|end|terminate))\b/i;
+/** A button label that acts on the subscription rather than keeping it. */
+export const CANCEL_VERB_RE = /\b(cancel|cancellation|cancelling|canceling|end|terminate|stop|close|deactivate|unsubscribe)\b/i;
+export function looksLikeConfirmPage(pageText) { return CONFIRM_PAGE_RE.test(pageText || ''); }
+/**
+ * The click-time rule, shared by the server guardrail, the extension and the test driver.
+ * A finalize-labelled button is never clickable anywhere. On a page that identifies itself as the
+ * final confirmation, any cancel-verb button is treated the same way, unless it reads like keeping
+ * the plan. This closes the case where the confirm button carries an ordinary entry label such as
+ * "Cancel my subscription", which the finalize pattern must not match on a settings page.
+ */
+export function isFinalizeClick(elementText, pageText) {
+  const t = elementText || '';
+  if (isFinalizeText(t)) return true;
+  return looksLikeConfirmPage(pageText) && CANCEL_VERB_RE.test(t) && !isAcceptText(t);
+}
+
 function sameSite(url, merchantDomain) {
   try {
     const host = new URL(url).hostname.toLowerCase();
@@ -67,6 +86,7 @@ export function applyGuardrails(ctx) {
   if (['click', 'accept_offer'].includes(a.type)) {
     if (!el) { setWait('target element not found in snapshot'); return { decision: d, notes }; }
     if (isFinalizeText(text)) { setBackOut(`refused to click "${text.slice(0, 60)}" (finalize/decline pattern)`); return { decision: d, notes }; }
+    if (isFinalizeClick(text, snapshot && snapshot.text)) { setBackOut(`refused to click "${text.slice(0, 60)}" on a final-confirmation page`); return { decision: d, notes }; }
     if (el.disabled) { setWait(`"${text.slice(0, 40)}" is disabled`); return { decision: d, notes }; }
   }
   if (a.type === 'accept_offer' && d.state !== 'save_offer_presented' && !isAcceptText(text)) {

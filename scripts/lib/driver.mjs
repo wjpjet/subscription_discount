@@ -1,6 +1,6 @@
 // Drives one hunt against a page the way the extension does: snapshot → /api/agent-step → guardrails → act.
 import { snapshotPage, performAction, readElement } from '../../shared/page-scripts.js';
-import { isFinalizeText } from '../../shared/guardrails.js';
+import { isFinalizeClick } from '../../shared/guardrails.js';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const ZERO = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
@@ -49,7 +49,7 @@ export async function hunt(page, merchant, maxSteps = 20, acc) {
     }
     if (a.type === 'click' || a.type === 'accept_offer') {
       const live = await page.evaluate(readElement, a.id);
-      if (!live || isFinalizeText(live.text)) { note = 'client guard refused click'; history.push({ step, url: snapshot.url, state: decision.state, action: a, target, ok: false, note }); return { outcome: 'no_offer_backed_out', reason: note, history, log, steps: step + 1, ms: Date.now() - t0 }; }
+      if (!live || isFinalizeClick(live.text, snapshot.text)) { note = 'client guard refused click'; history.push({ step, url: snapshot.url, state: decision.state, action: a, target, ok: false, note }); return { outcome: 'no_offer_backed_out', reason: note, history, log, steps: step + 1, ms: Date.now() - t0 }; }
       const r = await page.evaluate(performAction, { type: 'click', id: a.id }); ok = r.ok; note = r.note; await settle(page);
     } else if (a.type === 'type' || a.type === 'select' || a.type === 'scroll') { const r = await page.evaluate(performAction, a); ok = r.ok; note = r.note; await sleep(350); }
     else if (a.type === 'navigate') { await page.goto(a.url, { waitUntil: 'load' }).catch(() => { ok = false; }); }

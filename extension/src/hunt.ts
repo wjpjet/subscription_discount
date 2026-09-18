@@ -3,7 +3,7 @@
  * guardrails run server-side and again here (the final "confirm cancellation" is never clickable).
  */
 import { snapshotPage, readElement, performAction } from '../../shared/page-scripts.js';
-import { isFinalizeText, applyGuardrails } from '../../shared/guardrails.js';
+import { isFinalizeClick, applyGuardrails } from '../../shared/guardrails.js';
 import { mockClassify } from '../../shared/brain-mock.js';
 import { apiPost, apiAvailable } from './api';
 import { openTab, waitForLoad, runInTab, closeTab, sleep, tabUrl, navigateTab } from './tabs';
@@ -64,7 +64,7 @@ export async function huntOne(item: ScanItem, settings: Settings, onEvent: (e: H
       }
       if (a.type === 'click' || a.type === 'accept_offer') {
         const live = await runInTab(tabId, readElement, [a.id]);
-        if (!live || isFinalizeText(live.text)) { rec.ok = false; rec.note = 'refused at click time: finalize/decline text'; steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec }); result.outcome = 'no_offer_backed_out'; result.reason = rec.note; break; }
+        if (!live || isFinalizeClick(live.text, snapshot.text)) { rec.ok = false; rec.note = 'refused at click time: finalize/decline text or final-confirmation page'; steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec }); result.outcome = 'no_offer_backed_out'; result.reason = rec.note; break; }
         const r = await runInTab(tabId, performAction, [{ type: 'click', id: a.id }]); rec.ok = r.ok; rec.note = r.note;
         await settle(tabId);
       } else if (a.type === 'type' || a.type === 'select' || a.type === 'scroll') {
