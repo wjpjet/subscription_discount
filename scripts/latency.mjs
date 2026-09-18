@@ -11,7 +11,7 @@ import { preflight } from './lib/preflight.mjs';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)=?(.*)$/); return m ? [m[1], m[2] === '' ? true : m[2]] : [a, true]; }));
-const PORT = 8793, BASE = `http://127.0.0.1:${PORT}`;
+const PORT = Number(process.env.SUITE_PORT || 8793), BASE = `http://127.0.0.1:${PORT}`;   // SUITE_PORT lets two runs coexist
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 process.env.WALKAWAY_RATE_LIMIT = '0';
 if (args.model) process.env.GEMINI_MODEL = String(args.model);

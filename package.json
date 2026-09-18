@@ -14,7 +14,8 @@
     "latency": "node --env-file-if-exists=.env scripts/latency.mjs",
     "cf:dev": "wrangler dev",
     "cf:deploy": "wrangler deploy",
-    "cf:tail": "wrangler tail"
+    "cf:tail": "wrangler tail",
+    "verify": "node --env-file-if-exists=.env scripts/verify-worker.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

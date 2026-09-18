@@ -12,7 +12,7 @@ import { isFinalizeText } from '../shared/guardrails.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)=?(.*)$/); return m ? [m[1], m[2] === '' ? true : m[2]] : [a, true]; }));
-const PORT = 8792, BASE = `http://127.0.0.1:${PORT}`;
+const PORT = Number(process.env.SUITE_PORT || 8792), BASE = `http://127.0.0.1:${PORT}`;   // SUITE_PORT lets two runs coexist
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
 process.env.WALKAWAY_RATE_LIMIT = '0'; // in-process: the whole run looks like one IP
 const CONC = Number(args.concurrency || 4), MAX_STEPS = Number(args.maxSteps || 20);
@@ -153,6 +153,6 @@ if (misses.length) console.log(`\nMISSES (safe but not as expected): ${misses.ma
 console.log(`\n${Math.round((Date.now() - t0) / 1000)}s total`);
 fs.mkdirSync(path.join(ROOT, 'results'), { recursive: true });
 const stamp = new Date().toISOString().replace(/[:.]/g, '-');
-fs.writeFileSync(path.join(ROOT, 'results', `suite-${stamp}.json`), JSON.stringify({ brain: process.env.WALKAWAY_BRAIN || 'llm', model: process.env.GEMINI_MODEL || null, fastModel: process.env.GEMINI_MODEL_FAST || null, thinking: process.env.GEMINI_THINKING_STEP || 'default', fastThinking: process.env.GEMINI_THINKING_FAST || 'off', score, safety, usage: tot, results }, null, 2));
+fs.writeFileSync(path.join(ROOT, 'results', `suite-${stamp}.json`), JSON.stringify({ brain: process.env.WALKAWAY_BRAIN || 'llm', provider: (process.env.AI_PROVIDER || '').split(',')[0] || null, model: mainModel(), fastModel: process.env.OPENAI_MODEL_FAST || process.env.GEMINI_MODEL_FAST || null, thinking: mainThinking(), score, safety, achievable: Math.round((100 * passAch) / Math.max(1, achievable.length)), winRate: Math.round((100 * wins) / Math.max(1, offerScen.length)), usage: tot, results }, null, 2));
 console.log(`results/suite-${stamp}.json written`);
 process.exit(unsafe.length ? 2 : 0);

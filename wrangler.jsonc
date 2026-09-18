@@ -19,8 +19,16 @@
   "compatibility_date": "2026-09-01",
   "compatibility_flags": ["nodejs_compat"],
 
+  // Plain (non-secret) config. Secrets never go here.
+  //   AI_PROVIDER pins the brain to Gemini. Without it, providerOrder() picks whichever key exists,
+  //   so adding an OPENAI_API_KEY secret later (to A/B another model) would silently take over
+  //   production. With it, other keys are inert until you change this line.
+  //   No SITE_URL on purpose: Stripe's return URLs fall back to the host the request arrived on, so a
+  //   fresh deploy redirects to its own workers.dev URL. Add SITE_URL only for a custom domain.
   "vars": {
-    "SITE_URL": "https://walkaway.example.workers.dev"
+    "AI_PROVIDER": "gemini",
+    "GEMINI_MODEL": "gemini-3.8-flash",
+    "GEMINI_MODEL_FAST": "gemini-3.1-flash-lite"
   },
 
   // Static assets are served directly and are FREE and unlimited; only /api/* invokes the Worker.
