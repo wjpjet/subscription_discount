@@ -120,7 +120,7 @@ em.hl{font-style:normal;color:var(--accent);font-weight:500}
 .ticker{display:flex;align-items:center;gap:.6rem;padding:.75rem 1.1rem;border-top:1px solid var(--line);font-size:.85rem;color:var(--muted);font-variant-numeric:tabular-nums;background:var(--white)}
 .pulse{width:8px;height:8px;border-radius:50%;background:var(--save);flex:none;box-shadow:0 0 0 0 rgba(31,169,113,.5);animation:pulse 1.8s infinite}
 @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(31,169,113,.5)}70%{box-shadow:0 0 0 9px rgba(31,169,113,0)}100%{box-shadow:0 0 0 0 rgba(31,169,113,0)}}
-#tick{transition:opacity .3s ease}
+#tick{transition:opacity .3s ease;flex:1;min-width:0;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 #tick.fade{opacity:0}
 @media (prefers-reduced-motion:reduce){.pulse{animation:none}.js .row{opacity:1;transform:none;transition:none}}
 @media (max-width:480px){
@@ -225,7 +225,7 @@ footer a:hover{color:var(--paper)}
 .cta-note{font-size:.88rem;color:rgba(246,243,236,.6)}
 .see{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,4rem);align-items:center}
 @media (max-width:900px){.see{grid-template-columns:1fr}}
-.see .mock{transform:none;margin-inline:auto}
+.see .mock{transform:none;margin-inline:auto;width:100%;max-width:420px}
 .cta-final{background:var(--ink);color:var(--paper);text-align:center}
 .cta-final .container{display:flex;flex-direction:column;align-items:center;gap:1.2rem}
 .cta-final .lead{color:rgba(246,243,236,.72)}
@@ -257,10 +257,9 @@ footer a:hover{color:var(--paper)}
 <section class="hero">
   <div class="container">
     <div class="hero-copy">
-      <span class="eyebrow">Many subscriptions have a second price</span>
       <h1>Get the <em class="hl">leaving price.</em> Keep the subscription.</h1>
-      <p class="lead">Keeping you is cheaper than finding a new customer, so many subscriptions have a second, lower price that's offered only when you go to cancel. That's the leaving price. Walkaway AI goes and gets it for you, then stops. <strong>You keep the subscription. Your next bill is lower.</strong></p>
-      <p class="example">For example: <span class="was">$17.99/mo</span> → <span class="now">$9/mo</span> <b>for 3 months</b>, nothing cancelled.</p>
+      <p class="lead">Keeping you is cheaper than finding a new customer, so many subscriptions have a second, lower price that's offered when you go to cancel. That's the leaving price. Walkaway AI goes and gets it for you. <strong>You keep the subscription. Your next bill is lower.</strong></p>
+      <p class="example"><span class="was">$17.99/mo</span> → <span class="now">$9/mo</span> <b>for 3 months</b>, nothing cancelled.</p>
 
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href="install.html">Add to Chrome</a>
@@ -296,12 +295,12 @@ footer a:hover{color:var(--paper)}
       <article class="step reveal">
         <div class="num">2</div>
         <h3>Sit back</h3>
-        <p>Walkaway starts each cancellation the way you would, gets through the surveys and the “are you sure” screens, and stops at the offer. Then it brings back what each service is willing to do. Nothing is accepted yet.</p>
+        <p>Walkaway navigates each subscription's cancellation flow to find your best offer. No work required from you.</p>
       </article>
       <article class="step reveal">
         <div class="num">3</div>
         <h3>Save</h3>
-        <p>Untick anything you'd rather keep as it is, then say yes. It accepts the rest and your bills come down. We charge 10% of what you actually saved, checked on your own billing page, and nothing if nothing was saved.</p>
+        <p>Verify the subscription savings you want (sometimes we're borrowing someones else's streaming service... we've all done it.) We charge a 15% tip for the work we did. Nothing if nothing was saved.</p>
       </article>
     </div>
   </div>
@@ -331,7 +330,7 @@ footer a:hover{color:var(--paper)}
         <div><small>Your fee</small><strong>~$14</strong></div>
       </div>
       <div class="mock-cta">Get these discounts →</div>
-      <div class="ticker"><span class="pulse"></span><span id="tick">Checking which services you're signed into…</span></div>
+      <div class="ticker"><span class="pulse"></span><span id="tick">Checking which sites you're signed into…</span></div>
     </div>
   </div>
 </section>
@@ -415,7 +414,7 @@ footer a:hover{color:var(--paper)}
   var yr = document.getElementById('yr'); if (yr) yr.textContent = new Date().getFullYear();
   var rows = document.querySelectorAll('.mock .row');
   rows.forEach(function(r,i){ setTimeout(function(){ r.classList.add('in'); }, reduce ? 0 : 250 + i*140); });
-  var lines = ["Checking which services you're signed into…","Found 5 subscriptions","Walking Hulu's cancellation in a background tab…","Answering the “why are you leaving?” survey…","Offer found: $17.99/mo → $8.99/mo for 3 months","Holding it for you. Nothing accepted yet.","4 offers found · ~$140 you could save"];
+  var lines = ["Checking which sites you're signed into…","Found 5 subscriptions","Walking Hulu's cancellation flow…","Answering the exit survey…","Offer: $17.99 → $8.99/mo for 3 months","Holding it for you. Nothing accepted yet.","4 offers found · ~$140 you could save"];
   var tick = document.getElementById('tick'), li = 0;
   if (tick && !reduce) setInterval(function(){ tick.classList.add('fade'); setTimeout(function(){ li = (li+1) % lines.length; tick.textContent = lines[li]; tick.classList.remove('fade'); }, 300); }, 2300);
   var els = document.querySelectorAll('.reveal');
