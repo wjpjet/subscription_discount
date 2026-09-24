@@ -85,3 +85,9 @@ ul.consent i{font-style:italic}
 
 .rowmain .sub.offer{color:#177F55;white-space:normal;line-height:1.35}
 .rowmain .sub{white-space:normal;line-height:1.35}
+
+/* Live scan list: rows appear as accounts are read and fill in as offers are found. */
+.tag.busy{background:rgba(14,17,22,.06);color:var(--ink);animation:wa-pulse 1.4s ease-in-out infinite}
+@keyframes wa-pulse{0%,100%{opacity:.45}50%{opacity:1}}
+.row.won .rowline span{font-weight:700}
+.row.col .sub{white-space:normal;line-height:1.35}

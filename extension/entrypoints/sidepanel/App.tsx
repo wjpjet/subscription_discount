@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import { DEFAULTS, getSettings, saveSettings, type Settings } from '@/src/settings';
 import { originsFor } from '@/src/discovery';
-import { runScan, discardScan, savingLines, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
+import { runScan, discardScan, savingLines, isBusy, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
 import { acceptAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
 import { startCheckout, waitForCheckout, settle } from '@/src/payment';
 import { focusTab, closeTab } from '@/src/tabs';
@@ -54,7 +54,7 @@ export default function App() {
         const ok = await browser.permissions.request({ origins });
         if (!ok) { setError("Walkaway needs permission to check which sites you're signed into. Nothing runs without it."); return; }
       }
-      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…' });
+      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
       const r = await runScan(s, setProgress);
       setResult(r); setScreen('reveal');
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
@@ -70,7 +70,7 @@ export default function App() {
         const ok = await browser.permissions.request({ origins });
         if (!ok) { setError("Walkaway needs permission to check which sites you're signed into. Nothing runs without it."); setScreen('idle'); return; }
       }
-      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…' });
+      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
       const r = await runScan(s, setProgress);
       setResult(r); setScreen('reveal');
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
@@ -179,14 +179,33 @@ function Consent({ onAgree, onBack }: { onAgree: () => void; onBack: () => void 
 }
 
 function Scanning({ progress }: { progress: ScanProgress | null }) {
+  const phase = progress?.phase ?? 'discover';
+  const items = progress?.items ?? [];
+  const offers = items.filter((i) => i.hasOffer);
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 5;
-  const label = !progress || progress.phase === 'discover' ? (progress?.message || 'Discovering…') : progress.phase === 'pages' ? `Checking ${progress.current ?? 'your accounts'}… (${progress.done} of ${progress.total})` : progress.phase === 'find' ? `Looking for offers${progress.current ? ` at ${progress.current}` : ''}… (${progress.done} of ${progress.total})` : 'Almost done…';
+  const headline = phase === 'discover' ? (progress?.message || 'Discovering…')
+    : phase === 'pages' ? `Checking accounts · ${progress!.done} of ${progress!.total}`
+    : phase === 'find' ? `Looking for offers · ${progress!.done} of ${progress!.total}`
+    : 'Almost done…';
   return (
     <div className="body">
       <div className="prog"><i style={{ width: `${Math.max(5, pct)}%` }} /></div>
-      <h1>Scanning.</h1>
-      <p>{label}</p>
-      <p className="fine left">{progress?.phase === 'find' ? 'This is the slow part: it walks each cancellation flow up to the loyalty offer and stops there, three services at a time. Nothing is accepted yet.' : 'Account pages open briefly in background tabs and close on their own. Keep doing what you were doing.'}</p>
+      <div className="count">{headline}</div>
+      {offers.length > 0 && <div className="total"><small>Found so far</small><b>~{money(progress!.totalEstSavings)}</b><span>{offers.length} offer{offers.length === 1 ? '' : 's'} · more may appear as the scan continues.</span></div>}
+      {items.length > 0 && (
+        <div className="card">
+          {items.map((i) => (
+            <div className={`row col${i.hasOffer ? ' won' : ''}`} key={i.id}>
+              <div className="rowline"><span>{i.name}</span>{i.hasOffer ? <b className="amt">~{money(i.estSavings)}</b> : <span className={`tag ${isBusy(i) ? 'busy' : 'skip'}`}>{isBusy(i) ? 'working' : keptLabel(i)}</span>}</div>
+              <span className={`sub${i.hasOffer ? ' offer' : ''}`}>{i.live || ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <p className="fine left">{phase === 'find'
+        ? 'This is the slow part: it walks each cancellation flow up to the loyalty offer and stops there, three services at a time. Nothing is accepted yet.'
+        : phase === 'pages' ? 'Account pages open briefly in background tabs and close on their own.'
+        : "Only the names of sites you're signed into leave your browser at this step."}</p>
     </div>
   );
 }
@@ -237,6 +256,9 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
 }
 /** Why a subscription is listed without an offer. */
 function keptLabel(i: ScanItem): string {
+  if (i.status === 'login_wall') return 'Not signed in';
+  if (i.status === 'no_paid_plan') return 'No paid plan';
+  if (i.status === 'error') return "Couldn't check";
   if (i.offerApplied) return 'Promo active · kept';
   if (i.findOutcome === 'no_offer_backed_out') return 'No offer this time · left alone';
   if (i.findOutcome === 'blocked_needs_you') return 'Needs you to sign in';
