@@ -114,7 +114,7 @@ export default function App() {
       await browser.storage.local.set({ huntResults: results, scanResult: result });   // the paused tabs were consumed; persist that
       let settlement: Settlement | null = null;
       if (pay) {
-        // Charged now, and only now: 10% of what the billing pages actually showed.
+        // Charged now, and only now: 15% of what the billing pages actually showed.
         const verified = results.reduce((sum, r) => sum + (r.outcome === 'discount_applied' ? (r.savingsUsd || 0) : 0), 0);
         settlement = await settle(pay, verified, estimate).catch((e: any) => ({ feeCents: 0, estimatedFeeCents: 0, adjusted: false, charged: false, error: String(e?.message || e) }));
       }
@@ -169,7 +169,7 @@ function Consent({ onAgree, onBack }: { onAgree: () => void; onBack: () => void 
         <li><b>Finding subscriptions:</b> it checks which sites you're signed into by looking at cookie <i>names</i> on this device. Cookie values, passwords, and your browsing history never leave your browser.</li>
         <li><b>Sent to our AI service:</b> the names of those sites, and the text of the account and cancellation pages it works on, so it can decide what to click. Nothing else.</li>
         <li><b>Acting on your behalf:</b> it opens those sites in background tabs and goes through their cancellation flows to reach the loyalty offer. It cannot press a final “confirm cancellation.”</li>
-        <li><b>Payment:</b> if you continue to checkout, Stripe saves your card and email. Nothing is charged until the run is done; then 10% of what was actually saved.</li>
+        <li><b>Payment:</b> if you continue to checkout, Stripe saves your card and email. Nothing is charged until the run is done; then 15% of what was actually saved.</li>
       </ul>
       <p className="fine left">We don't sell data or use it for ads. Full details: <a href={PRIVACY_URL} target="_blank" rel="noreferrer">privacy policy</a>.</p>
       <div className="spacer" />
@@ -246,7 +246,7 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
       )}
       <div className="spacer" />
       <button className="btn" onClick={onHunt} disabled={picked.length === 0}>Get these discounts →</button>
-      <p className="fine">{skipPayment ? 'Payment skipped (testing). ' : 'No charge now. After the run: 10% of what was actually saved, $1 minimum, $0 if nothing. '}It cannot press “confirm cancellation” — that action doesn't exist in its toolset.</p>
+      <p className="fine">{skipPayment ? 'Payment skipped (testing). ' : 'No charge now. After the run: 15% of what was actually saved, $0 if nothing. '}It cannot press “confirm cancellation” — that action doesn't exist in its toolset.</p>
       <p className="links"><a onClick={onRescan}>Rescan</a> · <a onClick={() => setDetails(!details)}>{details ? 'Hide' : 'Show'} details</a></p>
       {details && <DevTable items={result.items} />}
     </div>
@@ -268,7 +268,7 @@ function Checkout({ msg, onCancel }: { msg: string; onCancel: () => void }) {
   return (
     <div className="body">
       <h1>Save a card. <em>Nothing is charged yet.</em></h1>
-      <p>A secure Stripe page opened in a new tab. Your card is saved there and not charged. After the run you pay 10% of what we actually saved you — if some services don't make an offer, the charge goes down with them. $0 if none do.</p>
+      <p>A secure Stripe page opened in a new tab. Your card is saved there and not charged. After the run you pay 15% of what we actually saved you — if some services don't make an offer, the charge goes down with them. $0 if none do.</p>
       <p className="fine left">{msg}</p>
       <div className="spacer" />
       <button className="btn ghost" onClick={onCancel}>Cancel</button>
@@ -307,7 +307,8 @@ function Done({ hunt, onRescan, onAgain }: { hunt: HuntState; onRescan: () => vo
   const st = hunt.settlement;
   const payment = !st ? null
     : st.error ? `Payment: ${st.error}`
-    : st.charged ? <>Charged {money(st.feeCents / 100)}{st.adjusted ? <> — adjusted down from about {money(st.estimatedFeeCents / 100)}, because {missed} of {results.length} didn't come through</> : ' (10% of verified savings)'}. {st.receiptUrl && <a href={st.receiptUrl} target="_blank" rel="noreferrer">Receipt</a>}</>
+    : st.charged ? <>Charged {money(st.feeCents / 100)}{st.adjusted ? <> — adjusted down from about {money(st.estimatedFeeCents / 100)}, because {missed} of {results.length} didn't come through</> : ' (15% of verified savings)'}. {st.receiptUrl && <a href={st.receiptUrl} target="_blank" rel="noreferrer">Receipt</a>}</>
+    : st.waived ? `No charge — 15% came to ${money(st.feeCents / 100)}, less than a card can be charged, so it's on us.`
     : st.needsAction ? 'Your bank needs to authenticate this charge — we will follow up by email.'
     : 'No charge — nothing was verified, so your card was not used.';
   return (

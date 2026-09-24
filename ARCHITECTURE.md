@@ -137,7 +137,7 @@ The extension revisits the billing page, snapshots it, and sends it to `/api/cla
 compares the price before and after. That difference is the **verified** saving. It is not the
 model's estimate, and it is not what a confirmation page claimed.
 
-**`/api/settle`** then makes the one and only charge: 10% of the verified saving, $1 minimum, to the
+**`/api/settle`** then makes the one and only charge: 15% of the verified saving, no minimum (a fee under Stripe's 50¢ floor is waived), to the
 saved card, off-session. If the run verified less than the estimate, the charge is lower and the
 reply says so, which the panel turns into "adjusted down from about $X because 2 of 5 didn't come
 through." If nothing was verified, nothing is charged.

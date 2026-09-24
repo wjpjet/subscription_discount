@@ -5,5 +5,5 @@ export interface AgentAction { type: string; id?: number | null; text?: string |
 export interface Decision { state: string; reasoning: string; action: AgentAction }
 export interface StepResponse { brain: string; model: string; proposed: AgentAction; decision: Decision; guardrails: string[] }
 export interface DiscoveredService { domain: string; isSubscription: boolean; name: string; category: string; accountUrl: string | null; typicalMonthlyPriceUsd: number | null; makesRetentionOffers: 'likely' | 'unlikely' | 'unknown'; typicalOfferDiscountPct: number | null; typicalOfferTermMonths: number | null; confidence: number; notes: string }
-export interface Settlement { feeCents: number; estimatedFeeCents: number; adjusted: boolean; charged: boolean; paymentIntentId?: string; receiptUrl?: string | null; needsAction?: boolean; error?: string; status?: string }
+export interface Settlement { feeCents: number; estimatedFeeCents: number; adjusted: boolean; charged: boolean; waived?: boolean; paymentIntentId?: string; receiptUrl?: string | null; needsAction?: boolean; error?: string; status?: string }
 export interface CheckoutResult { setupIntentId: string; customerId: string | null; paymentMethodId: string | null; email: string | null }

@@ -1,7 +1,7 @@
 # Walkaway (working name)
 
 Find your subscriptions, walk each service's cancellation flow **just far enough to surface the
-loyalty discount, accept it — and never actually cancel.** Pay 10% of verified savings, $1 minimum,
+loyalty discount, accept it — and never actually cancel.** Pay 15% of verified savings,
 $0 if nothing is saved.
 
 | Path | What it is |
