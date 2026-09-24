@@ -97,7 +97,8 @@ useful if the backend ever moves back to a wall-clock-billed host.
 ## Commands worth remembering
 
 ```
-npm run cf:dev             # the Worker locally on the real Cloudflare runtime, port 8787
+npm run cf:dev             # landing page + API locally on the real Cloudflare runtime, http://localhost:8787
+npm run testbed:dev        # Streamly locally, http://localhost:8081 (already in the extension allowlist)
 npm run cf:deploy          # publish the Worker
 npm run cf:tail            # live logs from the deployed Worker
 npm run api:dev            # the same handlers as a plain Node server, reads .env
