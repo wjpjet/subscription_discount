@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Walkaway — Get the leaving price. Keep the subscription.</title>
-<meta name="description" content="Every subscription has a second price — the one they show people who are about to leave. Walkaway goes and gets it for you, then stops. You keep the subscription; next month's bill is lower. 10% of what you save, once.">
+<meta name="description" content="Many subscriptions have a second, lower price, offered only when you go to cancel. Walkaway goes and gets it for you, then stops. You keep the subscription and your next bill is lower. 10% of what you save.">
 <meta name="theme-color" content="#0E1116">
 <meta property="og:type" content="website">
 <meta property="og:title" content="Walkaway — Get the leaving price. Keep the subscription.">
-<meta property="og:description" content="Every subscription has a second price. We go get it, and stop there. Nothing gets cancelled. 10% of what you save, once.">
+<meta property="og:description" content="Many subscriptions have a second price. We go get it, and stop there. Nothing gets cancelled. 10% of what you save.">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='14' fill='%23FF5C39'/%3E%3Cpath d='M18 32h24M32 20l12 12-12 12' fill='none' stroke='%230E1116' stroke-width='6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -216,13 +216,6 @@ footer a:hover{color:var(--paper)}
 .hero .container{grid-template-columns:1fr;gap:2.2rem}
 .hero .lead{max-width:62ch}
 .hero .lead strong{color:var(--paper)}
-.trickline{display:flex;flex-wrap:wrap;align-items:center;gap:.55rem;margin-top:1.8rem}
-.trickline .chip{font-size:.92rem}
-.trickline .chip.offer{background:rgba(255,92,57,.16);border-color:rgba(255,92,57,.45)}
-.trickline .yes{background:rgba(31,169,113,.16);border:1px solid rgba(31,169,113,.5);border-radius:12px;padding:.7rem 1rem;font-weight:700;font-size:.92rem}
-.trickline .no{background:rgba(255,255,255,.03);border:1px solid var(--line-dark);border-radius:12px;padding:.7rem 1rem;font-size:.92rem;color:rgba(246,243,236,.6)}
-.trickline .no s{text-decoration-color:rgba(255,92,57,.9);text-decoration-thickness:2px;color:rgba(246,243,236,.85)}
-@media (max-width:640px){.trickline{flex-direction:column;align-items:flex-start;gap:.3rem}.trickline .arrow{transform:rotate(90deg);padding-left:1.2rem;line-height:1}.trickline .chip,.trickline .yes{width:auto}}
 .cta-row{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;margin-top:2rem}
 .cta-note{font-size:.88rem;color:rgba(246,243,236,.6)}
 .see{display:grid;grid-template-columns:1fr 1fr;gap:clamp(2rem,5vw,4rem);align-items:center}
@@ -259,59 +252,51 @@ footer a:hover{color:var(--paper)}
 <section class="hero">
   <div class="container">
     <div class="hero-copy">
-      <span class="eyebrow">Every subscription has a second price</span>
+      <span class="eyebrow">Many subscriptions have a second price</span>
       <h1>Get the <em class="hl">leaving price.</em> Keep the subscription.</h1>
-      <p class="lead">Keeping you is cheaper than finding a new customer — so every subscription has a second, lower price, offered only when you go to cancel. That's the leaving price. Walkaway AI goes and gets it, then stops. <strong>You keep the subscription. Next month's bill is lower.</strong></p>
-
-      <div class="trickline" aria-label="How Walkaway gets the leaving price">
-        <span class="chip">Settings</span><span class="arrow" aria-hidden="true">→</span>
-        <span class="chip">Cancel subscription</span><span class="arrow" aria-hidden="true">→</span>
-        <span class="chip">“Why are you leaving?”</span><span class="arrow" aria-hidden="true">→</span>
-        <span class="chip offer">“Wait — 50% off for 6 months?”</span><span class="arrow" aria-hidden="true">→</span>
-        <span class="yes">✓ Walkaway AI takes it</span>
-      </div>
+      <p class="lead">Keeping you is cheaper than finding a new customer, so many subscriptions have a second, lower price that's offered only when you go to cancel. That's the leaving price. Walkaway AI goes and gets it for you, then stops. <strong>You keep the subscription. Your next bill is lower.</strong></p>
 
       <div class="cta-row">
         <a class="btn btn-primary btn-lg" href="install.html">Add to Chrome</a>
         <a class="btn btn-ghost" href="#how">How it works</a>
-        <span class="cta-note">Free to scan. You pay 10% of what you save. Once.</span>
+        <span class="cta-note">Free to scan.</span>
       </div>
     </div>
   </div>
 </section>
 
-<section class="section" id="how">
+<section class="section" id="why">
   <div class="container">
-    <div class="sec-head reveal">
-      <span class="eyebrow">How it works</span>
-      <h2>Three steps. One click from you.</h2>
-    </div>
-    <div class="steps three">
-      <article class="step reveal">
-        <div class="num">1</div>
-        <h3>Add it. Click Scan.</h3>
-        <p>It finds the subscriptions you're signed into, walks each one to the loyalty offer it's willing to make, and shows you the real terms before you decide. Free.</p>
-      </article>
-      <article class="step reveal">
-        <div class="num">2</div>
-        <h3>It does the leaving. You keep the subscription.</h3>
-        <p>Settings, cancel, the “why are you leaving?” survey — it goes through all of it for you. It knows which offers are decoys and which one to hold out for, takes it, and backs out. It can't press “confirm cancellation”: that button isn't in its toolset.</p>
-      </article>
-      <article class="step reveal">
-        <div class="num">3</div>
-        <h3>You pay 10%. Once.</h3>
-        <p>We check the new price on your billing page. You're charged 10% of what we actually saved — $1 minimum, $0 if nothing. Summary and receipt emailed.</p>
-      </article>
+    <div class="sec-head reveal" style="max-width:820px">
+      <span class="eyebrow">Why it works</span>
+      <h2>We're good at cancelling.</h2>
+      <p class="lead" style="margin-top:1rem">Cancellation flows are built to keep you. Decoy offers, buried buttons, guilt screens, a survey before anything happens. We've been through a lot of them. Walkaway AI moves through each one the way that gets you the best deal, and since we only get paid when you save, it holds out for the best offer rather than the first one.</p>
     </div>
   </div>
 </section>
 
-<section class="section" style="padding-top:0">
+<section class="section" id="how" style="padding-top:0">
   <div class="container">
-    <div class="sec-head reveal" style="max-width:820px">
-      <span class="eyebrow">Why it works</span>
-      <h2>We're experts at cancelling.</h2>
-      <p class="lead" style="margin-top:1rem">Cancellation flows are built to keep you: decoy offers, buried buttons, guilt screens. We've mapped them. Walkaway AI moves through each one the way that gets you the most money — and because we only get paid when you save, we hold out for the best offer, not the fastest one.</p>
+    <div class="sec-head reveal">
+      <span class="eyebrow">How it works</span>
+      <h2>Scan, sit back, save.</h2>
+    </div>
+    <div class="steps three">
+      <article class="step reveal">
+        <div class="num">1</div>
+        <h3>Scan</h3>
+        <p>Add the extension and click Scan. It finds the subscriptions you're signed into and checks each one for a leaving price. Nothing gets accepted yet, and scanning is free.</p>
+      </article>
+      <article class="step reveal">
+        <div class="num">2</div>
+        <h3>Sit back</h3>
+        <p>Walkaway starts each cancellation the way you would, gets through the surveys and the “are you sure” screens, and stops at the offer. Then it shows you what each service put on the table. Untick anything you'd rather leave alone.</p>
+      </article>
+      <article class="step reveal">
+        <div class="num">3</div>
+        <h3>Save</h3>
+        <p>Say yes and it accepts the offers you picked. Your next bills come down. We charge 10% of what you actually saved, checked on your own billing page, and nothing if nothing was saved.</p>
+      </article>
     </div>
   </div>
 </section>
@@ -320,25 +305,24 @@ footer a:hover{color:var(--paper)}
   <div class="container see">
     <div class="reveal">
       <span class="eyebrow">What you'll see</span>
-      <h2>Which of your services have a leaving price, and what it adds up to.</h2>
-      <p class="lead" style="margin-top:1rem">Offers like half off for six months are common in streaming, news, and software. Sometimes a company won't make one — we leave those alone. Exact numbers show up in your summary after the run.</p>
+      <h2>Which of your services will offer a lower price, and what that adds up to.</h2>
+      <p class="lead" style="margin-top:1rem">Half off for a few months is common in streaming, news and software. Some companies won't make an offer at all. We leave those alone.</p>
       <div class="pills" style="justify-content:flex-start">
         <span class="pill">Streaming</span><span class="pill">News</span><span class="pill">Music &amp; audio</span><span class="pill">Software</span><span class="pill">VPNs</span><span class="pill">Telecom</span><span class="pill">Fitness &amp; apps</span>
       </div>
     </div>
     <div class="mock reveal" aria-hidden="true">
-      <div class="mock-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="mock-title">5 subscriptions found · 4 make offers</span></div>
+      <div class="mock-head"><span class="dot"></span><span class="dot"></span><span class="dot"></span><span class="mock-title">5 subscriptions found · 4 made an offer</span></div>
       <ul class="mock-rows">
-        <li class="row"><span class="brand">SiriusXM</span><span class="tag ok">Makes offers</span></li>
-        <li class="row"><span class="brand">The New York Times</span><span class="tag ok">Makes offers</span></li>
-        <li class="row skip"><span class="brand">Spotify</span><span class="tag skip">No offers · kept</span></li>
-        <li class="row"><span class="brand">Hulu</span><span class="tag ok">Makes offers</span></li>
-        <li class="row"><span class="brand">Adobe Creative Cloud</span><span class="tag ok">Makes offers</span></li>
+        <li class="row"><span class="brand">SiriusXM</span><span class="tag ok">Made an offer</span></li>
+        <li class="row"><span class="brand">The New York Times</span><span class="tag ok">Made an offer</span></li>
+        <li class="row skip"><span class="brand">Spotify</span><span class="tag skip">No offer · left alone</span></li>
+        <li class="row"><span class="brand">Hulu</span><span class="tag ok">Made an offer</span></li>
+        <li class="row"><span class="brand">Adobe Creative Cloud</span><span class="tag ok">Made an offer</span></li>
       </ul>
       <div class="mock-foot">
-        <div><small>On upcoming renewals</small><strong class="save">~$500</strong></div>
-        <div><small>Your fee, once</small><strong>~$50</strong></div>
-        <div><small>Account</small><strong>Not needed</strong></div>
+        <div><small>You'd save</small><strong class="save">~$500</strong></div>
+        <div><small>Your fee</small><strong>~$50</strong></div>
       </div>
       <div class="mock-cta">Get these discounts →</div>
       <div class="ticker"><span class="pulse"></span><span id="tick">Checking which services you're signed into…</span></div>
@@ -350,16 +334,16 @@ footer a:hover{color:var(--paper)}
   <div class="container">
     <div class="sec-head reveal">
       <span class="eyebrow">Pricing</span>
-      <h2>You pay 10% of what you save. Once.</h2>
+      <h2>You pay 10% of what you save.</h2>
     </div>
     <div class="tiles">
-      <div class="tile hero-tile reveal"><div class="big">10%</div><div class="lab">of verified savings</div><div class="sub">On the discounts we actually secured, over the term of each offer. Charged once. $1 minimum.</div></div>
-      <div class="tile reveal"><div class="big">$0</div><div class="lab">charged up front</div><div class="sub">Your card is saved at checkout and not charged until the run is done and the savings are verified.</div></div>
-      <div class="tile reveal"><div class="big">$0</div><div class="lab">if we save you nothing</div><div class="sub">No offer, no fee. No monthly plan. Ever.</div></div>
+      <div class="tile hero-tile reveal"><div class="big">10%</div><div class="lab">of verified savings</div><div class="sub">On the discounts we actually got, over the term of each offer. $1 minimum.</div></div>
+      <div class="tile reveal"><div class="big">$0</div><div class="lab">charged up front</div><div class="sub">Your card is saved at checkout and isn't charged until the run is done and the savings are checked on your billing page.</div></div>
+      <div class="tile reveal"><div class="big">$0</div><div class="lab">if we save you nothing</div><div class="sub">No offer, no fee. No plan, no subscription to us.</div></div>
     </div>
     <div class="compare reveal">
       <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#E8492A" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-      <div>Bill-negotiation services typically take <strong>35–60%</strong> of your savings. We take 10% — and only after the new price is verified on your own billing page.</div>
+      <div>Bill-negotiation services usually take <strong>35–60%</strong> of what they save you. We take 10%, and only after the new price shows up on your own billing page.</div>
     </div>
   </div>
 </section>
@@ -368,29 +352,29 @@ footer a:hover{color:var(--paper)}
   <div class="container">
     <div class="sec-head reveal">
       <span class="eyebrow">Safety</span>
-      <h2>Built so it can't lose your subscriptions.</h2>
+      <h2>Made so it can't cancel anything.</h2>
     </div>
     <div class="grid4">
-      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 4v5"/></svg></div><h3>Runs in your browser</h3><p>It uses the accounts you're already signed into. We never see or store a password.</p></div>
-      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Cannot cancel</h3><p>“Confirm cancellation” isn't an action it can take. On anything unclear, it backs out.</p></div>
-      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3-3h12l3 3v12a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></div><h3>Every step logged</h3><p>You can watch it work, and review each step afterwards.</p></div>
-      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></div><h3>Only site names are sent</h3><p>To spot subscriptions, we send the names of sites you're signed into — never cookies, passwords, or history.</p></div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="16" rx="3"/><path d="M3 9h18M8 4v5"/></svg></div><h3>Runs in your browser</h3><p>It works inside the accounts you're already signed into. We never see or store a password.</p></div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l8 4v5c0 5-3.5 8.5-8 9-4.5-.5-8-4-8-9V7z"/><path d="M9 12l2 2 4-4"/></svg></div><h3>Can't cancel</h3><p>“Confirm cancellation” isn't an action it has. On anything unclear, it backs out.</p></div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 7l3-3h12l3 3v12a1 1 0 01-1 1H4a1 1 0 01-1-1z"/><circle cx="12" cy="13" r="3.5"/></svg></div><h3>Every step shown</h3><p>You can watch it work and read each step afterwards.</p></div>
+      <div class="safe reveal"><div class="ic" aria-hidden="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="10" width="16" height="11" rx="2"/><path d="M8 10V7a4 4 0 018 0v3"/></svg></div><h3>Only site names are sent</h3><p>To spot subscriptions, we send the names of sites you're signed into. Never cookies, passwords or history.</p></div>
     </div>
   </div>
 </section>
 
 <section class="section" id="faq">
   <div class="container">
-    <div class="sec-head reveal"><span class="eyebrow">FAQ</span><h2>Fair questions.</h2></div>
+    <div class="sec-head reveal"><span class="eyebrow">FAQ</span><h2>Questions.</h2></div>
     <div class="faq-list">
-      <details class="reveal"><summary>Will it ever actually cancel something?</summary><p>It's built so it can't: the “confirm cancellation” button isn't an action it can take. Every screen is checked before any click, and on anything unclear it backs out. Rare services cancel with no confirmation step at all; we track those and skip them.</p></details>
-      <details class="reveal"><summary>What's a “leaving price”?</summary><p>The offer a company makes when you go to cancel — a discount or free months to keep you. Most people never see it because they never start cancelling. Walkaway starts, gets it, and stops.</p></details>
-      <details class="reveal"><summary>So what does it actually do?</summary><p>The same thing a savvy person does by hand: go to cancel, sit through the “are you sure?” screens, and take the offer the company makes to keep you. Then it stops. Your plan stays exactly as it was — just cheaper.</p></details>
-      <details class="reveal"><summary>Which services work?</summary><p>Any that make an offer when you go to leave — streaming, news, music, software, VPNs, telecom, fitness apps. Sometimes a company won't make one; we leave those alone.</p></details>
+      <details class="reveal"><summary>Will it ever actually cancel something?</summary><p>No. “Confirm cancellation” isn't an action it has. Every screen is checked before any click, and on anything unclear it backs out. A few services cancel with no confirmation step at all. We know which ones and skip them.</p></details>
+      <details class="reveal"><summary>How does it get into my accounts?</summary><p>It doesn't. It runs in your own browser, on the services you're already signed into, and clicks through them the way you would. We have no login details, we never see a password, and it can't do anything on a service you're not signed into.</p></details>
+      <details class="reveal"><summary>What's a leaving price?</summary><p>The offer a company makes when you go to cancel: a discount, or a few free months, to keep you. Most people never see it because they never start cancelling. Walkaway starts, gets it, and stops.</p></details>
+      <details class="reveal"><summary>Which services work?</summary><p>Any that make an offer when you go to leave. Streaming, news, music, software, VPNs, phone plans, fitness apps. Some won't make one, and we leave those alone.</p></details>
       <details class="reveal"><summary>What if there's no discount?</summary><p>You pay nothing. Your card is saved at checkout but never charged.</p></details>
-      <details class="reveal"><summary>Is this a one-time thing?</summary><p>Mostly. Offers run for a set term — months to a year — and most services won't offer again for a while. Run Walkaway again when an offer ends.</p></details>
-      <details class="reveal"><summary>How is the fee calculated?</summary><p>10% of the verified savings over each offer's term, added up, charged once, $1 minimum. Example: $24 → $7 a month for six months is $102 saved, so the fee is $10.20. If some of the services you picked don't come through, the charge is lower — you only ever pay on what was verified.</p></details>
-      <details class="reveal"><summary>What does the extension look at?</summary><p>Which sites you're signed into — it sends only those site names to identify subscription services, then reads your plan from each account page. During a run it only touches the tab it's working in. Cookies, passwords, and your browsing history never leave your browser.</p></details>
+      <details class="reveal"><summary>Can I scan more than once?</summary><p>As often as you like, and scanning is free. Offers run for a set term, and most services won't offer again until it ends, so running again a few months later is the usual rhythm.</p></details>
+      <details class="reveal"><summary>How is the fee worked out?</summary><p>10% of the verified savings over each offer's term, added up, $1 minimum. Say $24 a month drops to $7 for six months. That's $102 saved, so the fee is $10.20. If some of the services you picked don't come through, the charge is lower. You only pay on what was verified.</p></details>
+      <details class="reveal"><summary>What does the extension look at?</summary><p>Which sites you're signed into. It sends only those site names to work out which are subscriptions, then reads your plan from each account page. During a run it only touches the tab it's working in. Cookies, passwords and your history never leave your browser.</p></details>
     </div>
   </div>
 </section>
@@ -399,7 +383,7 @@ footer a:hover{color:var(--paper)}
   <div class="container">
     <span class="eyebrow">Ready?</span>
     <h2>Stop paying the <em class="hl">staying price.</em></h2>
-    <p class="lead">Add Walkaway to Chrome, click Scan, and see what you could save. Free.</p>
+    <p class="lead">Add Walkaway to Chrome, click Scan, and see what your subscriptions would offer to keep you. Free.</p>
     <a class="btn btn-primary btn-lg" href="install.html">Add to Chrome</a>
   </div>
 </section>

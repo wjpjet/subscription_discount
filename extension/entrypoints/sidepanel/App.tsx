@@ -2,7 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import { DEFAULTS, getSettings, saveSettings, type Settings } from '@/src/settings';
 import { originsFor } from '@/src/discovery';
-import { runScan, discardScan, savingLines, isBusy, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
+import { runScan, discardScan, isBusy, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
+import { dealLine } from '@/src/saving';
 import { acceptAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
 import { startCheckout, waitForCheckout, settle } from '@/src/payment';
 import { focusTab, closeTab } from '@/src/tabs';
@@ -122,7 +123,7 @@ export default function App() {
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
 
-  const right: Record<Screen, string> = { consent: 'Before we start', idle: settings.restrictedMode ? 'Restricted mode' : 'No account needed', scanning: 'Scanning…', reveal: settings.restrictedMode ? 'Restricted mode' : 'Scan complete', checkout: 'Checkout', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
+  const right: Record<Screen, string> = { consent: 'Before we start', idle: settings.restrictedMode ? 'Restricted mode' : 'Free to scan', scanning: 'Scanning…', reveal: settings.restrictedMode ? 'Restricted mode' : 'Scan complete', checkout: 'Checkout', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
   const openSettings = () => { returnTo.current = screen === 'settings' ? 'idle' : screen; setScreen('settings'); };
 
   return (
@@ -168,7 +169,7 @@ function Consent({ onAgree, onBack }: { onAgree: () => void; onBack: () => void 
         <li><b>Finding subscriptions:</b> it checks which sites you're signed into by looking at cookie <i>names</i> on this device. Cookie values, passwords, and your browsing history never leave your browser.</li>
         <li><b>Sent to our AI service:</b> the names of those sites, and the text of the account and cancellation pages it works on, so it can decide what to click. Nothing else.</li>
         <li><b>Acting on your behalf:</b> it opens those sites in background tabs and goes through their cancellation flows to reach the loyalty offer. It cannot press a final “confirm cancellation.”</li>
-        <li><b>Payment:</b> if you continue to checkout, Stripe saves your card and email. Nothing is charged until the run is done; then 10% of what was actually saved, once.</li>
+        <li><b>Payment:</b> if you continue to checkout, Stripe saves your card and email. Nothing is charged until the run is done; then 10% of what was actually saved.</li>
       </ul>
       <p className="fine left">We don't sell data or use it for ads. Full details: <a href={PRIVACY_URL} target="_blank" rel="noreferrer">privacy policy</a>.</p>
       <div className="spacer" />
@@ -226,24 +227,21 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
         </>
       ) : (
         <>
-          <div className="count">{found.length} subscription{found.length === 1 ? '' : 's'} found · {offers.length} made an offer</div>
-          {offers.length > 0 && <p className="sub hint">All ticked. <b>Untick any subscription you'd rather we leave alone.</b> We only go for the discount on the ones left ticked.</p>}
+          {offers.length > 0 && <div className="total"><small>{picked.length === offers.length ? 'You could save' : `${picked.length} of ${offers.length} picked · you could save`}</small><b>~{money(total)}</b><span>on your next bills, without cancelling anything.</span></div>}
+          <div className="count">{found.length} subscription{found.length === 1 ? '' : 's'} found · {offers.length} made an offer{offers.length > 0 ? ' · untick anything you\'d rather leave alone' : ''}</div>
           <div className="card">
             {offers.map((i) => { const on = !excluded.includes(i.id); return (
               <label className={`row pick${on ? '' : ' off'}`} key={i.id}>
                 <input type="checkbox" checked={on} onChange={() => onToggle(i.id)} aria-label={`Include ${i.name}`} />
                 <div className="rowmain">
                   <div className="rowline"><span>{i.name}</span><b className="amt">~{money(i.estSavings)}</b></div>
-                  {(() => { const L = savingLines(i); return (<>
-                    <span className="sub">{[i.email, L.now].filter(Boolean).join(' · ')}</span>
-                    <span className="sub offer">{L.offer}</span>
-                  </>); })()}
+                  {i.email && <span className="sub who">{i.email}</span>}
+                  <span className="sub deal">{dealLine(i)}</span>
                 </div>
               </label>
             ); })}
             {kept.map((i) => <div className="row skip" key={i.id}>{i.name}<span className="tag skip">{keptLabel(i)}</span></div>)}
           </div>
-          {offers.length > 0 && <div className="total"><small>{picked.length === offers.length ? 'You could save about' : `${picked.length} of ${offers.length} selected — you could save about`}</small><b>~{money(total)}</b><span>on your upcoming renewals — by not cancelling. These are the offers each service actually showed; the exact charge is confirmed on your billing page after the run.</span></div>}
         </>
       )}
       <div className="spacer" />

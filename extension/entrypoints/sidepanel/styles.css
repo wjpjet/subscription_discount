@@ -91,3 +91,8 @@ ul.consent i{font-style:italic}
 @keyframes wa-pulse{0%,100%{opacity:.45}50%{opacity:1}}
 .row.won .rowline span{font-weight:700}
 .row.col .sub{white-space:normal;line-height:1.35}
+
+/* Reveal rows: name and amount on the first line, who on the second, the deal on the third. */
+.rowmain .sub.who{color:var(--muted)}
+.rowmain .sub.deal{color:var(--ink);font-weight:600;white-space:normal;line-height:1.35}
+.total + .count{margin-top:12px}

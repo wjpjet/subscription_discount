@@ -21,7 +21,7 @@ you is cheaper than finding a new customer. Walkaway gets that price for you.
 2. Click once. It opens each service in a background tab, goes through the cancellation steps, and accepts
    the loyalty offer when it appears. It cannot press a final "confirm cancellation" — that action doesn't
    exist in the extension. If no offer appears, it backs out and nothing changes.
-3. You pay 10% of the savings we verify on your billing page, once. $0 if we save you nothing.
+3. You pay 10% of the savings we verify on your billing page. $0 if we save you nothing.
 
 You stay in control: the extension asks for site access at your first scan, restricted mode limits it to sites
 you list, and a blocklist names sites it must never touch. You can watch every run.

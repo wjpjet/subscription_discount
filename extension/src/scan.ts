@@ -16,7 +16,6 @@ import { discoverCandidates, type Candidate } from './discovery';
 import { openTab, waitForLoad, runInTab, closeTab, sleep } from './tabs';
 import { findAll, closePaused, type FindResult, type HuntStep, type PausedAt } from './hunt';
 import { money } from './format';
-export { savingLines } from './saving';
 import type { Settings } from './settings';
 import type { Offer, PageClass } from './types';
 

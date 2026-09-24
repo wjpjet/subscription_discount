@@ -1,11 +1,12 @@
 /**
- * The two plain lines a person sees per subscription: what they pay today and when, then what the
- * offer changes and when. Pure: no browser APIs, so it can be unit-tested with plain Node.
+ * The one line that explains a deal, in a person's words. Pure: no browser APIs, so it is unit-tested
+ * under plain Node (scripts/test-saving.cjs).
  *
- *   now:   "Paying $17.99/mo · next charge Oct 10"            or  "Free trial until Oct 10, then $17.99/mo"
- *   offer: "50% off for 3 months → $9.00/mo Oct 10 – Jan 10, back to $17.99/mo after · saves $26.99"
- *          "2 months free → $0 Oct 10 – Dec 10, then $17.99/mo · saves $35.98"
- *          "20% off your next year → $96 on Mar 3 2027 · saves $24"
+ *   "$17.99/mo → $9/mo for 3 months, from Oct 10"
+ *   "Free until Oct 10, then $9/mo instead of $17.99 for 3 months"
+ *   "2 months free from Oct 10, then $17.99/mo"
+ *   "$120/yr → $96 at your next renewal, Mar 3 2027"
+ * and, with no offer, what they pay today: "$17.99/mo, next charge Oct 10".
  */
 import { money } from './format';
 import type { Offer } from './types';
@@ -23,51 +24,50 @@ export function parseDate(s: string | null | undefined): Date | null {
   const d = m ? new Date(Number(m[1]), Number(m[2]) - 1, Number(m[3])) : new Date(String(s));
   return isNaN(d.getTime()) ? null : d;
 }
-export function addMonths(d: Date, n: number): Date { const x = new Date(d.getTime()); x.setMonth(x.getMonth() + n); return x; }
 export function fmtDate(d: Date | null, today = new Date()): string {
   if (!d) return '';
   const y = d.getFullYear() !== today.getFullYear() ? ` ${d.getFullYear()}` : '';
   return `${MONTH[d.getMonth()]} ${d.getDate()}${y}`;
 }
 /** Round half up the way a price is printed: 8.995 → 9.00, not 8.99. */
-const round2 = (x: number) => Math.round(x * 100 + 1e-9) / 100;   // 8.995*100 is 899.4999… in floating point
+const round2 = (x: number) => Math.round(x * 100 + 1e-9) / 100;
 const per = (cadence: string) => (cadence === 'year' ? 'yr' : cadence === 'week' ? 'wk' : 'mo');
+const months = (n: number) => `${n} month${n === 1 ? '' : 's'}`;
 
-export function savingLines(i: SavingInput, today = new Date()): { now: string; offer: string } {
+/** What they pay today, for rows with no offer. */
+export function payingLine(i: SavingInput, today = new Date()): string {
   const cad = per(i.cadence);
   const renewal = parseDate(i.renewalDate);
-  const trialEnd = parseDate(i.trialEndsOn) || renewal;
-  const paying = i.cycleCharge ?? i.monthlyPrice;
-  const fd = (d: Date | null) => fmtDate(d, today);
-
-  let now: string;
   if (i.isTrial) {
+    const end = parseDate(i.trialEndsOn) || renewal;
     const after = i.priceAfterTrial ?? i.monthlyPrice;
-    now = `Free trial${trialEnd ? ` until ${fd(trialEnd)}` : ''}${after != null ? `, then ${money(after)}/${cad}` : ''}`;
-  } else {
-    now = `Paying ${money(paying)}/${cad}${renewal ? ` · next charge ${fd(renewal)}` : ''}`;
+    return `Free${end ? ` until ${fmtDate(end, today)}` : ' trial'}${after != null ? `, then ${money(after)}/${cad}` : ''}`;
   }
-  if (!i.hasOffer || !i.offer) return { now, offer: '' };
+  return `${money(i.cycleCharge ?? i.monthlyPrice)}/${cad}${renewal ? `, next charge ${fmtDate(renewal, today)}` : ''}`;
+}
 
+/** The deal in one line: what they pay now → what they'll pay, for how long, from when. */
+export function dealLine(i: SavingInput, today = new Date()): string {
+  if (!i.hasOffer || !i.offer) return payingLine(i, today);
   const o = i.offer;
+  const cad = per(i.cadence);
+  const renewal = parseDate(i.renewalDate);
+  const start = i.isTrial ? (parseDate(i.trialEndsOn) || renewal) : renewal;
+  const from = start ? `from ${fmtDate(start, today)}` : 'from your next charge';
   const base = i.isTrial && i.priceAfterTrial != null ? i.priceAfterTrial : (i.monthlyPrice ?? 0);
-  const start = i.isTrial ? trialEnd : renewal;
-  const term = o.termMonths ?? o.freeMonths ?? 0;
-  const end = start && term ? addMonths(start, term) : null;
-  const when = start ? (end ? `${fd(start)} – ${fd(end)}` : `from ${fd(start)}`) : (term ? `for ${term} month${term === 1 ? '' : 's'} from your next charge` : 'from your next charge');
-  const saves = ` · saves ${money(i.estSavings)}`;
   let pct = o.discountPct ?? 0; if (pct > 1) pct /= 100;
+  const term = o.termMonths ?? 0;
 
   if (i.cadence === 'year') {
     const yearNow = i.cycleCharge ?? base * 12;
-    const next = o.newMonthlyPriceUsd != null ? o.newMonthlyPriceUsd * 12 : pct ? round2(yearNow * (1 - pct)) : null;
-    return { now, offer: `${pct ? `${Math.round(pct * 100)}% off your next year` : o.description} → ${next != null ? money(next) : '?'} on ${renewal ? fd(renewal) : 'your next renewal'}${saves}` };
+    const next = o.newMonthlyPriceUsd != null ? round2(o.newMonthlyPriceUsd * 12) : pct ? round2(yearNow * (1 - pct)) : null;
+    return `${money(yearNow)}/yr → ${next != null ? money(next) : o.description} at your next renewal${renewal ? `, ${fmtDate(renewal, today)}` : ''}`;
   }
   if (o.freeMonths && !o.newMonthlyPriceUsd) {
-    return { now, offer: `${o.freeMonths} month${o.freeMonths === 1 ? '' : 's'} free → $0 ${when}, then ${money(base)}/${cad}${saves}` };
+    return `${months(o.freeMonths)} free ${from}, then ${money(base)}/${cad}`;
   }
   const newPrice = o.newMonthlyPriceUsd != null ? o.newMonthlyPriceUsd : pct ? round2(base * (1 - pct)) : null;
-  const head = pct ? `${Math.round(pct * 100)}% off${term ? ` for ${term} month${term === 1 ? '' : 's'}` : ''}` : o.newMonthlyPriceUsd != null ? `${money(o.newMonthlyPriceUsd)}/${cad} instead of ${money(base)}` : o.description;
-  const arrow = newPrice != null && pct ? ` → ${money(newPrice)}/${cad}` : '';
-  return { now, offer: `${head}${arrow} ${when}${end ? `, back to ${money(base)}/${cad} after` : ''}${saves}` };
+  if (newPrice == null) return `${o.description || 'Offer'} ${from}`;
+  if (i.isTrial) return `Free until ${start ? fmtDate(start, today) : 'the trial ends'}, then ${money(newPrice)}/${cad} instead of ${money(base)}${term ? ` for ${months(term)}` : ''}`;
+  return `${money(base)}/${cad} → ${money(newPrice)}/${cad}${term ? ` for ${months(term)}` : ''}, ${from}`;
 }
