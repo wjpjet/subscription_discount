@@ -449,6 +449,45 @@ find phase report the terms the scenario actually shows, and did it report none 
 none) and the **estimate gap** (what the reveal would have shown against what the billing page
 verified after accepting). Real Gemini, full 100 scenarios, two phases: score 76, safety 100, achievable 100, win rate 73% at $0.0202 per scenario, unchanged from the single-phase baseline. **Offer accuracy 98%**: 64 of 65 achievable offer scenarios reported the terms the page actually showed, with 0 false offers on the 7 no-offer scenarios. **Estimate gap $0.00** mean over 64 wins, 57 of them exact to the cent. The reveal screen now shows what the billing page will confirm. The run took 14 minutes against 10, the cost of walking to the offer, pausing, and accepting as two phases. The rule-based mock, for comparison, scores offer accuracy 42% with a $5.74 mean gap, which is why the metric needed a real model to mean anything.
 
+## What a person sees per subscription, 2026-09-23
+
+Each ticked row now carries two plain lines under the name and email. The first says what is paid
+today and when the next charge lands: "Paying $17.99/mo · next charge Oct 10", or for a trial,
+"Free trial until Oct 10, then $17.99/mo". The second says what the offer changes and when:
+"50% off for 3 months → $9/mo Oct 10 – Jan 10 2027, back to $17.99/mo after · saves $26.99". Free
+months, fixed prices and annual plans each get their own shape ("2 months free → $0 Oct 10 – Dec 10,
+then $17.99/mo"; "20% off your next year → $96 on Mar 3 2027").
+
+To say that, the classifier reports four more facts from the account page: the actual charge per
+billing cycle (not the per-month normalisation), the next charge date as an ISO date, whether the
+plan is in a trial, and what it will cost afterwards. On a trial the saving is computed against the
+post-trial price, since the person pays nothing today. Verified on the testbed with Gemini for both
+a paid plan and a free trial (a `?trial=1` switch renders one without adding a scenario), and the
+formatter has a plain-Node unit test covering monthly, trial, free-months, fixed, annual, no-date
+and no-offer cases.
+
+## The cookie discovery, reviewed 2026-09-23
+
+How it works: every cookie in the browser is grouped by registrable domain, a hand-kept list of
+infrastructure domains is dropped, and a domain is kept as "signed in" if it has any HttpOnly cookie
+or any cookie whose *name* looks like a session (`sess`, `auth`, `token`, `sid`, `jwt`, and so on).
+Only the domain names go to the model, which says which are subscription services and where the
+account page usually is. The account page is then actually opened and read, and that read is what
+decides "signed in" and "paid plan" for real.
+
+Assessment: the cookie step is a heuristic, and a deliberately loose one. Almost every site you have
+merely visited sets an HttpOnly cookie, so "signed in" at that stage really means "has server-set
+cookies". That costs little, because the model only sees names and the page read is the truth. What
+matters is recall, and recall is high: session cookies are HttpOnly on nearly every site. The AI is
+used where it belongs, on world knowledge about domain names, and never sees a cookie.
+
+The weak link is the model's guess at the account page URL. A wrong guess lands on a login wall or a
+404, and the site is reported as "needs you to sign in" when the person is signed in. Two things
+would fix most of that: on a login wall, load the site's home page and classify that instead, and
+let the model give two candidate URLs rather than one. Both are on the list. Two limits are
+structural: subscriptions billed through Apple, Google or Amazon leave no cookie on the service's own
+domain, and services used only through native apps are invisible to a browser extension.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

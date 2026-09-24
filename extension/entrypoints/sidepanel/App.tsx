@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import { DEFAULTS, getSettings, saveSettings, type Settings } from '@/src/settings';
 import { originsFor } from '@/src/discovery';
-import { runScan, discardScan, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
+import { runScan, discardScan, savingLines, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
 import { acceptAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
 import { startCheckout, waitForCheckout, settle } from '@/src/payment';
 import { focusTab, closeTab } from '@/src/tabs';
@@ -215,7 +215,10 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
                 <input type="checkbox" checked={on} onChange={() => onToggle(i.id)} aria-label={`Include ${i.name}`} />
                 <div className="rowmain">
                   <div className="rowline"><span>{i.name}</span><b className="amt">~{money(i.estSavings)}</b></div>
-                  <span className="sub">{[i.email, i.offerText].filter(Boolean).join(' · ')}</span>
+                  {(() => { const L = savingLines(i); return (<>
+                    <span className="sub">{[i.email, L.now].filter(Boolean).join(' · ')}</span>
+                    <span className="sub offer">{L.offer}</span>
+                  </>); })()}
                 </div>
               </label>
             ); })}

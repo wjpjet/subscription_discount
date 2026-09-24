@@ -102,7 +102,7 @@ export function mockClassify(snapshot) {
   const monthly = monthlyFromPrices(snapshot.prices);
   const signedIn = !snapshot.hasPassword && (/(sign out|log out|your (subscription|plan|membership)|manage|billing)/.test(t));
   const offerApplied = /(offer applied|loyalty offer)/.test(t);
-  return { signedIn, hasPaidPlan: signedIn ? (monthly != null) : null, planName: null, accountEmail: (String(snapshot.text || '').match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/) || [null])[0], monthlyPriceUsd: monthly, cadence: monthly != null ? 'month' : 'unknown', renewalDate: null, offerApplied, offerText: null, confidence: 0.5, notes: 'mock classify' };
+  return { signedIn, hasPaidPlan: signedIn ? (monthly != null) : null, planName: null, accountEmail: (String(snapshot.text || '').match(/[\w.+-]+@[\w-]+(\.[\w-]+)+/) || [null])[0], monthlyPriceUsd: monthly, cycleChargeUsd: /free trial/i.test(t) ? 0 : monthly, cadence: monthly != null ? 'month' : 'unknown', renewalDate: (String(snapshot.text || '').match(/next billing(?: date)?:?\s*([A-Z][a-z]+ \d{1,2}, \d{4})/i) || [null, null])[1], isTrial: /free trial/i.test(t), trialEndsOn: (String(snapshot.text || '').match(/trial (?:until|ends?(?: on)?)\s*([A-Z][a-z]+ \d{1,2}, \d{4})/i) || [null, null])[1], priceAfterTrialUsd: (function () { const mm = String(snapshot.text || '').match(/then \$\s?(\d+(?:\.\d{2})?)\s*\/\s*month/i); return mm ? +mm[1] : null; })(), offerApplied, offerText: null, confidence: 0.5, notes: 'mock classify' };
 }
 
 /** Mock discovery knows nothing about the world; it only works in test mode. */

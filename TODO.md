@@ -36,6 +36,19 @@ Tested on the full suite through Together AI. Neither GLM-5.3-Flash nor DeepSeek
 close: best achievable 72 against Gemini's 100, and win rate is the revenue. Gemini 3.8 Flash stays.
 Numbers and reasoning in HISTORY.md. The Together key in `.env` can be revoked.
 
+## Then — scan quality
+
+- [ ] **Login wall fallback.** When the model's guessed account URL lands on a login wall, load the
+      site's home page and classify that before declaring "needs you to sign in". Also let discovery
+      return two candidate URLs. This is the main source of missed subscriptions.
+- [ ] **Show the steps during the scan.** The find pass already emits them; the scanning screen just
+      doesn't render them yet.
+- [ ] **Work in a minimized window, and shield paused tabs.** Chrome has no hidden tabs for a
+      signed-in site. The closest is a separate minimized window for all of Walkaway's tabs, plus an
+      overlay on each paused offer screen ("Walkaway is holding this offer for you") and a click
+      listener that pauses the run if a person touches the page. Decide first whether to keep tabs
+      paused at all or close-and-rewalk on accept; see HISTORY.md.
+
 ## Then — make it fewer steps
 
 The scan itself is fine. What is long is everything around it.

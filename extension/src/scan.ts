@@ -14,13 +14,15 @@ import { discoverCandidates, type Candidate } from './discovery';
 import { openTab, waitForLoad, runInTab, closeTab, sleep } from './tabs';
 import { findAll, closePaused, type HuntStep, type PausedAt } from './hunt';
 import { money } from './format';
+export { savingLines } from './saving';
 import type { Settings } from './settings';
 import type { Offer, PageClass } from './types';
 
 export type ItemStatus = 'signed_in' | 'login_wall' | 'no_paid_plan' | 'unknown' | 'error';
 export interface ScanItem {
   id: string; domain: string; name: string; accountUrl: string; source: string; status: ItemStatus;
-  monthlyPrice: number | null; planName: string | null; email: string | null; offerApplied: boolean; confidence: number;
+  monthlyPrice: number | null; cycleCharge: number | null; cadence: string; renewalDate: string | null; isTrial: boolean; trialEndsOn: string | null; priceAfterTrial: number | null;
+  planName: string | null; email: string | null; offerApplied: boolean; confidence: number;
   /** From the find pass. hasOffer is true only when an offer was actually seen. */
   hasOffer: boolean; offer: Offer | null; offerText: string; findOutcome: string | null; findReason?: string | null; paused: PausedAt | null; path: HuntStep[];
   estSavings: number; termMonths: number; discountPct: number;
@@ -63,7 +65,7 @@ export async function runScan(settings: Settings, onProgress: (p: ScanProgress) 
       const f = found.get(i.id); if (!f) continue;
       i.findOutcome = f.outcome; i.findReason = f.reason ?? null; i.offer = f.offer; i.paused = f.paused; i.path = f.path;
       i.hasOffer = f.outcome === 'offer_found' && !!f.paused;
-      const sv = offerSavings(f.offer, i.monthlyPrice);
+      const sv = offerSavings(f.offer, i.isTrial && i.priceAfterTrial != null ? i.priceAfterTrial : i.monthlyPrice);
       i.estSavings = i.hasOffer ? sv.savingsUsd : 0; i.termMonths = sv.termMonths; i.discountPct = sv.discountPct; i.offerText = i.hasOffer ? sv.text : '';
       if (!i.hasOffer) i.note = f.outcome === 'no_offer_backed_out' ? 'no offer this time' : f.outcome === 'blocked_needs_you' ? 'needs you to sign in' : f.outcome === 'ai_declined' ? 'left alone' : (f.reason || f.error || 'could not check');
     }
@@ -85,7 +87,7 @@ export async function discardScan(result: ScanResult | null): Promise<void> {
 }
 
 async function probe(c: Candidate, useApi: boolean): Promise<ScanItem> {
-  const base: ScanItem = { id: c.domain, domain: c.domain, name: c.name, accountUrl: c.accountUrl, source: c.source, status: 'unknown', monthlyPrice: null, planName: null, email: null, offerApplied: false, confidence: c.confidence, hasOffer: false, offer: null, offerText: '', findOutcome: null, paused: null, path: [], estSavings: 0, termMonths: 0, discountPct: 0, before: null };
+  const base: ScanItem = { id: c.domain, domain: c.domain, name: c.name, accountUrl: c.accountUrl, source: c.source, status: 'unknown', monthlyPrice: null, cycleCharge: null, cadence: 'unknown', renewalDate: null, isTrial: false, trialEndsOn: null, priceAfterTrial: null, planName: null, email: null, offerApplied: false, confidence: c.confidence, hasOffer: false, offer: null, offerText: '', findOutcome: null, paused: null, path: [], estSavings: 0, termMonths: 0, discountPct: 0, before: null };
   let tabId: number | undefined;
   try {
     tabId = await openTab(c.accountUrl, false);
@@ -99,6 +101,8 @@ async function probe(c: Candidate, useApi: boolean): Promise<ScanItem> {
     if (cls.hasPaidPlan === false) return { ...base, status: 'no_paid_plan' };
     base.status = 'signed_in';
     base.monthlyPrice = cls.monthlyPriceUsd; base.planName = cls.planName; base.email = cls.accountEmail ?? null; base.offerApplied = cls.offerApplied;
+    base.cycleCharge = cls.cycleChargeUsd ?? null; base.cadence = cls.cadence || 'unknown'; base.renewalDate = cls.renewalDate ?? null;
+    base.isTrial = !!cls.isTrial; base.trialEndsOn = cls.trialEndsOn ?? null; base.priceAfterTrial = cls.priceAfterTrialUsd ?? null;
     if (cls.offerApplied) base.note = 'a promotional price is already applied';
     return base;
   } catch (e: any) {
@@ -124,3 +128,4 @@ export function offerSavings(o: Offer | null, price: number | null): { savingsUs
   }
   return { savingsUsd: 0, termMonths: term, discountPct: pct, text: o.description || 'offer terms unclear' };
 }
+

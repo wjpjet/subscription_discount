@@ -82,3 +82,6 @@ ul.consent i{font-style:italic}
 
 .hint{margin:6px 0 10px;line-height:1.4}
 .hint b{color:var(--ink);font-weight:700}
+
+.rowmain .sub.offer{color:#177F55;white-space:normal;line-height:1.35}
+.rowmain .sub{white-space:normal;line-height:1.35}

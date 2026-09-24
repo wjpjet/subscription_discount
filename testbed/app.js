@@ -2,7 +2,7 @@
 (function () {
   var KEY = 'streamly.state';
   var SC = (window.WALKAWAY_SCENARIOS || []);
-  var DEFAULTS = { loggedIn: false, email: '', loginStep: 'creds', pendingEmail: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
+  var DEFAULTS = { loggedIn: false, email: '', loginStep: 'creds', pendingEmail: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, trial: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
   var S = load();
   function load() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return Object.assign({}, DEFAULTS); } }
   function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
@@ -125,6 +125,7 @@
   }
   function planBlock() { return '<div class="plan"><div><div class="plan-name">' + esc(S.plan) + '</div>' + priceLine() + '</div></div>'; }
   function priceLine() {
+    if (S.trial && !S.offerApplied) return '<div class="price">$0.00/month <span class="muted" style="font-size:14px;font-weight:500">free trial until ' + NEXT_BILLING + ', then ' + money(S.price) + '/month</span></div>';
     return S.offerApplied ? '<div class="price">' + money(S.offerPrice) + '/month <span class="muted" style="font-size:14px;font-weight:500">for ' + S.offerMonths + ' months, then ' + money(S.price) + '/month</span></div><span class="badge">Loyalty offer applied through ' + OFFER_END + '</span>' : '<div class="price">' + money(S.downgraded ? 6.99 : S.price) + '/month</div>';
   }
   function footerLinks() { var s = scn(); return '<div class="pagefoot"><a href="/browse" data-link>Help</a> · <a href="/browse" data-link>Terms</a> · <a href="/browse" data-link>Privacy</a>' + (s.entry.where === 'footer' ? ' · ' + entryLink() : '') + '</div>'; }
@@ -144,6 +145,8 @@
   function currentPath() { var p = location.pathname.replace(/\/+$/, ''); return p || '/'; }
 
   function render() {
+    var tq = new URLSearchParams(location.search).get('trial');   // ?trial=1 → the plan is a free trial; ?trial=0 → back to paid
+    if (tq != null && (tq === '1') !== !!S.trial) { S.trial = tq === '1'; save(); }
     var q = new URLSearchParams(location.search).get('scenario');
     if (q && SC.some(function (s) { return s.id === q; })) { if (q !== S.scenarioId) { Object.assign(S, { scenarioId: q, offerApplied: false, cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} }); save(); } history.replaceState({}, '', location.pathname); }
     var path = currentPath();

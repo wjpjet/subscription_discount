@@ -16,7 +16,8 @@
     "cf:deploy": "wrangler deploy",
     "cf:tail": "wrangler tail",
     "verify": "node --env-file-if-exists=.env scripts/verify-worker.mjs",
-    "check:email": "node --env-file-if-exists=.env scripts/check-email.mjs"
+    "check:email": "node --env-file-if-exists=.env scripts/check-email.mjs",
+    "test:saving": "node scripts/test-saving.cjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
