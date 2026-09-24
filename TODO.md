@@ -70,7 +70,11 @@ The scan itself is fine. What is long is everything around it.
 ## Before real users
 
 - [ ] Real contact email in `landing/privacy.html` and `landing/terms.html`, replacing the
-      placeholders.
+      placeholders (`privacy@walkaway.example`, `hello@walkaway.example`).
+- [ ] **Trust on the landing page.** Nothing on it says who is behind Walkaway. Add a short, real
+      "who we are" line with a contact email, and the Chrome Web Store badge once listed. Never
+      invent testimonials. Until the store listing exists, "Add to Chrome" leads to a developer-mode
+      install, which is where most visitors will drop off.
 - [ ] Three to five screenshots at 1280×800 and a 440×280 tile.
 - [ ] Chrome Web Store developer account, $5 one-time.
 - [ ] Short demo video for the reviewer, recorded against Streamly.
