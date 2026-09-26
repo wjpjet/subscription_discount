@@ -3,12 +3,13 @@ import { browser } from '#imports';
 import { DEFAULTS, getSettings, saveSettings, type Settings } from '@/src/settings';
 import { originsFor } from '@/src/discovery';
 import { runScan, discardScan, isBusy, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
-import { dealLine } from '@/src/saving';
+import { dealLine, payingLine } from '@/src/saving';
 import { acceptAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
 import { startCheckout, waitForCheckout, settle } from '@/src/payment';
 import { focusTab, closeTab } from '@/src/tabs';
 import { money, outcomeLabel } from '@/src/format';
 import type { CheckoutResult, Settlement } from '@/src/types';
+import { traceStart, traceEnd, trace, lastLog, downloadLog } from '@/src/trace';
 
 type Screen = 'idle' | 'consent' | 'scanning' | 'reveal' | 'checkout' | 'hunting' | 'done' | 'settings' | 'error';
 const SITE = ((import.meta as any).env?.WXT_API_BASE || '').replace(/\/+$/, '');
@@ -55,10 +56,21 @@ export default function App() {
         const ok = await browser.permissions.request({ origins });
         if (!ok) { setError("Walkaway needs permission to check which sites you're signed into. Nothing runs without it."); return; }
       }
-      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
-      const r = await runScan(s, setProgress);
-      setResult(r); setScreen('reveal');
+      await scanNow(s);
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
+  }
+  /** Run a scan; in test mode, record everything about it. */
+  async function scanNow(s: Settings) {
+    setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
+    if (s.testMode) await traceStart(await runMeta(s), { pageText: s.testPageText });
+    try {
+      const r = await runScan(s, setProgress);
+      if (s.testMode) await traceEnd(scanSummary(r));
+      setResult(r); setScreen('reveal');
+    } catch (e: any) {
+      if (s.testMode) { trace('run.error', { error: String(e?.message || e), stack: String(e?.stack || '').slice(0, 1500) }); await traceEnd({ error: String(e?.message || e) }); }
+      throw e;
+    }
   }
   async function agreeAndScan() {
     await browser.storage.local.set({ consentAt: Date.now() });
@@ -71,9 +83,7 @@ export default function App() {
         const ok = await browser.permissions.request({ origins });
         if (!ok) { setError("Walkaway needs permission to check which sites you're signed into. Nothing runs without it."); setScreen('idle'); return; }
       }
-      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
-      const r = await runScan(s, setProgress);
-      setResult(r); setScreen('reveal');
+      await scanNow(s);
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
   async function rescan() { await discardScan(result); setResult(null); setHunt(EMPTY_HUNT); setExcluded([]); await startScan(); }
@@ -82,6 +92,7 @@ export default function App() {
   async function startHunt() {
     if (!result) return;
     const s = await getSettings(); setSettings(s);
+    if (s.testMode) return;   // test mode never accepts an offer and never charges
     // The services still ticked (all are ticked by default), best offer first, capped. Every figure was observed during the scan.
     const offers = result.items.filter((i) => i.hasOffer);
     const targets = offers.filter((i) => !excluded.includes(i.id)).slice(0, Math.max(1, s.maxHunts || 10));
@@ -123,7 +134,8 @@ export default function App() {
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
 
-  const right: Record<Screen, string> = { consent: 'Before we start', idle: settings.restrictedMode ? 'Restricted mode' : 'Free to scan', scanning: 'Scanning…', reveal: settings.restrictedMode ? 'Restricted mode' : 'Scan complete', checkout: 'Checkout', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
+  const modeLabel = settings.testMode ? (settings.testFind ? 'Test mode · finds offers' : 'Test mode · read-only') : settings.restrictedMode ? 'Restricted mode' : null;
+  const right: Record<Screen, string> = { consent: 'Before we start', idle: modeLabel || 'Free to scan', scanning: settings.testMode ? 'Scanning · logging' : 'Scanning…', reveal: modeLabel || 'Scan complete', checkout: 'Checkout', hunting: 'Hunting…', done: 'Done', settings: 'Settings', error: 'Something went wrong' };
   const openSettings = () => { returnTo.current = screen === 'settings' ? 'idle' : screen; setScreen('settings'); };
 
   return (
@@ -134,10 +146,10 @@ export default function App() {
         <span className="r">{right[screen]}</span>
         <button className="gear" title="Settings" onClick={openSettings} aria-label="Settings">⚙</button>
       </div>
-      {screen === 'idle' && <Idle onScan={startScan} error={error} restricted={settings.restrictedMode} />}
+      {screen === 'idle' && <Idle onScan={startScan} error={error} restricted={settings.restrictedMode} testMode={settings.testMode} testFind={settings.testFind} />}
       {screen === 'consent' && <Consent onAgree={agreeAndScan} onBack={() => setScreen('idle')} />}
       {screen === 'scanning' && <Scanning progress={progress} />}
-      {screen === 'reveal' && result && <Reveal result={result} excluded={excluded} onToggle={toggle} onHunt={startHunt} onRescan={rescan} restricted={settings.restrictedMode} skipPayment={settings.skipPayment} />}
+      {screen === 'reveal' && result && <Reveal result={result} excluded={excluded} onToggle={toggle} onHunt={startHunt} onRescan={rescan} restricted={settings.restrictedMode} skipPayment={settings.skipPayment} testMode={settings.testMode} />}
       {screen === 'checkout' && <Checkout msg={checkoutMsg} onCancel={() => { cancelCheckout.current = true; }} />}
       {screen === 'hunting' && <Hunting hunt={hunt} watch={settings.watch} />}
       {screen === 'done' && <Done hunt={hunt} onRescan={rescan} onAgain={startHunt} />}
@@ -147,10 +159,11 @@ export default function App() {
   );
 }
 
-function Idle({ onScan, error, restricted }: { onScan: () => void; error: string | null; restricted: boolean }) {
+function Idle({ onScan, error, restricted, testMode, testFind }: { onScan: () => void; error: string | null; restricted: boolean; testMode: boolean; testFind: boolean }) {
   return (
     <div className="body">
       <h1>Find your <em>loyalty discounts.</em></h1>
+      {testMode && <p className="testnote"><b>Test mode.</b> {testFind ? 'It will walk each cancellation flow up to the offer and stop there.' : 'Read-only: it reads account pages and opens no cancellation flow.'} Nothing is accepted and nothing is charged. Everything is logged; download the log when it finishes.{restricted ? ' Restricted mode is on, so only allowlisted sites are scanned.' : ''}</p>}
       <p>{restricted ? 'Restricted mode: only the sites in your allowlist are scanned and hunted.' : "We'll check which subscription services you're signed into — locally in your browser, sending only the site names to identify subscriptions — and show you what you could save on your upcoming renewals."}</p>
       {error && <p className="err">{error}</p>}
       <div className="spacer" />
@@ -211,7 +224,7 @@ function Scanning({ progress }: { progress: ScanProgress | null }) {
   );
 }
 
-function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skipPayment }: { result: ScanResult; excluded: string[]; onToggle: (id: string) => void; onHunt: () => void; onRescan: () => void; restricted: boolean; skipPayment: boolean }) {
+function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skipPayment, testMode }: { result: ScanResult; excluded: string[]; onToggle: (id: string) => void; onHunt: () => void; onRescan: () => void; restricted: boolean; skipPayment: boolean; testMode: boolean }) {
   const [details, setDetails] = useState(false);
   const found = result.items.filter((i) => i.status === 'signed_in' || i.status === 'unknown');
   const offers = found.filter((i) => i.hasOffer);
@@ -240,13 +253,24 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
                 </div>
               </label>
             ); })}
-            {kept.map((i) => <div className="row skip" key={i.id}>{i.name}<span className="tag skip">{keptLabel(i)}</span></div>)}
+            {kept.map((i) => (
+              <div className="row col skip" key={i.id}>
+                <div className="rowline"><span>{i.name}</span><span className="tag skip">{keptLabel(i)}</span></div>
+                {(i.email || i.monthlyPrice != null || i.isTrial) && <span className="sub">{[i.email, i.status === 'signed_in' ? payingLine(i) : null].filter(Boolean).join(' · ')}</span>}
+              </div>
+            ))}
           </div>
         </>
       )}
       <div className="spacer" />
-      <button className="btn" onClick={onHunt} disabled={picked.length === 0}>Get these discounts →</button>
-      <p className="fine">{skipPayment ? 'Payment skipped (testing). ' : 'No charge now. After the run: 15% of what was actually saved, $0 if nothing. '}It cannot press “confirm cancellation” — that action doesn't exist in its toolset.</p>
+      {testMode ? (<>
+        <button className="btn" onClick={async () => { const l = await lastLog(); if (l) downloadLog(l); }}>Download test log</button>
+        {result.items.some((i) => i.paused) && <button className="btn ghost" onClick={async () => { for (const i of result.items) if (i.paused) { await closeTab(i.paused.tabId); i.paused = null; } }}>Close the tabs held on offers</button>}
+        <p className="fine">Test mode: nothing was accepted and nothing will be charged. The tabs held on offer screens are real; leave them or close them.</p>
+      </>) : (<>
+        <button className="btn" onClick={onHunt} disabled={picked.length === 0}>Get these discounts →</button>
+        <p className="fine">{skipPayment ? 'Payment skipped (testing). ' : 'No charge now. After the run: 15% of what was actually saved, $0 if nothing. '}It cannot press “confirm cancellation” — that action doesn't exist in its toolset.</p>
+      </>)}
       <p className="links"><a onClick={onRescan}>Rescan</a> · <a onClick={() => setDetails(!details)}>{details ? 'Hide' : 'Show'} details</a></p>
       {details && <DevTable items={result.items} />}
     </div>
@@ -260,6 +284,7 @@ function keptLabel(i: ScanItem): string {
   if (i.offerApplied) return 'Promo active · kept';
   if (i.findOutcome === 'no_offer_backed_out') return 'No offer this time · left alone';
   if (i.findOutcome === 'blocked_needs_you') return 'Needs you to sign in';
+  if (i.findOutcome === 'not_walked') return 'Signed in · not walked (read-only)';
   if (i.findOutcome == null) return 'Not checked';
   return "Couldn't check · left alone";
 }
@@ -345,6 +370,11 @@ function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; on
       <label className="check"><input type="checkbox" checked={s.watch} onChange={(e) => setS({ ...s, watch: e.target.checked })} /> Watch mode — open the hunt tab in front and leave it open</label>
       <label>Max services per run <span className="hint">highest estimated savings first</span><input type="number" min={1} max={30} {...f('maxHunts')} /></label>
       <label>Max steps per service<input type="number" min={5} max={40} {...f('maxSteps')} /></label>
+      <h2 className="settings-h">Test mode</h2>
+      <label className="check"><input type="checkbox" checked={s.testMode} onChange={(e) => setS({ ...s, testMode: e.target.checked })} /> Test mode — scan and log everything; never accept an offer, never charge</label>
+      <label className="check"><input type="checkbox" checked={s.testFind} disabled={!s.testMode} onChange={(e) => setS({ ...s, testFind: e.target.checked })} /> Also walk cancellation flows to find offers <span className="hint">off = read-only: account pages only, no cancellation flow opened</span></label>
+      <label className="check"><input type="checkbox" checked={s.testPageText} disabled={!s.testMode} onChange={(e) => setS({ ...s, testPageText: e.target.checked })} /> Include page text in the log <span className="hint">helps find bugs; may contain your name or address; long numbers are removed</span></label>
+      <button className="btn ghost" onClick={async () => { const l = await lastLog(); if (l) downloadLog(l); else alert('No test log yet. Turn on test mode and run a scan.'); }}>Download last test log</button>
       <div className="spacer" />
       <button className="btn" onClick={() => onSave(s)}>Save</button>
       <button className="btn ghost" onClick={onCancel}>Cancel</button>
@@ -371,4 +401,25 @@ function DevTable({ items }: { items: ScanItem[] }) {
       <tbody>{items.map((i) => (<tr key={i.id} title={(i.url ?? '') + (i.note ? ' — ' + i.note : '')}><td>{i.name}</td><td>{i.status}</td><td>{i.source}</td><td>{i.monthlyPrice ?? '–'}</td><td>{i.estSavings || '–'}</td></tr>))}</tbody>
     </table>
   );
+}
+
+/** Everything about the environment that could explain a surprise in the log. */
+async function runMeta(s: Settings): Promise<Record<string, unknown>> {
+  const conn: any = (navigator as any).connection;
+  const { clientKey, ...safe } = s;
+  return {
+    extensionVersion: browser.runtime.getManifest().version, settings: { ...safe, clientKey: clientKey ? '(set)' : '' },
+    userAgent: navigator.userAgent, language: navigator.language, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+    network: conn ? { effectiveType: conn.effectiveType, downlinkMbps: conn.downlink, rttMs: conn.rtt, saveData: conn.saveData } : null,
+    startedAtLocal: new Date().toString(),
+  };
+}
+/** The result in one object: counts plus one compact row per service. */
+function scanSummary(r: ScanResult): Record<string, unknown> {
+  const by = (xs: string[]) => xs.reduce((o: Record<string, number>, x) => { o[x] = (o[x] || 0) + 1; return o; }, {});
+  return {
+    domainsChecked: r.domainsChecked, found: r.found, withOffers: r.withOffers, totalEstSavings: r.totalEstSavings,
+    byStatus: by(r.items.map((i) => i.status)), byFindOutcome: by(r.items.map((i) => i.findOutcome || '-')),
+    services: r.items.map((i) => ({ domain: i.domain, name: i.name, status: i.status, email: i.email, monthlyPrice: i.monthlyPrice, cycleCharge: i.cycleCharge, cadence: i.cadence, renewalDate: i.renewalDate, isTrial: i.isTrial, offerApplied: i.offerApplied, findOutcome: i.findOutcome, offer: i.offer, estSavings: i.estSavings, deal: i.hasOffer ? dealLine(i) : null, note: i.note ?? null })),
+  };
 }

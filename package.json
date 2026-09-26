@@ -18,7 +18,9 @@
     "verify": "node --env-file-if-exists=.env scripts/verify-worker.mjs",
     "check:email": "node --env-file-if-exists=.env scripts/check-email.mjs",
     "test:saving": "node scripts/test-saving.cjs",
-    "testbed:dev": "node scripts/testbed-dev.mjs"
+    "testbed:dev": "node scripts/testbed-dev.mjs",
+    "review-log": "node scripts/review-log.mjs",
+    "e2e:extension": "node scripts/e2e-extension.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

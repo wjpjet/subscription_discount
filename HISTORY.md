@@ -488,6 +488,27 @@ let the model give two candidate URLs rather than one. Both are on the list. Two
 structural: subscriptions billed through Apple, Google or Amazon leave no cookie on the service's own
 domain, and services used only through native apps are invisible to a browser extension.
 
+## Test mode for the first live run, 2026-09-26
+
+A switch in Settings that scans for real, logs everything, and never accepts an offer or charges.
+Two levels: **read-only** (default) opens account pages only and no cancellation flow; **find**
+also walks each cancellation flow to the offer and stops there. The log records the cookie funnel
+(counts only, never values), the model's verdict on every domain, each account page (load time,
+whether it timed out, redirects, the classifier's full answer, page text with long digit runs
+removed), every walk step (the page's buttons, what the model proposed, its one-line reasoning, what
+the guardrails changed, what was clicked, how long each part took), every API call (client time,
+server time, network time, tokens), retries and errors. Every backend response now carries
+`serverMs`, which separates a slow connection from a slow model.
+
+`npm run review-log -- <file>` turns a log into a report with automatic flags; `--svc=<domain>` shows
+one service step by step. `npm run e2e:extension` loads the real extension into Chrome and runs a
+test-mode scan against the local testbed, then checks the log and that the site was left untouched:
+19/19 read-only, 23/23 with walks, with the mock brain and with Gemini.
+
+Two real fixes came out of building it: a failed discovery chunk used to abort the whole scan and now
+skips just those domains; and subscriptions without an offer showed only their name, so a read-only
+scan told you nothing about what you pay. They now show the account and the price.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

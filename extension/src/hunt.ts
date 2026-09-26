@@ -21,6 +21,7 @@ import type { Settings } from './settings';
 import type { ScanItem } from './scan';
 import type { AgentAction, Decision, FinishDetails, Offer, PageClass, StepResponse } from './types';
 import { isBlocked, hostOf } from './lists';
+import { trace, snapSummary } from './trace';
 
 export interface HuntStep { step: number; url: string; state: string; action: AgentAction; target?: string; ok?: boolean; note?: string; guardrails?: string[]; ts: number }
 /** Where a find left off: the open tab and the accept button it stopped in front of. */
@@ -51,15 +52,28 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
   const out: LoopOut = { outcome: 'error', reason: 'step budget exhausted', details: null, offer: null, acceptId: null, acceptText: null, url: '' };
   for (let step = opts.startStep || 0; step <= maxSteps; step++) {
     if (stopRequested) { out.outcome = 'error'; out.reason = 'stopped by user'; break; }
+    const ts = Date.now();
     const snapshot = await runInTab(tabId, snapshotPage, [{ maxElements: 100, textChars: 3000 }]);
+    const snapMs = Date.now() - ts;
     out.url = snapshot.url;
-    if (isBlocked(hostOf(snapshot.url), settings.extraBlock)) { out.outcome = 'error'; out.reason = 'landed on a blocklisted site — stopped'; break; }
-    const res = await stepWithRetry({ runId: `${item.domain}-${Date.now()}`, merchant, goal: opts.goal, step, maxSteps, history, snapshot, priorPath: opts.priorPath || null });
+    if (isBlocked(hostOf(snapshot.url), settings.extraBlock)) { out.outcome = 'error'; out.reason = 'landed on a blocklisted site — stopped'; trace('step.blocked', { svc: item.domain, step, url: snapshot.url }); break; }
+    const tb = Date.now();
+    const res = await stepWithRetry({ runId: `${item.domain}-${Date.now()}`, merchant, goal: opts.goal, step, maxSteps, history, snapshot, priorPath: opts.priorPath || null }, item.domain, step);
+    const brainMs = Date.now() - tb;
     const local = applyGuardrails({ decision: res.decision as Decision, snapshot, history, merchantDomain: item.domain, step, maxSteps, goal: opts.goal });
     const decision: Decision = local.decision;
     const a = decision.action;
     const target = a.id != null ? (snapshot.elements.find((e) => e.id === a.id)?.text) : undefined;
     const rec: HuntStep = { step, url: snapshot.url, state: decision.state, action: a, target, guardrails: [...res.guardrails, ...local.notes], ts: Date.now() };
+    const stepTrace: Record<string, unknown> = {
+      svc: item.domain, goal: opts.goal, step, url: snapshot.url, offSite: hostOf(snapshot.url) !== '' && !hostOf(snapshot.url).endsWith(item.domain),
+      state: decision.state, reasoning: (res.decision as any)?.reasoning ?? null,
+      proposed: res.proposed ? { type: res.proposed.type, id: res.proposed.id ?? null } : null,
+      action: { type: a.type, id: a.id ?? null, target: target ?? null, outcome: a.outcome ?? null, url: a.url ?? null, text: a.type === 'type' ? a.text ?? null : undefined, reason: a.reason ?? null },
+      changedByGuardrail: !!res.proposed && res.proposed.type !== a.type, guardrails: rec.guardrails,
+      offer: a.offer ?? null, snapMs, brainMs, page: snapSummary(snapshot),
+    };
+    const ta = Date.now();
 
     if (a.type === 'finish' || a.type === 'back_out') {
       rec.ok = true; steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec });
@@ -67,20 +81,23 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
       out.reason = a.reason || null; out.details = a.details || null; out.offer = a.offer || null;
       if (a.type === 'finish' && a.outcome === 'offer_found') { out.acceptId = a.id ?? null; out.acceptText = target ?? null; }
       if (a.type === 'back_out' && /^ai_declined/.test(a.reason || '')) out.outcome = 'ai_declined';
+      trace('step', { ...stepTrace, terminal: true });
       break;
     }
     if (a.type === 'click' || a.type === 'accept_offer') {
       const live = await runInTab(tabId, readElement, [a.id]);
-      if (!live || isFinalizeClick(live.text, snapshot.text)) { rec.ok = false; rec.note = 'refused at click time: finalize/decline text or final-confirmation page'; steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec }); out.outcome = 'no_offer_backed_out'; out.reason = rec.note; break; }
+      if (!live || isFinalizeClick(live.text, snapshot.text)) { rec.ok = false; rec.note = 'refused at click time: finalize/decline text or final-confirmation page'; steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec }); out.outcome = 'no_offer_backed_out'; out.reason = rec.note; trace('step', { ...stepTrace, clickRefused: true, liveText: live?.text ?? null, note: rec.note }); break; }
       const r = await runInTab(tabId, performAction, [{ type: 'click', id: a.id }]); rec.ok = r.ok; rec.note = r.note;
-      await settleTab(tabId);
+      stepTrace.settle = await settleTab(tabId);
     } else if (a.type === 'type' || a.type === 'select' || a.type === 'scroll') {
       const r = await runInTab(tabId, performAction, [a]); rec.ok = r.ok; rec.note = r.note; await sleep(400);
     } else if (a.type === 'navigate' && a.url) {
       await navigateTab(tabId, a.url); await sleep(800); rec.ok = true;
     } else { await sleep(900); rec.ok = true; }
     steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec });
+    trace('step', { ...stepTrace, ok: rec.ok ?? null, note: rec.note ?? null, actMs: Date.now() - ta });
   }
+  if (out.reason === 'step budget exhausted') trace('step.budget_exhausted', { svc: item.domain, goal: opts.goal, maxSteps });
   return out;
 }
 
@@ -95,7 +112,9 @@ export async function findOne(item: ScanItem, settings: Settings, onEvent: (e: H
     if (isBlocked(item.domain, settings.extraBlock) || isBlocked(hostOf(item.accountUrl), settings.extraBlock)) throw new Error('blocklisted site — never explored');
     tabId = await openTab(item.accountUrl, false);   // the scan always works in the background
     onEvent({ type: 'start', item, tabId });
-    await waitForLoad(tabId); await sleep(1200);
+    const tl = Date.now();
+    const loaded = await waitForLoad(tabId); await sleep(1200);
+    trace('find.start', { svc: item.domain, accountUrl: item.accountUrl, loadMs: Date.now() - tl, loadTimedOut: !loaded });
     const out = await runLoop(tabId, item, settings, onEvent, steps, { goal: 'find' });
     result.outcome = out.outcome; result.reason = out.reason; result.offer = out.offer;
     if (out.outcome === 'offer_found') {
@@ -213,19 +232,22 @@ export async function acceptOne(item: ScanItem, settings: Settings, onEvent: (e:
 }
 
 /** The brain is remote; retry transient failures before giving up. No decision → no click. */
-async function stepWithRetry(body: unknown): Promise<StepResponse> {
+async function stepWithRetry(body: unknown, svc = '', step = -1): Promise<StepResponse> {
   let last: any;
   for (let i = 0; i < 3; i++) {
     try { return await apiPost<StepResponse>('/api/agent-step', body); }
-    catch (e: any) { last = e; if (/unauthorized|No API URL/i.test(String(e?.message))) break; if (i < 2) await sleep(1500 * (i + 1)); }
+    catch (e: any) { last = e; trace('step.retry', { svc, step, attempt: i + 1, error: String(e?.message || e) }); if (/unauthorized|No API URL/i.test(String(e?.message))) break; if (i < 2) await sleep(1500 * (i + 1)); }
   }
   throw new Error(`brain unavailable: ${String(last?.message || last)}`);
 }
 
-async function settleTab(tabId: number) {
+async function settleTab(tabId: number): Promise<{ navigated: boolean; loadTimedOut: boolean; ms: number }> {
+  const t0 = Date.now();
   const before = await tabUrl(tabId);
   await sleep(700);
   const after = await tabUrl(tabId);
-  if (before !== after) await waitForLoad(tabId, 8000);
+  let loadTimedOut = false;
+  if (before !== after) loadTimedOut = !(await waitForLoad(tabId, 8000));
   await sleep(500);
+  return { navigated: before !== after, loadTimedOut, ms: Date.now() - t0 };
 }

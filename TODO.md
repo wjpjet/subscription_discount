@@ -111,7 +111,21 @@ npm run suite:mock         # same, no API key needed
 npm run latency            # p50/p95 per endpoint
 npm run test:stripe        # 10 checks against Stripe test mode
 npm run package:extension  # build + zip + copy into landing/downloads
+npm run review-log -- <log> [--svc=domain] [--text]   # read a test-mode log
+npm run e2e:extension [-- --find] [--real]            # the real extension, in Chrome, on the testbed
 ```
+
+## First live run: test mode
+
+1. Reload the extension. Gear → turn **Test mode** on, leave **Also walk cancellation flows** off,
+   turn **Restricted mode** off so it looks at every site you're signed into. Save.
+2. Scan. It reads each account page and opens no cancellation flow. When it finishes, press
+   **Download test log**.
+3. `npm run review-log -- ~/Downloads/walkaway-test-log-<time>.json` and send me the output, or just
+   the path; I'll read it directly.
+4. When that looks right, turn **Also walk cancellation flows** on and scan again. Tabs stay open on
+   any offer screens it finds; nothing is accepted. Close them from the panel when done.
+5. Add any site you don't want touched to **Never explore** first (banks, work accounts).
 
 ## Testing by hand
 

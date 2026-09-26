@@ -18,5 +18,8 @@ export async function handle(req, fn) {
   const ip = req.headers.get('x-nf-client-connection-ip') || req.headers.get('x-forwarded-for') || 'local';
   if (rateLimited(ip)) return json({ error: 'rate limited' }, 429);
   let body; try { body = await req.json(); } catch { return json({ error: 'invalid JSON body' }, 400); }
-  try { return json(await fn(body)); } catch (e) { console.error(e); return json({ error: String((e && e.message) || e) }, 500); }
+  const t0 = Date.now();
+  // serverMs lets a client separate time spent on the network from time spent here (mostly the model).
+  try { const out = await fn(body); if (out && typeof out === 'object' && !Array.isArray(out)) out.serverMs = Date.now() - t0; return json(out); }
+  catch (e) { console.error(e); return json({ error: String((e && e.message) || e), serverMs: Date.now() - t0 }, 500); }
 }

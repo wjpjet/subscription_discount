@@ -15,6 +15,8 @@ import { apiAvailable, apiPost } from './api';
 import { discoverCandidates, type Candidate } from './discovery';
 import { openTab, waitForLoad, runInTab, closeTab, sleep } from './tabs';
 import { findAll, closePaused, type FindResult, type HuntStep, type PausedAt } from './hunt';
+import { trace, snapSummary } from './trace';
+import { hostOf } from './lists';
 import { money } from './format';
 import type { Settings } from './settings';
 import type { Offer, PageClass } from './types';
@@ -46,7 +48,10 @@ export async function runScan(settings: Settings, onProgress: (p: ScanProgress) 
   const emit = (p: Omit<ScanProgress, 'items' | 'totalEstSavings'>) => onProgress({ ...p, items: [...items].sort(order), totalEstSavings: +items.filter((i) => i.hasOffer).reduce((s, i) => s + i.estSavings, 0).toFixed(2) });
   try {
     emit({ phase: 'discover', done: 0, total: 0, message: 'Discovering…' });
+    let tp = Date.now();
     const { candidates, domainsChecked } = await discoverCandidates(settings, (message) => emit({ phase: 'discover', done: 0, total: 0, message }));
+    trace('phase', { phase: 'discover', ms: Date.now() - tp, candidates: candidates.map((c) => ({ domain: c.domain, name: c.name, accountUrl: c.accountUrl, source: c.source })) });
+    tp = Date.now();
     const useApi = await apiAvailable();
     let done = 0;
     emit({ phase: 'pages', done, total: candidates.length });
@@ -62,16 +67,26 @@ export async function runScan(settings: Settings, onProgress: (p: ScanProgress) 
       }
     }));
 
+    trace('phase', { phase: 'pages', ms: Date.now() - tp, probed: items.length, byStatus: countBy(items.map((i) => i.status)) });
+    tp = Date.now();
+
     // Pass 3: find the offers. Only confirmed, paid, not-already-discounted subscriptions are walked.
     const subs = items.filter((i) => i.status === 'signed_in' && !i.offerApplied);
-    let fdone = 0;
-    emit({ phase: 'find', done: 0, total: subs.length, message: 'Looking for loyalty offers…' });
-    const found = await findAll(subs, settings, (e) => {
-      if (e.type === 'start') { e.item.live = 'Starting the cancellation flow…'; emit({ phase: 'find', done: fdone, total: subs.length, current: e.item.name }); }
-      else if (e.type === 'step') { e.item.live = liveText(e.step); emit({ phase: 'find', done: fdone, total: subs.length, current: e.item.name }); }
-      else if (e.type === 'found') { applyFind(e.item, e.result); fdone++; emit({ phase: 'find', done: fdone, total: subs.length, current: e.item.name }); }
-    }, FIND_CONCURRENCY);
-    for (const i of subs) { const f = found.get(i.id); if (f && i.findOutcome == null) applyFind(i, f); }
+    if (settings.testMode && !settings.testFind) {
+      // Read-only test run: no cancellation flow is opened on any site.
+      for (const i of subs) { i.findOutcome = 'not_walked'; i.live = 'Read-only test: cancellation flow not opened'; }
+      trace('phase', { phase: 'find', skipped: true, reason: 'test mode, read-only', wouldWalk: subs.map((i) => i.domain) });
+    } else {
+      let fdone = 0;
+      emit({ phase: 'find', done: 0, total: subs.length, message: 'Looking for loyalty offers…' });
+      const found = await findAll(subs, settings, (e) => {
+        if (e.type === 'start') { e.item.live = 'Starting the cancellation flow…'; emit({ phase: 'find', done: fdone, total: subs.length, current: e.item.name }); }
+        else if (e.type === 'step') { e.item.live = liveText(e.step); emit({ phase: 'find', done: fdone, total: subs.length, current: e.item.name }); }
+        else if (e.type === 'found') { applyFind(e.item, e.result); fdone++; emit({ phase: 'find', done: fdone, total: subs.length, current: e.item.name }); }
+      }, FIND_CONCURRENCY);
+      for (const i of subs) { const f = found.get(i.id); if (f && i.findOutcome == null) applyFind(i, f); }
+      trace('phase', { phase: 'find', ms: Date.now() - tp, walked: subs.length, byOutcome: countBy(subs.map((i) => i.findOutcome || 'none')) });
+    }
 
     items.sort(order);
     const foundItems = items.filter((i) => i.status === 'signed_in' || i.status === 'unknown');
@@ -96,14 +111,21 @@ function blank(c: Candidate): ScanItem {
 /** Read one account page and fill the item in place. */
 async function probe(item: ScanItem, c: Candidate, useApi: boolean): Promise<void> {
   let tabId: number | undefined;
+  const t0 = Date.now();
+  const rec: Record<string, unknown> = { svc: c.domain, name: c.name, accountUrl: c.accountUrl };
   try {
     tabId = await openTab(c.accountUrl, false);
-    await waitForLoad(tabId, PAGE_TIMEOUT_MS);
+    const loaded = await waitForLoad(tabId, PAGE_TIMEOUT_MS);
+    rec.loadMs = Date.now() - t0; rec.loadTimedOut = !loaded;
     await sleep(SETTLE_MS);
     item.live = 'Reading the account page…';
     const snap = await runInTab(tabId, snapshotPage, [{ maxElements: 80, textChars: 4000 }]);
     item.url = snap?.url;
+    rec.finalUrl = snap?.url; rec.redirected = !!snap?.url && snap.url !== c.accountUrl; rec.leftSite = !!snap?.url && hostOf(snap.url) !== '' && !hostOf(snap.url).endsWith(c.domain);
+    rec.page = snapSummary(snap);
+    const tc = Date.now();
     const cls: PageClass = useApi ? (await apiPost<{ result: PageClass }>('/api/classify', { domain: c.domain, snapshot: snap })).result : mockClassify(snap);
+    rec.classifyMs = Date.now() - tc; rec.classify = cls;
     item.before = cls;
     if (!cls.signedIn) { item.status = 'login_wall'; item.live = 'Not signed in here'; return; }
     if (cls.hasPaidPlan === false) { item.status = 'no_paid_plan'; item.live = 'No paid plan on this account'; return; }
@@ -115,11 +137,16 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean): Promise<voi
     else item.live = `Signed in${item.monthlyPrice != null ? ` · ${money(item.monthlyPrice)}/mo` : ''} · waiting to look for an offer`;
   } catch (e: any) {
     item.status = 'error'; item.note = String(e?.message || e); item.live = "Couldn't open the account page";
-  } finally { if (tabId !== undefined) await closeTab(tabId); }
+    rec.error = item.note;
+  } finally {
+    if (tabId !== undefined) await closeTab(tabId);
+    trace('probe', { ...rec, ms: Date.now() - t0, status: item.status, email: item.email, monthlyPrice: item.monthlyPrice, cycleCharge: item.cycleCharge, cadence: item.cadence, renewalDate: item.renewalDate, isTrial: item.isTrial, offerApplied: item.offerApplied });
+  }
 }
 
 /** Record what the find pass saw, and say it in plain words. */
 function applyFind(i: ScanItem, f: FindResult): void {
+  trace('find.result', { svc: i.domain, name: i.name, outcome: f.outcome, reason: f.reason ?? null, error: f.error ?? null, offer: f.offer, paused: f.paused ? { url: f.paused.url, acceptText: f.paused.acceptText } : null, steps: f.path.length, price: i.monthlyPrice, isTrial: i.isTrial });
   i.findOutcome = f.outcome; i.findReason = f.reason ?? null; i.offer = f.offer; i.paused = f.paused; i.path = f.path;
   i.hasOffer = f.outcome === 'offer_found' && !!f.paused;
   const sv = offerSavings(f.offer, i.isTrial && i.priceAfterTrial != null ? i.priceAfterTrial : i.monthlyPrice);
@@ -175,3 +202,5 @@ export function offerSavings(o: Offer | null, price: number | null): { savingsUs
   }
   return { savingsUsd: 0, termMonths: term, discountPct: pct, text: o.description || 'offer terms unclear' };
 }
+
+function countBy(xs: string[]): Record<string, number> { const o: Record<string, number> = {}; for (const x of xs) o[x] = (o[x] || 0) + 1; return o; }
