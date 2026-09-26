@@ -281,6 +281,7 @@ function keptLabel(i: ScanItem): string {
   if (i.status === 'login_wall') return 'Not signed in';
   if (i.status === 'no_paid_plan') return 'No paid plan';
   if (i.status === 'error') return "Couldn't check";
+  if (i.status === 'sensitive') return 'Skipped · sensitive account';
   if (i.offerApplied) return 'Promo active · kept';
   if (i.findOutcome === 'no_offer_backed_out') return 'No offer this time · left alone';
   if (i.findOutcome === 'blocked_needs_you') return 'Needs you to sign in';
@@ -365,7 +366,7 @@ function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; on
       <label>Client key <span className="hint">only if WALKAWAY_CLIENT_KEY is set on the backend</span><input {...f('clientKey')} /></label>
       <label className="check"><input type="checkbox" checked={s.restrictedMode} onChange={(e) => setS({ ...s, restrictedMode: e.target.checked })} /> Restricted mode — scan and hunt <b>only</b> allowlisted sites (allowlist.json + below)</label>
       <label>Extra allowed sites <span className="hint">one per line: domain | name | account URL</span><textarea rows={3} value={s.extraAllow} onChange={(e) => setS({ ...s, extraAllow: e.target.value })} placeholder="streamly-testbed.netlify.app | Streamly | https://streamly-testbed.netlify.app/settings/subscription" /></label>
-      <label>Never explore <span className="hint">one domain per line; also blocklist.json. Applies in every mode.</span><textarea rows={2} value={s.extraBlock} onChange={(e) => setS({ ...s, extraBlock: e.target.value })} placeholder="bank.com" /></label>
+      <label>Never explore <span className="hint">one domain per line; also blocklist.json. Applies in every mode. Banks, government, health, insurance and payroll sites are always skipped, without needing to be listed.</span><textarea rows={2} value={s.extraBlock} onChange={(e) => setS({ ...s, extraBlock: e.target.value })} placeholder="bank.com" /></label>
       <label className="check"><input type="checkbox" checked={s.skipPayment} onChange={(e) => setS({ ...s, skipPayment: e.target.checked })} /> Skip payment — no card, no fee (testing only)</label>
       <label className="check"><input type="checkbox" checked={s.watch} onChange={(e) => setS({ ...s, watch: e.target.checked })} /> Watch mode — open the hunt tab in front and leave it open</label>
       <label>Max services per run <span className="hint">highest estimated savings first</span><input type="number" min={1} max={30} {...f('maxHunts')} /></label>

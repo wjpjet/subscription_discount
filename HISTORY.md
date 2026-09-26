@@ -509,6 +509,31 @@ Two real fixes came out of building it: a failed discovery chunk used to abort t
 skips just those domains; and subscriptions without an offer showed only their name, so a read-only
 scan told you nothing about what you pay. They now show the account and the price.
 
+## Never touching banks and the like, 2026-09-26
+
+Before the first live run. A bank has no subscription to save, and its dangerous buttons ("Cancel
+payment", "Stop autopay", "Close card") are not what the cancellation guardrails were tuned on. Before
+this change, a bank's domain name was among those sent to the model, which was told banks aren't
+subscriptions; safety rested on that one judgement. Now four independent layers, none of them the model:
+
+1. **Withheld before discovery.** A built-in list (banks, credit unions, card issuers, brokerages, crypto,
+   payment apps, lenders, credit bureaus, insurers, health portals, payroll and tax), every `.gov`,
+   `.mil`, `.bank`, `.edu` domain and country forms like `gov.uk`, and names containing bank, credit
+   union, fcu, brokerage, mortgage. Their names never leave the browser.
+2. **The model's category as a second net.** The prompt now says these are never subscriptions, and
+   any verdict filed under banking, finance, insurance, health, government or payroll is dropped.
+3. **A page check before any text is sent.** Two or more phrases like "routing number", "available
+   balance", "Zelle", "minimum payment", "policy number", "explanation of benefits" mark a page as
+   sensitive. It is skipped, and its text goes neither to the model nor into the test log.
+4. **A mid-walk stop.** A walk that reaches such a site or page, say through a "manage billing" link to
+   PayPal, stops without clicking. The backend enforces 3 and 4 as well, before the model is asked.
+
+These are absolute: they cannot be overridden from Settings. Over-matching only skips a site; under-
+matching is what layers 2 to 4 are for. Tested both ways: 109 unit cases (every bank caught; Netflix,
+gyms, phone plans, 1Password, QuickBooks kept) and an end-to-end run of the real extension where the
+browser held sessions for Chase, Bank of America, irs.gov and Navy Federal alongside Hulu and Netflix:
+only Hulu and Netflix were sent, and a Streamly page dressed as a bank dashboard was skipped unsent.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

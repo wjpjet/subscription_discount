@@ -20,7 +20,8 @@
     "test:saving": "node scripts/test-saving.cjs",
     "testbed:dev": "node scripts/testbed-dev.mjs",
     "review-log": "node scripts/review-log.mjs",
-    "e2e:extension": "node scripts/e2e-extension.mjs"
+    "e2e:extension": "node scripts/e2e-extension.mjs",
+    "test:sensitive": "node scripts/test-sensitive.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

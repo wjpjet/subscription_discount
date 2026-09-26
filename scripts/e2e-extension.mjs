@@ -2,6 +2,7 @@
 //   npm run e2e:extension               mock brain, read-only (no cancellation flow opened)
 //   npm run e2e:extension -- --find     mock brain, walks the cancellation flow to the offer
 //   npm run e2e:extension -- --find --real   real brain from .env (costs a few cents)
+//   npm run e2e:extension -- --sensitive     banks & co. are never sent, opened or walked
 //
 // Builds a test-only copy of the extension (WXT_E2E=1 → .output-e2e/, testbed hosts pre-granted), starts
 // the API and Streamly locally, loads the extension into Chrome, signs into Streamly, runs a test-mode
@@ -15,11 +16,66 @@ import { loginTestbed, sleep } from './lib/driver.mjs';
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const EXT = path.join(ROOT, 'extension', '.output-e2e', 'chrome-mv3');
 const CHROME = process.env.CHROME_PATH || '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome';
-const FIND = process.argv.includes('--find'), REAL = process.argv.includes('--real'), SHOW = process.argv.includes('--show');
+const SENSITIVE = process.argv.includes('--sensitive');
+const FIND = process.argv.includes('--find') || SENSITIVE, REAL = process.argv.includes('--real'), SHOW = process.argv.includes('--show');
 const API_PORT = 8788, TB_PORT = 8081, EMAIL = 'e2e.tester@example.com';
 const API = `http://127.0.0.1:${API_PORT}`, TB = `http://localhost:${TB_PORT}`;
 
 let pass = 0, fail = 0;
+
+/** Configure the panel, press Scan like a person, and return the finished test log. */
+async function scanOnce(panel, settings) {
+  await panel.evaluate(async (settings) => { await chrome.storage.local.remove(['testLog', 'scanResult', 'huntResults']); await chrome.storage.local.set({ settings, consentAt: Date.now() }); }, settings);
+  await panel.reload({ waitUntil: 'load' });
+  await panel.waitForFunction(() => /Test mode/.test(document.body.innerText), { timeout: 10000 }).catch(() => {});
+  await panel.click('::-p-text(Scan my subscriptions)');
+  let log = null;
+  for (let i = 0; i < 300; i++) { await sleep(1000); log = (await panel.evaluate(async () => (await chrome.storage.local.get('testLog')).testLog)) || null; if (log?.endedAt) break; }
+  return log;
+}
+
+/** Banks and the like: withheld before discovery, skipped by the page check, never walked. */
+async function sensitiveChecks(browser, extId) {
+  const site = await browser.newPage();
+  await loginTestbed(site, TB, EMAIL);
+  await site.goto(`${TB}/?scenario=S001`, { waitUntil: 'load' });
+  await site.goto(`${TB}/settings/subscription?bank=1`, { waitUntil: 'load' });   // Streamly now reads like online banking
+  const panel = await browser.newPage();
+  await panel.goto(`chrome-extension://${extId}/sidepanel.html`, { waitUntil: 'load' });
+  const base = { apiBase: API, testMode: true, testFind: true, testPageText: true, skipPayment: true, maxSteps: 20 };
+
+  console.log('\n-- page check: an account page that reads like a bank --');
+  let log = await scanOnce(panel, { ...base, restrictedMode: true });
+  check('scan finished', !!log?.endedAt, log ? `${log.events.length} events` : 'no log');
+  const ev = (k) => (log?.events || []).filter((e) => e.kind === k);
+  const pr = ev('probe').find((p) => p.svc === 'localhost');
+  check('bank-like page marked sensitive', pr?.status === 'sensitive', `${pr?.status} · ${pr?.sensitive}`);
+  check('its text was never sent to the model', !ev('api').some((a) => a.path === '/api/classify' && a.svc === 'localhost'), '');
+  check('its text is not in the log either', !pr?.page?.text, '');
+  check('no walk was started on it', !ev('find.start').some((e) => e.svc === 'localhost') && !ev('step').some((e) => e.svc === 'localhost'), '');
+  const st1 = await site.evaluate(() => JSON.parse(localStorage.getItem('streamly.state') || '{}'));
+  check('site untouched', st1.cancelled === false && st1.offerApplied === false && !st1.paused && !st1.downgraded, '');
+  await site.goto(`${TB}/settings/subscription?bank=0`, { waitUntil: 'load' });
+
+  console.log('\n-- discovery: signed into banks, irs.gov, Hulu and Netflix --');
+  const sess = (domain) => ({ name: 'session_id', value: 'x', domain, path: '/', httpOnly: true, secure: true, sameSite: 'Lax' });
+  await browser.defaultBrowserContext().setCookie(sess('.chase.com'), sess('.bankofamerica.com'), sess('.irs.gov'), sess('.navyfederal.org'), sess('.hulu.com'), sess('.netflix.com'));
+  log = await scanOnce(panel, { ...base, restrictedMode: false });
+  check('scan finished', !!log?.endedAt, log ? `${log.events.length} events` : 'no log');
+  const ev2 = (k) => (log?.events || []).filter((e) => e.kind === k);
+  const held = (ev2('discover.withheld')[0]?.sites || []).map((x) => x.d);
+  const sent = (ev2('discover.cookies')[0]?.sites_sent || []).map((x) => x.d);
+  for (const d of ['chase.com', 'bankofamerica.com', 'irs.gov', 'navyfederal.org']) {
+    check(`${d} withheld`, held.includes(d), '');
+    check(`${d} never sent to the model`, !sent.includes(d), '');
+  }
+  check('Hulu and Netflix were sent as normal', sent.includes('hulu.com') && sent.includes('netflix.com'), sent.join(', '));
+  check('no bank page was opened', !ev2('probe').some((p) => ['chase.com', 'bankofamerica.com', 'irs.gov', 'navyfederal.org'].includes(p.svc)), '');
+
+  const out = path.join(ROOT, 'results', `e2e-test-log-sensitive-${new Date().toISOString().replace(/[:.]/g, '-')}.json`);
+  fs.mkdirSync(path.dirname(out), { recursive: true }); fs.writeFileSync(out, JSON.stringify(log, null, 2));
+  console.log(`\nlog saved → ${path.relative(ROOT, out)}`);
+}
 const check = (name, ok, info = '') => { console.log(`${ok ? 'PASS' : 'FAIL'}  ${name}${info ? '  — ' + info : ''}`); ok ? pass++ : fail++; };
 
 console.log(`building the E2E extension (${FIND ? 'find' : 'read-only'}, ${REAL ? 'real brain' : 'mock brain'})…`);
@@ -36,6 +92,7 @@ try {
   const sw = await browser.waitForTarget((t) => t.type() === 'service_worker' && t.url().startsWith('chrome-extension://'), { timeout: 15000 });
   const extId = new URL(sw.url()).host;
   check('extension loaded', !!extId, extId);
+  if (SENSITIVE) { await sensitiveChecks(browser, extId); } else {
 
   // Sign into the local Streamly and pick the scenario with a 50%-for-3-months offer.
   const site = await browser.newPage();
@@ -107,6 +164,7 @@ try {
 
   console.log(`\nlog saved → ${path.relative(ROOT, out)}\n`);
   console.log(execSync(`node scripts/review-log.mjs "${out}"`, { cwd: ROOT, encoding: 'utf8' }));
+  }
 } catch (e) {
   check('e2e ran without throwing', false, String(e?.stack || e).slice(0, 600));
 } finally {

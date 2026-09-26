@@ -22,6 +22,7 @@ import type { ScanItem } from './scan';
 import type { AgentAction, Decision, FinishDetails, Offer, PageClass, StepResponse } from './types';
 import { isBlocked, hostOf } from './lists';
 import { trace, snapSummary } from './trace';
+import { financialPageReason } from '../../shared/sensitive.js';
 
 export interface HuntStep { step: number; url: string; state: string; action: AgentAction; target?: string; ok?: boolean; note?: string; guardrails?: string[]; ts: number }
 /** Where a find left off: the open tab and the accept button it stopped in front of. */
@@ -56,7 +57,9 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
     const snapshot = await runInTab(tabId, snapshotPage, [{ maxElements: 100, textChars: 3000 }]);
     const snapMs = Date.now() - ts;
     out.url = snapshot.url;
-    if (isBlocked(hostOf(snapshot.url), settings.extraBlock)) { out.outcome = 'error'; out.reason = 'landed on a blocklisted site — stopped'; trace('step.blocked', { svc: item.domain, step, url: snapshot.url }); break; }
+    if (isBlocked(hostOf(snapshot.url), settings.extraBlock)) { out.outcome = 'error'; out.reason = 'landed on a blocked or sensitive site — stopped'; trace('step.blocked', { svc: item.domain, step, url: snapshot.url }); break; }
+    const fin = financialPageReason(snapshot.text);
+    if (fin) { out.outcome = 'error'; out.reason = 'reached a banking or other sensitive page — stopped, nothing clicked'; trace('step.sensitive_page', { svc: item.domain, step, url: snapshot.url, why: fin }); break; }
     const tb = Date.now();
     const res = await stepWithRetry({ runId: `${item.domain}-${Date.now()}`, merchant, goal: opts.goal, step, maxSteps, history, snapshot, priorPath: opts.priorPath || null }, item.domain, step);
     const brainMs = Date.now() - tb;

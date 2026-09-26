@@ -2,6 +2,7 @@
 import allowJson from '../allowlist.json';
 import blockJson from '../blocklist.json';
 import { etld1 } from '../../shared/domains.js';
+import { sensitiveReason } from '../../shared/sensitive.js';
 export interface AllowEntry { domain: string; name?: string; accountUrl?: string }
 export interface BlockEntry { domain: string; reason?: string }
 
@@ -17,9 +18,13 @@ export function allowlist(extra: string): AllowEntry[] {
   return out;
 }
 export function blocklist(extra: string): BlockEntry[] { return [...(blockJson as BlockEntry[]), ...parseBlockLines(extra)]; }
-/** True if host is a blocklisted domain or a subdomain of one. */
-export function isBlocked(host: string, extra: string): boolean {
+/** Why a host must never be explored: the built-in never-touch rules (banks, government, health...)
+ *  first, then your blocklist. Null when it's fine. Applies in every mode and cannot be overridden. */
+export function blockReason(host: string, extra: string): string | null {
   const h = (host || '').toLowerCase(); const d = etld1(h);
-  return blocklist(extra).some((b) => h === b.domain || h.endsWith('.' + b.domain) || d === b.domain);
+  const s = sensitiveReason(h); if (s) return s;
+  return blocklist(extra).some((b) => h === b.domain || h.endsWith('.' + b.domain) || d === b.domain) ? 'on your never-explore list' : null;
 }
+/** True if host is off limits: a never-touch site, or a blocklisted domain or a subdomain of one. */
+export function isBlocked(host: string, extra: string): boolean { return blockReason(host, extra) != null; }
 export function hostOf(url: string): string { try { return new URL(url).hostname.toLowerCase(); } catch { return ''; } }

@@ -77,6 +77,8 @@ console.log('\nDISCOVERY');
 if (rs) console.log(`  restricted mode: allowlist ${rs.allowlist.join(', ')}${rs.blocked.length ? ' · blocked ' + rs.blocked.join(', ') : ''}`);
 if (ck) {
   console.log(`  ${ck.cookies} cookies → ${ck.sites} sites → ${ck.infraSites} infrastructure dropped → ${ck.noSessionCookie} without a session-like cookie → ${ck.signedInLike} signed-in-like${ck.dropped ? ` → ${ck.dropped} DROPPED by the ${ck.cappedAt} cap` : ''} (${s(ck.ms)})`);
+  const wh = one('discover.withheld');
+  if (wh?.count) console.log(`  withheld before sending (banks, government, health, payroll…): ${wh.count} — ${wh.sites.map((x) => x.d).join(', ')}`);
   if (ck.dropped) flag('medium', `${ck.dropped} signed-in-like sites dropped by the ${ck.cappedAt}-site cap`, (ck.sites_dropped_by_cap || []).slice(0, 20).join(', '));
 }
 if (vd) {
@@ -85,6 +87,7 @@ if (vd) {
   for (const x of vd.subscription.filter((x) => !x.accountUrl)) flag('medium', `no account URL guessed for ${x.domain}`, 'probed at https://www.<domain>/account, which is often wrong');
   if (vd.failed) flag('high', `${vd.failed} domains never classified (discover call failed)`, '');
 }
+for (const e of of('discover.dropped_by_category')) flag('info', 'the model filed some "subscriptions" under a sensitive category; dropped', e.sites.map((x) => `${x.d} (${x.category})`).join(', '));
 for (const e of of('discover.missing')) flag('low', 'model skipped some domains', e.domains.join(', '));
 for (const e of of('discover.chunk_failed')) flag('high', 'a discover chunk failed', `${e.error} · ${e.domains.length} domains`);
 
@@ -102,6 +105,7 @@ if (probes.length) {
     if (p.status === 'signed_in' && p.monthlyPrice == null && !p.isTrial) flag('medium', `${p.svc}: signed in but no price read`, `the offer can't be valued; page title "${p.page?.title}"`);
     if (p.status === 'signed_in' && !p.email) flag('low', `${p.svc}: no account email found on the page`, '');
     if (p.status === 'error') flag('high', `${p.svc}: probe error`, p.error);
+    if (p.status === 'sensitive') flag('info', `${p.svc}: skipped as a sensitive account, nothing sent`, `${p.sensitive} · landed on ${p.finalUrl}. If this is a normal subscription, the page check is too strict`);
     if (p.isTrial) flag('info', `${p.svc}: on a trial`, `after trial ${$(p.classify?.priceAfterTrialUsd)}, trial ends ${p.classify?.trialEndsOn}`);
   }
 }
@@ -132,6 +136,7 @@ if (walks.length) {
     if (retries.length) flag('medium', `${w.svc}: ${retries.length} brain retries`, retries.map((r) => r.error).join(' | ').slice(0, 300));
   }
   for (const e of of('step.budget_exhausted')) flag('high', `${e.svc}: ran out of steps (${e.maxSteps})`, 'likely a loop or a flow it could not read');
+  for (const e of of('step.sensitive_page')) flag('high', `${e.svc}: a walk reached a banking or other sensitive page and stopped`, `${e.url} · ${e.why}`);
   for (const e of of('step.blocked')) flag('high', `${e.svc}: a step landed on a blocklisted site`, e.url);
   for (const e of of('find.start').filter((e) => e.loadTimedOut)) flag('medium', `${e.svc}: account page timed out at the start of the walk`, e.accountUrl);
 }

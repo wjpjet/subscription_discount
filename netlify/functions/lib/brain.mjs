@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import { generateStructured, AIDeclined, BRAIN, ZERO_USAGE, addUsage } from './llm.mjs';
 import { STATES, ACTIONS, OUTCOMES } from '../../../shared/guardrails.js';
+import { isSensitive, sensitiveReason } from '../../../shared/sensitive.js';
 import { mockDecide, mockClassify, mockDiscover } from '../../../shared/brain-mock.js';
 
 export const Decision = z.object({
@@ -76,7 +77,7 @@ Return exactly one decision: the screen state, a one-sentence reasoning, and one
 
 const CLASSIFY_SYSTEM = `You read a snapshot of a subscription service's account/billing page and report the signed-in subscription state precisely. Normalize prices to USD per month. If the page is a login wall, signedIn=false. If signed in but there is no paid plan, hasPaidPlan=false. Report an applied promotional/loyalty price when the page shows one. If the page shows the signed-in account's email address, report it as accountEmail; otherwise null. Also report the actual charge per billing cycle (cycleChargeUsd), the next charge or renewal date as YYYY-MM-DD, and whether the plan is in a trial: during a free trial cycleChargeUsd is 0, isTrial is true, and priceAfterTrialUsd is what the page says will be charged afterwards.`;
 
-const DISCOVER_SYSTEM = `You classify website domains. For each domain, decide whether it is a consumer service with recurring paid subscriptions (streaming, news, software, VPN, fitness, dating, cloud storage, memberships, etc.). Use your knowledge of the company. Infrastructure, ad-tech, banks, retailers without memberships, social networks without paid tiers, and unknown domains are not subscriptions. For real services give your best-guess signed-in account/subscription page URL, a typical monthly price in USD, whether the service is known to present a discount or loyalty offer during its cancellation flow, and if known the typical discount fraction and term in months.`;
+const DISCOVER_SYSTEM = `You classify website domains. For each domain, decide whether it is a consumer service with recurring paid subscriptions (streaming, news, software, VPN, fitness, dating, cloud storage, memberships, etc.). Use your knowledge of the company. Financial institutions of any kind (banks, credit unions, credit cards, brokerages, crypto exchanges, payment apps, lenders, credit bureaus), insurers, health and health-insurance portals, payroll, tax and government sites are NEVER subscriptions here: always isSubscription=false, and put the kind of institution in category. Infrastructure, ad-tech, banks, retailers without memberships, social networks without paid tiers, and unknown domains are not subscriptions. For real services give your best-guess signed-in account/subscription page URL, a typical monthly price in USD, whether the service is known to present a discount or loyalty offer during its cancellation flow, and if known the typical discount fraction and term in months.`;
 
 export function renderSnapshot(s) {
   const lines = [`URL: ${s.url}`, `TITLE: ${s.title || ''}`];
@@ -140,7 +141,10 @@ export async function classify(input) {
 
 const discoverCache = new Map();
 export async function discover(domains) {
-  if (BRAIN === 'mock') return { services: mockDiscover(domains), usage: ZERO_USAGE };
+  // Backstop: never-touch sites are answered here, without asking the model (the extension withholds them already).
+  const held = (domains || []).filter((d) => isSensitive(d)).map((d) => ({ domain: d, isSubscription: false, name: d, category: 'sensitive (withheld)', accountUrl: null, typicalMonthlyPriceUsd: null, makesRetentionOffers: 'unknown', typicalOfferDiscountPct: null, typicalOfferTermMonths: null, confidence: 1, notes: sensitiveReason(d) }));
+  domains = (domains || []).filter((d) => !isSensitive(d));
+  if (BRAIN === 'mock') return { services: [...mockDiscover(domains), ...held], usage: ZERO_USAGE };
   const out = [], todo = []; let usage = ZERO_USAGE;
   for (const d of domains) { if (discoverCache.has(d)) out.push(discoverCache.get(d)); else todo.push(d); }
   for (let i = 0; i < todo.length; i += 25) {   // small chunks: each call stays well under a 10s function timeout
@@ -153,5 +157,5 @@ export async function discover(domains) {
       discoverCache.set(d, r); out.push(r);
     }
   }
-  return { services: out, usage };
+  return { services: [...out, ...held], usage };
 }

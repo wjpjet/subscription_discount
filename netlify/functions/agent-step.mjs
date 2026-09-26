@@ -2,6 +2,9 @@ import { handle } from './lib/http.mjs';
 import { decide } from './lib/brain.mjs';
 import { BRAIN, describeBrain } from './lib/llm.mjs';
 import { applyGuardrails } from '../../shared/guardrails.js';
+import { sensitiveReason, financialPageReason } from '../../shared/sensitive.js';
+
+const hostOf = (u) => { try { return new URL(u).hostname; } catch { return ''; } };
 
 // goal: 'find'   — the scan: walk to the offer and PAUSE (accept_offer becomes offer_found; nothing is accepted)
 //       'hunt'   — accept the offer and reach the confirmation
@@ -14,6 +17,13 @@ export default async (req) => handle(req, async (body) => {
   const history = Array.isArray(body.history) ? body.history : [];
   const goal = ['verify', 'find', 'hunt'].includes(body.goal) ? body.goal : 'hunt';
   const priorPath = Array.isArray(body.priorPath) ? body.priorPath.slice(0, 20).map((p) => String(p).slice(0, 200)) : null;
+  // Backstop for the extension's own check: a bank, government, health or similar site or page is never
+  // sent to the model and never acted on. The answer is always "back out".
+  const never = sensitiveReason(merchant.domain) || sensitiveReason(hostOf(snapshot.url)) || financialPageReason(snapshot.text);
+  if (never) {
+    const action = { type: 'back_out', id: null, text: null, value: null, url: null, direction: null, reason: 'sensitive site: ' + never, offer: null, outcome: null, details: null };
+    return { brain: BRAIN, model: 'none (refused before the model)', provider: 'none', proposed: action, decision: { state: 'ambiguous', reasoning: 'Refused: ' + never, action }, guardrails: ['never-touch: ' + never], usage: null };
+  }
   const { _usage, _provider, _model, ...proposed } = await decide({ merchant, goal, step, maxSteps, history, snapshot, priorPath });
   const { decision, notes } = applyGuardrails({ decision: proposed, snapshot, history, merchantDomain: merchant.domain, step, maxSteps, goal });
   return { brain: BRAIN, model: _model || describeBrain(), provider: _provider, proposed: proposed.action, decision, guardrails: notes, usage: _usage || null };

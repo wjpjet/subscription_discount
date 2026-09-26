@@ -8,6 +8,7 @@
  */
 import { browser } from '#imports';
 import { etld1, isInfra, AUTH_COOKIE_RE } from '../../shared/domains.js';
+import { sensitiveReason, SENSITIVE_CATEGORY_RE } from '../../shared/sensitive.js';
 import { apiPost, apiAvailable } from './api';
 import { trace } from './trace';
 import type { Settings } from './settings';
@@ -39,12 +40,17 @@ export async function signedInDomains(): Promise<DomainFeatures[]> {
     map.set(d, f);
   }
   const score = (f: DomainFeatures) => f.httpOnly * 2 + f.authLike;
-  const kept = [...map.values()].filter((f) => f.httpOnly > 0 || f.authLike > 0).sort((a, b) => score(b) - score(a));
+  const signedIn = [...map.values()].filter((f) => f.httpOnly > 0 || f.authLike > 0).sort((a, b) => score(b) - score(a));
+  // Banks, government, health, payroll and the like are withheld HERE, before anything leaves the
+  // browser: their names are never sent to the model, and their pages are never opened.
+  const withheld = signedIn.filter((f) => sensitiveReason(f.domain));
+  const kept = signedIn.filter((f) => !sensitiveReason(f.domain));
+  trace('discover.withheld', { count: withheld.length, sites: withheld.map((f) => ({ d: f.domain, why: sensitiveReason(f.domain) })) });
   const sent = kept.slice(0, MAX_SITES);
   // Counts and cookie NAMES' derived features only. No cookie value is ever read.
   trace('discover.cookies', {
     ms: Date.now() - t0, cookies: all.length, sites: map.size + infraSeen.size, infraSites: infraSeen.size, infraCookies: infra, bareHostCookies: bare,
-    noSessionCookie: map.size - kept.length, signedInLike: kept.length, cappedAt: MAX_SITES, dropped: Math.max(0, kept.length - MAX_SITES),
+    noSessionCookie: map.size - signedIn.length, signedInLike: signedIn.length, withheldSensitive: withheld.length, cappedAt: MAX_SITES, dropped: Math.max(0, kept.length - MAX_SITES),
     sites_sent: sent.map((f) => ({ d: f.domain, c: f.cookies, h: f.httpOnly, a: f.authLike })),
     sites_dropped_by_cap: kept.slice(MAX_SITES).map((f) => f.domain),
   });
@@ -89,7 +95,11 @@ export async function discoverCandidates(settings: Settings, onProgress: (msg: s
     }
   }));
   if (failed.length && failed.length === domains.length) throw new Error('Could not reach the brain to identify subscriptions. Check the API URL in Settings.');
-  const subs = services.filter((s) => s.isSubscription);
+  // Second net: anything the model itself files under banking, credit, investing, insurance, health,
+  // government or payroll is dropped even if it also called it a subscription.
+  const flagged = services.filter((s) => s.isSubscription && SENSITIVE_CATEGORY_RE.test(s.category || ''));
+  if (flagged.length) trace('discover.dropped_by_category', { sites: flagged.map((s) => ({ d: s.domain, category: s.category })) });
+  const subs = services.filter((s) => s.isSubscription && !flagged.includes(s));
   const blocked = subs.filter((s) => isBlocked(s.domain, settings.extraBlock));
   trace('discover.verdicts', {
     sent: domains.length, answered: services.length, failed: failed.length, subscriptions: subs.length, blocked: blocked.map((s) => s.domain),

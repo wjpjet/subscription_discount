@@ -125,7 +125,8 @@ npm run e2e:extension [-- --find] [--real]            # the real extension, in C
    the path; I'll read it directly.
 4. When that looks right, turn **Also walk cancellation flows** on and scan again. Tabs stay open on
    any offer screens it finds; nothing is accepted. Close them from the panel when done.
-5. Add any site you don't want touched to **Never explore** first (banks, work accounts).
+5. Banks, government, health, insurance and payroll sites are skipped automatically. Add anything
+   else you don't want touched to **Never explore** first (work accounts, say).
 
 ## Testing by hand
 

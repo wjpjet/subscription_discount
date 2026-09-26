@@ -16,12 +16,13 @@ import { discoverCandidates, type Candidate } from './discovery';
 import { openTab, waitForLoad, runInTab, closeTab, sleep } from './tabs';
 import { findAll, closePaused, type FindResult, type HuntStep, type PausedAt } from './hunt';
 import { trace, snapSummary } from './trace';
-import { hostOf } from './lists';
+import { hostOf, blockReason } from './lists';
+import { financialPageReason } from '../../shared/sensitive.js';
 import { money } from './format';
 import type { Settings } from './settings';
 import type { Offer, PageClass } from './types';
 
-export type ItemStatus = 'checking' | 'signed_in' | 'login_wall' | 'no_paid_plan' | 'unknown' | 'error';
+export type ItemStatus = 'checking' | 'signed_in' | 'login_wall' | 'no_paid_plan' | 'unknown' | 'error' | 'sensitive';
 export interface ScanItem {
   id: string; domain: string; name: string; accountUrl: string; source: string; status: ItemStatus;
   monthlyPrice: number | null; cycleCharge: number | null; cadence: string; renewalDate: string | null; isTrial: boolean; trialEndsOn: string | null; priceAfterTrial: number | null;
@@ -122,6 +123,13 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean): Promise<voi
     const snap = await runInTab(tabId, snapshotPage, [{ maxElements: 80, textChars: 4000 }]);
     item.url = snap?.url;
     rec.finalUrl = snap?.url; rec.redirected = !!snap?.url && snap.url !== c.accountUrl; rec.leftSite = !!snap?.url && hostOf(snap.url) !== '' && !hostOf(snap.url).endsWith(c.domain);
+    // Never-touch check on where the page actually landed, and on what it says, BEFORE its text is sent.
+    const why = blockReason(hostOf(snap?.url || c.accountUrl), '') || financialPageReason(snap?.text);
+    if (why) {
+      item.status = 'sensitive'; item.note = why; item.live = 'Looks like a bank or other sensitive account — skipped, nothing sent';
+      rec.sensitive = why; rec.page = { url: snap?.url, title: snap?.title };   // no page text in the log either
+      return;
+    }
     rec.page = snapSummary(snap);
     const tc = Date.now();
     const cls: PageClass = useApi ? (await apiPost<{ result: PageClass }>('/api/classify', { domain: c.domain, snapshot: snap })).result : mockClassify(snap);

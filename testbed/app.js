@@ -2,7 +2,7 @@
 (function () {
   var KEY = 'streamly.state';
   var SC = (window.WALKAWAY_SCENARIOS || []);
-  var DEFAULTS = { loggedIn: false, email: '', loginStep: 'creds', pendingEmail: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, trial: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
+  var DEFAULTS = { loggedIn: false, email: '', loginStep: 'creds', pendingEmail: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, trial: false, bank: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
   var S = load();
   function load() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return Object.assign({}, DEFAULTS); } }
   function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
@@ -60,6 +60,7 @@
       return settingsShell('billing', body);
     },
     '/settings/subscription': function () {
+      if (S.bank) return settingsShell('subscription', '<h2>Accounts</h2><div class="card"><div class="plan"><div><div class="plan-name">Everyday Checking ••••1234</div><div class="price">Available balance $2,340.12</div><p style="margin-top:8px">Routing number 021000021 · Direct deposit set up</p></div><div class="row" style="margin-top:0"><button class="btn" type="button">Transfer money</button><button class="btn" type="button">Send with Zelle</button><button class="btn danger" type="button">Cancel payment</button><button class="btn" type="button">Stop autopay</button></div></div></div>');
       var s = scn(), body;
       if (S.cancelled) body = '<h2>Subscription</h2><div class="card"><div class="notice">Your subscription has been cancelled. You have access until ' + NEXT_BILLING + '.</div><div class="row"><button class="btn primary" data-action="reset">Restart subscription</button></div></div>';
       else if (S.paused) body = '<h2>Subscription</h2><div class="card"><div class="notice">Your plan is paused for 2 months.</div><div class="row"><button class="btn primary" data-action="reset">Resume</button></div></div>';
@@ -145,6 +146,8 @@
   function currentPath() { var p = location.pathname.replace(/\/+$/, ''); return p || '/'; }
 
   function render() {
+    var bq = new URLSearchParams(location.search).get('bank');   // ?bank=1 → the account page reads like online banking (tests the never-touch page check)
+    if (bq != null && (bq === '1') !== !!S.bank) { S.bank = bq === '1'; save(); }
     var tq = new URLSearchParams(location.search).get('trial');   // ?trial=1 → the plan is a free trial; ?trial=0 → back to paid
     if (tq != null && (tq === '1') !== !!S.trial) { S.trial = tq === '1'; save(); }
     var q = new URLSearchParams(location.search).get('scenario');
