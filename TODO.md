@@ -9,21 +9,17 @@ The short list. Background and measurements live in **[HISTORY.md](HISTORY.md)**
 The backend runs as one Cloudflare Worker at <https://walkaway.willem-jeffrey-prins.workers.dev>.
 Current state and a handoff summary: **[STATUS.md](STATUS.md)**.
 
-- [ ] **Ship main.** Production is one commit behind (the second-run fixes and page recording). Commands in
-      STATUS.md, "Not shipped yet". Needed before the walk run below.
+- [x] **Ship main** (2026-09-27): the second-run fixes and page recording are live.
 
 - [ ] **Clean up after the first live log.** It captured live session tokens from page text.
   - Sign out of all Together AI sessions.
   - Sign out and back in at Best Buy and Walmart.
-  - Move `walkaway-test-log-2026-09-27T00-21-25.json` out of the repo folder, or delete it. Test logs
-    are git-ignored now, but never share that one.
+  - [x] `walkaway-test-log-2026-09-27T00-21-25.json` is out of the repo folder. Never share that one.
 - [ ] **Rotate the Gemini API key and revoke the Together key.** Both were pasted into a chat.
 - [x] **Second live run, read-only** (2026-09-27). 5 real paid plans found and nothing false in Paying;
       fixes for what it showed are in HISTORY.md.
-- [ ] **Live run with walks, recording on.** Settings → Test mode: turn on **Also walk cancellation
-      flows**, keep **Include page text** and **Record each page for replay tests** on. Then
-      `npm run review-log -- <log>` and `npm run flows -- <log>`: every real cancellation flow it walked
-      becomes a flow file in `flows/` (local only, git-ignored).
+- [ ] **Live run with walks, recording on.** Steps below, under "Live walk run". Every real cancellation
+      flow it walks becomes a flow file in `flows/` (local only, git-ignored).
 - [ ] **Build the realistic edge cases from those flows.** Replay them free with
       `npm run flows -- flows/<run> --replay`, and mimic the interesting ones on Streamly.
 - [ ] **Retire the Netlify function site** once the Worker has been used for a while. Keep Streamly
@@ -132,19 +128,27 @@ npm run e2e:extension [-- --find] [--real] [--sensitive]   # the real extension,
 npm test                   # unit tests: never-touch lists, guardrails, scrubbing, reveal lines, page reader, walks, probes
 ```
 
-## First live run: test mode
+## Live walk run: test mode
 
-1. Reload the extension. Gear → turn **Test mode** on, leave **Also walk cancellation flows** off,
-   turn **Restricted mode** off so it looks at every site you're signed into. Save.
-2. Scan. It reads each account page and opens no cancellation flow. When it finishes, press
-   **Download test log**.
-3. `npm run review-log -- ~/Downloads/walkaway-test-log-<time>.json` and send me the output, or just
-   the path; I'll read it directly.
-4. When that looks right, turn **Also walk cancellation flows** on and scan again. Tabs stay open on
-   any offer screens it finds; nothing is accepted. Close them from the panel when done.
-5. Banks, government, health, insurance and payroll sites are skipped automatically. Work and team
-   accounts are recognised and left alone, but add your employer's domains to **Never explore** first
-   to be sure.
+The two read-only runs are done. This one walks each confirmed paid plan up to its offer and stops there.
+
+1. `chrome://extensions` → Walkaway → reload. Settings (gear) should show **Record each page for replay
+   tests**; if it doesn't, the old build is still loaded.
+2. Settings: **Test mode**, **Also walk cancellation flows**, **Include page text** and **Record each
+   page for replay tests** on; **Restricted mode** off. In **Never explore**, your employer's domains and
+   any service you don't want walked this time. Max steps 25. Save.
+3. Scan, and keep the side panel open until the result shows: closing it ends the run and leaves the log
+   unfinished. Tabs open and close in the background; don't click in them. Walks run 3 at a time.
+4. Press **Download test log**. Then **Close the tabs held on offers**: it closes them without clicking
+   anything, and closing a tab mid-flow cancels nothing.
+5. Open each walked service's account page and check the plan still shows as active.
+6. `npm run review-log -- <log>` and `npm run flows -- <log>` (or send Claude the path), then replay the
+   flows free with `npm run flows -- flows/<run> --replay`.
+
+What it can't guard against by rule: a final confirmation whose button has the same label as the entry
+button ("Cancel plan" twice) on a screen with no "are you sure" wording and no offer. There it relies on the
+model calling the screen a final confirmation. Keep any service you can't risk in **Never explore**.
+Banks, government, health, insurance and payroll sites are always skipped.
 
 ## Testing by hand
 

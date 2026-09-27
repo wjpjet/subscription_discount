@@ -14,17 +14,17 @@ minimum; under 50¢ is waived). It can never finalize a cancellation.
 
 | Piece | Where | State |
 |---|---|---|
-| Backend + landing page | One Cloudflare Worker, https://walkaway.willem-jeffrey-prins.workers.dev (Workers Paid plan) | Deployed from main at `8981e5c` ("live-log fixes"). **One commit behind main** (see "Not shipped") |
-| Extension | `landing/downloads/walkaway-extension.zip`, served by the Worker; load unpacked from `extension/.output/chrome-mv3` | Built from `8981e5c` |
+| Backend + landing page | One Cloudflare Worker, https://walkaway.willem-jeffrey-prins.workers.dev (Workers Paid plan) | Deployed from main with `9526ceb` (second-run fixes, page recording), 2026-09-27. Matches main |
+| Extension | `landing/downloads/walkaway-extension.zip`, served by the Worker; load unpacked from `extension/.output/chrome-mv3` | Built from `9526ceb` |
 | Test site "Streamly" | https://streamly-testbed.netlify.app (Netlify, rebuilds on every push to main) | Current |
 | Payments | Stripe **test mode** (setup mode: card saved, charged after the run) | Test keys only |
 | Model | Gemini 3.8 Flash for walk steps, 3.1 Flash-Lite for classify/discover; `AI_PROVIDER=gemini` pinned in `wrangler.jsonc` | GLM-5.3 and DeepSeek V4.1 were tested and rejected (HISTORY.md) |
 
-## Not shipped yet
+## Shipping
 
-Main is ahead of production by the "second live run" commit: sparse-page waits, 404 recovery, price hops,
-Twitch/Google One handling, the page **recording** for replay tests, `npm run flows`, and the 5-scenario paid suite.
-To ship (from the main checkout):
+Nothing is waiting: the "second live run" commit (sparse-page waits, 404 recovery, price hops, Twitch/Google One
+handling, page **recording** for replay tests) went live on 2026-09-27. To ship a later change (from the main
+checkout, after the free checks in "Testing"):
 
 ```
 npm run cf:deploy
@@ -44,7 +44,8 @@ Then reload the extension at `chrome://extensions`.
   - Run 2 (`walkaway-test-log-2026-09-27T16-29-55.json`): 5 real paid plans found, nothing false under Paying, no
     secrets in the log. Remaining issues fixed in the unshipped commit.
 - **No real walk run yet.** Next live run: test mode with **Also walk cancellation flows** on, and **Record each
-  page for replay tests** on. Then `npm run review-log -- <log>` and `npm run flows -- <log>`.
+  page for replay tests** on. Step by step in TODO.md, "Live walk run". Then `npm run review-log -- <log>` and
+  `npm run flows -- <log>`.
 - **Plan after that:** build realistic edge-case tests from the recorded real flows (the 100 synthetic Streamly
   scenarios were judged repetitive), then the logging/offer-database foundation (LOGGING_TODO.md).
 
@@ -52,7 +53,6 @@ Then reload the extension at `chrome://extensions`.
 
 - Sign out of all Together AI sessions; sign out and back in at Best Buy and Walmart (run 1 captured live session
   tokens in page text before the fix).
-- Move or delete `walkaway-test-log-2026-09-27T00-21-25.json` from the repo folder.
 - Rotate the Gemini API key and revoke the Together key (both were pasted into a chat).
 - Before real users: see "Before real users" in TODO.md (privacy policy, contact email, Web Store listing, live
   Stripe keys, lawyer review of terms).

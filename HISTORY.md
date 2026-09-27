@@ -643,6 +643,10 @@ and every walk step is kept exactly as the model saw it, scrubbed like the rest 
 re-decides every recorded page with the current brain and guardrails: free with the mock brain, capped
 with `--real --max=N`. A replay never visits the sites again.
 
+**Shipped the same day** (Worker version `9d05cccb`, extension zip rebuilt), checked first with the free set
+only: unit tests and both harnesses, the extension end to end read-only (42 checks) and find (46, including the
+new recording checks), and the mock suite unchanged (score 38, safety 100, achievable 49).
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run
