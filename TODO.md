@@ -6,28 +6,21 @@ The short list. Background and measurements live in **[HISTORY.md](HISTORY.md)**
 
 ## Now
 
-The backend now runs as a single Cloudflare Worker that serves the landing page and `/api/*`
-together. Verified locally against the real runtime with `npm run cf:dev`: landing page, a live
-Gemini call, a live Stripe session, CORS, and 404s all correct.
+The backend runs as one Cloudflare Worker at <https://walkaway.willem-jeffrey-prins.workers.dev>.
+The first live test-mode scan found 49 problems; all are fixed (HISTORY.md, 2026-09-27).
 
-- [ ] **Deploy the Worker.**
-
-      ```
-      npx wrangler login
-      npx wrangler secret put GEMINI_API_KEY
-      npx wrangler secret put STRIPE_SECRET_KEY
-      npm run cf:deploy
-      ```
-
-      Then set `SITE_URL` in `wrangler.jsonc` to the URL it prints and deploy once more, so Stripe
-      redirects land back on the right host.
-- [ ] **Point the extension at the Worker.** Set `WXT_API_BASE` in `extension/.env` to the new URL,
-      run `npm run package:extension`, and reload at `chrome://extensions`.
-- [ ] **Rotate the Gemini API key.** It was pasted into a chat, so treat it as public. New key into
-      `.env`, `.dev.vars`, and `wrangler secret put`.
-- [ ] **Retire the Netlify sites when the Worker is confirmed.** Keep Streamly where it is; it is a
-      static testbed and costs nothing. The `netlify.toml` and `netlify/functions/` layout still work,
-      so this is reversible.
+- [ ] **Clean up after the first live log.** It captured live session tokens from page text.
+  - Sign out of all Together AI sessions.
+  - Sign out and back in at Best Buy and Walmart.
+  - Move `walkaway-test-log-2026-09-27T00-21-25.json` out of the repo folder, or delete it. Test logs
+    are git-ignored now, but never share that one.
+- [ ] **Rotate the Gemini API key and revoke the Together key.** Both were pasted into a chat.
+- [ ] **Second live run, read-only**, with the new build. Same steps as below. Check in the report:
+      emails now shown, the 404s recovered, the employer's accounts marked "work account", nothing in
+      "Paying" that you don't pay for.
+- [ ] **Then a live run with walks** (Also walk cancellation flows on).
+- [ ] **Retire the Netlify function site** once the Worker has been used for a while. Keep Streamly
+      where it is; it is a static testbed and costs nothing.
 - [ ] **Delete the environment variables from the Streamly site.** It is static and never used them.
 
 ## Done: the model comparison
@@ -38,16 +31,23 @@ Numbers and reasoning in HISTORY.md. The Together key in `.env` can be revoked.
 
 ## Then — scan quality
 
-- [ ] **Login wall fallback.** When the model's guessed account URL lands on a login wall, load the
-      site's home page and classify that before declaring "needs you to sign in". Also let discovery
-      return two candidate URLs. This is the main source of missed subscriptions.
+- [ ] **Work domains in Settings.** Your employer's own domains (its SSO and internal sites) are still
+      sent to discovery by name. A short list in Settings would withhold them, and mark any account
+      signed in with that email domain as a work account.
+- [ ] **Check the cookie rules on the next log.** Two changes need a real log to confirm: `user` and
+      `secure` no longer make a cookie look like a session (some real subscriptions may have qualified
+      only that way), and domains whose cookies are all third-party are now flagged
+      (`thirdPartyOnly`) but not yet dropped. Compare `signedInLike` and `sites_sent` with the first run.
+- [ ] **Billing inside iframes.** The snapshot now records visible iframes. If a real account page turns
+      out to keep the plan inside one, read same-origin frames first.
+- [ ] **Start probing while discovery is still answering.** Discovery is now about 6s, so this matters
+      less than it did.
 - [ ] **Show the steps during the scan.** The find pass already emits them; the scanning screen just
       doesn't render them yet.
 - [ ] **Work in a minimized window, and shield paused tabs.** Chrome has no hidden tabs for a
       signed-in site. The closest is a separate minimized window for all of Walkaway's tabs, plus an
       overlay on each paused offer screen ("Walkaway is holding this offer for you") and a click
-      listener that pauses the run if a person touches the page. Decide first whether to keep tabs
-      paused at all or close-and-rewalk on accept; see HISTORY.md.
+      listener that pauses the run if a person touches the page.
 
 ## Then — make it fewer steps
 
@@ -63,9 +63,10 @@ The scan itself is fine. What is long is everything around it.
       Stripe's embedded checkout would keep it in the panel.
 - [ ] **Remember the scan.** Re-scanning from scratch on every open is slow and costs money. The
       result is already cached; add an age and a one-tap rescan.
-- [ ] **Paused tabs are fragile.** The find pass leaves one tab open per offer. Chrome's tab discarding,
-      a restart, or the user closing them forces the re-walk fallback. Consider re-finding on demand
-      when the reveal is older than a few minutes.
+- [ ] **Paused tabs are fragile.** The find pass leaves one tab open per offer. They are now kept from
+      being discarded and are only ever used if provably still ours, but a restart or the user closing
+      them still forces the re-walk. Consider re-finding on demand when the reveal is older than a few
+      minutes.
 
 ## Before real users
 
@@ -112,7 +113,8 @@ npm run latency            # p50/p95 per endpoint
 npm run test:stripe        # 10 checks against Stripe test mode
 npm run package:extension  # build + zip + copy into landing/downloads
 npm run review-log -- <log> [--svc=domain] [--text]   # read a test-mode log
-npm run e2e:extension [-- --find] [--real]            # the real extension, in Chrome, on the testbed
+npm run e2e:extension [-- --find] [--real] [--sensitive]   # the real extension, in Chrome, on the testbed
+npm test                   # unit tests: never-touch lists, guardrails, scrubbing, reveal lines, page reader, walks, probes
 ```
 
 ## First live run: test mode
@@ -125,8 +127,9 @@ npm run e2e:extension [-- --find] [--real]            # the real extension, in C
    the path; I'll read it directly.
 4. When that looks right, turn **Also walk cancellation flows** on and scan again. Tabs stay open on
    any offer screens it finds; nothing is accepted. Close them from the panel when done.
-5. Banks, government, health, insurance and payroll sites are skipped automatically. Add anything
-   else you don't want touched to **Never explore** first (work accounts, say).
+5. Banks, government, health, insurance and payroll sites are skipped automatically. Work and team
+   accounts are recognised and left alone, but add your employer's domains to **Never explore** first
+   to be sure.
 
 ## Testing by hand
 

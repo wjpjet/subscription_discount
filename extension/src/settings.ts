@@ -5,7 +5,7 @@ export interface Settings {
   testMode: boolean;
   /** In test mode, walk cancellation flows to find offers. Off = read-only: account pages only. */
   testFind: boolean;
-  /** In test mode, include page text (digit runs redacted) in the log. */
+  /** In test mode, include page text, headings and button labels in the log (tokens, long numbers, card data and addresses removed; emails masked). */
   testPageText: boolean;
 }
 // Set WXT_API_BASE in extension/.env before `npm run package:extension`.

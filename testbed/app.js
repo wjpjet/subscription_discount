@@ -2,7 +2,7 @@
 (function () {
   var KEY = 'streamly.state';
   var SC = (window.WALKAWAY_SCENARIOS || []);
-  var DEFAULTS = { loggedIn: false, email: '', loginStep: 'creds', pendingEmail: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, trial: false, bank: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
+  var DEFAULTS = { loggedIn: false, email: '', loginStep: 'creds', pendingEmail: '', plan: 'Premium', price: 17.99, scenarioId: SC.length ? SC[0].id : 'S001', offerApplied: false, offerPrice: null, offerMonths: null, offerLabel: '', cancelled: false, paused: false, downgraded: false, reauthed: false, trial: false, bank: false, org: false, uid: '', csrf: '', jwt: '', revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} };
   var S = load();
   function load() { try { return Object.assign({}, DEFAULTS, JSON.parse(localStorage.getItem(KEY) || '{}')); } catch (e) { return Object.assign({}, DEFAULTS); } }
   function save() { localStorage.setItem(KEY, JSON.stringify(S)); }
@@ -15,6 +15,17 @@
   function money(n) { return '$' + Number(n).toFixed(2); }
   function esc(s) { return String(s).replace(/[&<>"]/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]; }); }
   var NEXT_BILLING = 'October 10, 2026', OFFER_END = 'January 10, 2027';
+  // A session the way real apps inline it: a user id, a 32-hex CSRF token and a JWT-like session token. Fake, but
+  // shaped like the real thing so the extension's scrubbers and the e2e leak checks have something to catch.
+  function rnd(n, abc) { var o = ''; for (var i = 0; i < n; i++) o += abc[Math.floor(Math.random() * abc.length)]; return o; }
+  function b64url(str) { return btoa(str).replace(/=+$/, '').replace(/\+/g, '-').replace(/\//g, '_'); }
+  function ensureSession() {
+    if (S.uid && S.csrf && S.jwt) return;
+    var B64 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_';
+    S.uid = 'u_' + rnd(10, '0123456789abcdef'); S.csrf = rnd(32, '0123456789abcdef');
+    S.jwt = b64url('{"alg":"HS256","typ":"JWT"}') + '.' + b64url(JSON.stringify({ sub: S.uid, iat: Math.floor(Date.now() / 1000) })) + '.' + rnd(43, B64);
+    save();
+  }
 
   // ---- flow helpers ----
   function firstCancelPath() { var s = scn(); if (s.confirm && s.confirm.immediate) return null; return s.steps.length ? '/cancel/step/0' : (s.offer ? '/cancel/offer' : '/cancel/confirm'); }
@@ -129,11 +140,16 @@
     if (S.trial && !S.offerApplied) return '<div class="price">$0.00/month <span class="muted" style="font-size:14px;font-weight:500">free trial until ' + NEXT_BILLING + ', then ' + money(S.price) + '/month</span></div>';
     return S.offerApplied ? '<div class="price">' + money(S.offerPrice) + '/month <span class="muted" style="font-size:14px;font-weight:500">for ' + S.offerMonths + ' months, then ' + money(S.price) + '/month</span></div><span class="badge">Loyalty offer applied through ' + OFFER_END + '</span>' : '<div class="price">' + money(S.downgraded ? 6.99 : S.price) + '/month</div>';
   }
-  function footerLinks() { var s = scn(); return '<div class="pagefoot"><a href="/browse" data-link>Help</a> · <a href="/browse" data-link>Terms</a> · <a href="/browse" data-link>Privacy</a>' + (s.entry.where === 'footer' ? ' · ' + entryLink() : '') + '</div>'; }
+  // "Sign out" in the footer (Amazon does this) is the signed-in chrome a 404 or the home page shows. Not on the
+  // cancel-flow pages: the re-auth scenarios need their sign-in wall to have no sign-out control.
+  function footerLinks() { var s = scn(); return '<div class="pagefoot"><a href="/browse" data-link>Help</a> · <a href="/browse" data-link>Terms</a> · <a href="/browse" data-link>Privacy</a>' + (s.entry.where === 'footer' ? ' · ' + entryLink() : '') + ' · <button type="button" class="footlink" data-action="signout">Sign out</button></div>'; }
+  // ?org=1: the same account seen as a team member's (a work seat). The extension must call it a work account and leave it alone.
+  function orgCard() { return S.org ? '<div class="card org"><h2>Team settings</h2><p>Billing is managed by your organization\'s admin. Ask them to change or cancel this plan.</p><p>Members &amp; groups: 12 members in 3 groups</p><div class="row" style="margin-top:0"><button class="btn" type="button">Invite teammates</button></div></div>' : ''; }
   function settingsShell(active, body) {
     var s = scn();
     var items = [['profile', '/settings', 'Profile'], ['playback', '/settings', 'Playback'], ['notifications', '/settings', 'Notifications'], ['subscription', '/settings/subscription', 'Subscription'], ['billing', '/settings/billing', 'Billing'], ['devices', '/settings', 'Devices']];
-    return '<h1>Settings</h1><p class="muted">Signed in as <b>' + esc(S.email || 'you@example.com') + '</b></p><div class="layout"><nav class="side">' + items.map(function (i) { return '<a href="' + i[1] + '" data-link class="' + (i[0] === active ? 'active' : '') + '">' + i[2] + '</a>'; }).join('') + '</nav><section>' + body + '</section></div>' + footerLinks();
+    if (S.org) items.push(['team', '/settings', 'Team settings'], ['members', '/settings', 'Members &amp; groups']);
+    return '<h1>Settings</h1><p class="muted">Signed in as <b>' + esc(S.email || 'you@example.com') + '</b></p><div class="layout"><nav class="side">' + items.map(function (i) { return '<a href="' + i[1] + '" data-link class="' + (i[0] === active ? 'active' : '') + '">' + i[2] + '</a>'; }).join('') + '</nav><section>' + orgCard() + body + '</section></div>' + footerLinks();
   }
   function noiseHtml() {
     var s = scn(), h = '';
@@ -150,6 +166,8 @@
     if (bq != null && (bq === '1') !== !!S.bank) { S.bank = bq === '1'; save(); }
     var tq = new URLSearchParams(location.search).get('trial');   // ?trial=1 → the plan is a free trial; ?trial=0 → back to paid
     if (tq != null && (tq === '1') !== !!S.trial) { S.trial = tq === '1'; save(); }
+    var oq = new URLSearchParams(location.search).get('org');   // ?org=1 → settings show team-admin UI (a work seat); ?org=0 → personal again
+    if (oq != null && (oq === '1') !== !!S.org) { S.org = oq === '1'; save(); }
     var q = new URLSearchParams(location.search).get('scenario');
     if (q && SC.some(function (s) { return s.id === q; })) { if (q !== S.scenarioId) { Object.assign(S, { scenarioId: q, offerApplied: false, cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} }); save(); } history.replaceState({}, '', location.pathname); }
     var path = currentPath();
@@ -157,7 +175,9 @@
     if (!S.loggedIn && path !== '/login' && path !== '/scenarios') { history.replaceState({}, '', '/login'); path = '/login'; }
     if (S.loggedIn && path === '/login') { history.replaceState({}, '', '/'); path = '/'; }
     var m = path.match(/^\/cancel\/step\/(\d+)$/);
-    var view = m ? function () { return stepView(+m[1]); } : (views[path] || function () { return '<h1>Not found</h1><p><a href="/" data-link>Home</a></p>'; });
+    var known = !!(m || views[path]);
+    var view = m ? function () { return stepView(+m[1]); } : (views[path] || function () { return '<h1>Page not found</h1><p>The page you’re looking for doesn’t exist. <a href="/" data-link>Home</a></p>' + footerLinks(); });
+    if (S.loggedIn) ensureSession();
     var html = view();
     document.getElementById('app').innerHTML = html + (html ? noiseHtml() : '');
     document.getElementById('nav').hidden = !S.loggedIn;
@@ -165,7 +185,9 @@
     var menu = document.getElementById('avatar-menu'); menu.hidden = true;
     document.getElementById('menu-cancel').hidden = scn().entry.where !== 'menu';
     document.getElementById('menu-cancel').innerHTML = scn().entry.where === 'menu' ? entryLink().replace('class=""', 'role="menuitem"') : '';
-    document.title = 'Streamly' + (path === '/' ? '' : ' — ' + path.split('/').filter(Boolean).map(function (s) { return s[0].toUpperCase() + s.slice(1); }).join(' / '));
+    document.getElementById('menu-email').textContent = S.loggedIn ? S.email : '';
+    document.getElementById('app-state').textContent = S.loggedIn ? JSON.stringify({ session: { user: { email: S.email, id: S.uid } }, csrfToken: S.csrf, sessionToken: S.jwt }) : '';
+    document.title = !known ? 'Streamly — Page not found' : 'Streamly' + (path === '/' ? '' : ' — ' + path.split('/').filter(Boolean).map(function (s) { return s[0].toUpperCase() + s.slice(1); }).join(' / '));
     updateDevbar(); window.scrollTo(0, 0);
   }
   function updateDevbar() {
@@ -178,7 +200,7 @@
     var btn = e.target.closest('[data-action]');
     if (!btn) { if (!e.target.closest('.account')) document.getElementById('avatar-menu').hidden = true; return; }
     var a = btn.getAttribute('data-action');
-    if (a === 'signout') { S.loggedIn = false; S.email = ''; S.loginStep = 'creds'; clearCookie(); save(); go('/login', true); }
+    if (a === 'signout') { S.loggedIn = false; S.email = ''; S.loginStep = 'creds'; S.uid = S.csrf = S.jwt = ''; clearCookie(); save(); go('/login', true); }
     else if (a === 'login-back') { S.loginStep = 'creds'; save(); render(); }
     else if (a === 'reset') { Object.assign(S, { offerApplied: false, offerPrice: null, offerMonths: null, cancelled: false, paused: false, downgraded: false, reauthed: false, revealed: false, offerShown: false, cookieDismissed: false, popupDismissed: false, survey: {} }); save(); go('/settings/subscription'); }
     else if (a === 'immediate-cancel') { e.preventDefault(); S.cancelled = true; save(); go('/cancel/done'); }
@@ -201,7 +223,7 @@
     if (e.target.id === 'code-form') {
       e.preventDefault();
       if (document.getElementById('code').value.trim() !== TEST_CODE) { document.getElementById('code-error').hidden = false; return; }
-      S.loggedIn = true; S.email = S.pendingEmail; S.loginStep = 'creds'; save(); setCookie(); go('/', true); return;
+      S.loggedIn = true; S.email = S.pendingEmail; S.loginStep = 'creds'; S.uid = S.csrf = S.jwt = ''; ensureSession(); setCookie(); go('/', true); return;
     }
     if (e.target.id !== 'login-form') return; e.preventDefault();
     var pw = document.getElementById('password').value;

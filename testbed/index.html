@@ -8,20 +8,30 @@
 <link rel="stylesheet" href="/styles.css">
 </head>
 <body>
+<!-- SvelteKit's default shell: a display:contents wrapper around the whole app. It has no box, so a visibility
+     check on body children drops everything inside it (the K1 regression). Kept permanently as a fixture. -->
+<div style="display: contents">
 <header class="nav" id="nav" hidden>
   <a href="/" data-link class="brand"><span class="logo"></span>Streamly</a>
   <nav class="links"><a href="/" data-link>Home</a><a href="/browse" data-link>Browse</a><a href="/browse" data-link>My List</a></nav>
   <div class="account">
-    <button class="avatar" id="avatar-btn" aria-haspopup="menu" aria-expanded="false" title="Account">S</button>
+    <button class="avatar" id="avatar-btn" aria-haspopup="menu" aria-controls="avatar-menu" aria-expanded="false" title="Account">S</button>
     <div class="menu" id="avatar-menu" role="menu" hidden>
+      <div class="menu-who">Signed in as <span id="menu-email"></span></div>
       <a href="/settings" data-link role="menuitem">Settings</a>
       <a href="/settings/subscription" data-link role="menuitem">Subscription</a>
       <span id="menu-cancel" hidden></span>
       <button data-action="signout" role="menuitem">Sign out</button>
     </div>
+    <!-- After the avatar in the DOM (drawn before it): agents that pick the first "account" control keep opening the menu. -->
+    <a href="/settings/subscription" data-link class="acct-link">Account</a>
   </div>
 </header>
 <main id="app"></main>
+</div>
+<!-- Signed-in state inlined the way real apps do (__NEXT_DATA__ & co.). Never shown; it must never reach page text,
+     the model or the test log. Filled by app.js while signed in. -->
+<script type="application/json" id="app-state"></script>
 <div class="devbar" id="devbar" data-wa-ignore hidden>
   <span class="devbar-title">Testbed</span> <a href="/scenarios" data-link class="dev-link">scenarios</a>
   <span class="devbar-status" id="dev-status"></span>

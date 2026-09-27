@@ -75,20 +75,43 @@ The extension reads the browser's cookies and reduces them to a list of domains 
 **session-like cookie** exists. It reads cookie *names and flags only*, never values. That's the
 "sites you're signed into" signal.
 
-That domain list goes to **`/api/discover`** in chunks of 25, four chunks at a time. The model answers,
-per domain: is this a subscription service, what is it called, where is its account page. Most
-domains come back as "not a subscription" and are dropped.
+Banks, government, health, insurance and payroll sites are withheld at this point, by fixed rules,
+before any name leaves the browser. About 30 common services (Netflix, YouTube, Prime, ChatGPT…) are
+recognised from a built-in catalog with a checked account URL, so their names are not sent either.
 
-For the survivors, the extension **opens each account page in a background tab**, takes a text
-snapshot, and sends it to **`/api/classify`**: is there a paid plan, what does it cost, when does it
-renew, which email is signed in. Four tabs at a time.
+The rest goes to **`/api/discover`** in chunks of 25, all chunks at once. The model answers, per
+domain: is this a subscription a person pays for themselves (not an employer's tool, not a shop, not a
+usage-billed API), what the brand is called, which other domains share its account (cursor.sh and
+cursor.com), and an account page URL only when it is sure one exists. A guessed URL that points at
+another company's site, a sign-in page or a blocked host is replaced with the service's home page.
+Most domains come back as "not a subscription" and are dropped.
 
-Then, for each confirmed subscription, the **find pass**: the same agent loop as the hunt below, in
-`find` mode, three services at a time. It walks the cancellation flow until an offer is on screen,
-then pauses with the tab left open. The model proposes accepting exactly as it would in a hunt; the
-guardrail turns that into "offer found" and records the button. Nothing is clicked.
+For the survivors, the extension **opens each account page in a background tab**, waits until the page
+has actually rendered (single-page apps fill in well after the browser says "loaded"), and takes a text
+snapshot of what a person can see. Script source, hidden menus and the page's own JSON are never part of
+it; card numbers, addresses and session tokens are scrubbed before it leaves the browser. It goes to
+**`/api/classify`**, which first says what kind of page it is (the plan page, another account page, a
+sign-in page, a 404, a loading screen, a robot check, a sales page) and then, from what is visible only:
+signed in or not, a paid plan or not, which plan, what it costs, when it renews, whose account it is,
+and whether it is a work account or billed through Apple or a carrier. Six tabs at a time.
 
-The user sees every service with its email, the offer it actually made, and a checkbox, all ticked.
+Two recoveries per service at most. A 404 or error page tries the next known URL, then the site's
+home page. A signed-in page that doesn't show the plan follows the page's own "Billing" or "Membership"
+link, by opening its URL, never by clicking.
+
+Each service ends in one status: **paying** (a confirmed paid plan), **billed elsewhere** (paid through
+Apple, Google Play, a carrier or a bundle), **free plan**, **signed out**, **work account**, **needs a
+look** (signed in but no plan shown, wrong page, didn't load, robot check or password prompt), **same
+account** as another row, or **skipped** as sensitive. Only "paying" is ever walked.
+
+Then, for each confirmed personal subscription, the **find pass**: the same agent loop as the hunt
+below, in `find` mode, three services at a time, never two on one site at once. It walks the
+cancellation flow until an offer is on screen, then pauses with the tab left open. The model proposes
+accepting exactly as it would in a hunt; the guardrail turns that into "offer found" and records the
+button. Nothing is clicked.
+
+The user sees every paid service with its email, the offer it actually made, and a checkbox, all ticked,
+then "Needs a look" with a link to open each page, and the rest folded away.
 
 ### 2. Pay — save the card, charge nothing yet
 
@@ -126,7 +149,9 @@ Two things guard every step:
   action doesn't exist in its vocabulary.
 - Deterministic code checks the decision anyway, on the server and again in the extension, and the
   extension **re-reads the live button text at the moment of clicking**. If that text looks like a
-  final cancel, or the page announces itself as the final confirmation, the click is refused.
+  final cancel, a pause, a downgrade, a plan switch or a purchase, or the page announces itself as the
+  final confirmation, the click is refused. Element ids carry the snapshot they came from, so a click
+  can never land on a different element after the page changed.
 
 The loop stops when an offer is accepted, when there's nothing to accept, or when anything at all is
 ambiguous. No decision means no click.
@@ -187,5 +212,6 @@ model accepted. Swapping models is configuration, not code.
 
 ## What the backend never sees
 
-Cookie values. Passwords. Browsing history. Anything typed into a password field. The extension sends
-page text and a numbered list of clickable elements, and that is all it is able to send.
+Cookie values. Passwords. Browsing history. Anything typed into a password field. Session tokens, card
+numbers and street addresses on a page are removed before the snapshot is sent. The extension sends
+visible page text and a numbered list of clickable elements, and that is all it is able to send.

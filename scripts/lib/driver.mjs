@@ -1,6 +1,6 @@
 // Drives one hunt against a page the way the extension does: snapshot → /api/agent-step → guardrails → act.
 import { snapshotPage, performAction, readElement } from '../../shared/page-scripts.js';
-import { isFinalizeClick } from '../../shared/guardrails.js';
+import { isFinalizeClick, acceptLooksRight } from '../../shared/guardrails.js';
 export const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export const ZERO = { inputTokens: 0, outputTokens: 0, thinkingTokens: 0, calls: 0 };
@@ -55,10 +55,10 @@ export async function hunt(page, merchant, maxSteps = 20, acc, opts = {}) {
       return base;
     }
     if (a.type === 'click' || a.type === 'accept_offer') {
-      const live = await page.evaluate(readElement, a.id);
-      if (!live || isFinalizeClick(live.text, snapshot.text)) { note = 'client guard refused click'; history.push({ step, url: snapshot.url, state: decision.state, action: a, target, ok: false, note }); return { outcome: 'no_offer_backed_out', reason: note, history, log, steps: step + 1, ms: Date.now() - t0 }; }
-      const r = await page.evaluate(performAction, { type: 'click', id: a.id }); ok = r.ok; note = r.note; await settle(page);
-    } else if (a.type === 'type' || a.type === 'select' || a.type === 'scroll') { const r = await page.evaluate(performAction, a); ok = r.ok; note = r.note; await sleep(350); }
+      const live = await page.evaluate(readElement, a.id, snapshot.gen);
+      if (!live || isFinalizeClick(live.text, snapshot.text, history) || (a.type === 'accept_offer' && !acceptLooksRight(live.text, target, snapshot.text, history))) { note = 'client guard refused click'; history.push({ step, url: snapshot.url, state: decision.state, action: a, target, ok: false, note }); return { outcome: 'no_offer_backed_out', reason: note, history, log, steps: step + 1, ms: Date.now() - t0 }; }
+      const r = await page.evaluate(performAction, { type: 'click', id: a.id, gen: snapshot.gen }); ok = r.ok; note = r.note; await settle(page);
+    } else if (a.type === 'type' || a.type === 'select' || a.type === 'scroll') { const r = await page.evaluate(performAction, { ...a, gen: snapshot.gen }); ok = r.ok; note = r.note; await sleep(350); }
     else if (a.type === 'navigate') { await page.goto(a.url, { waitUntil: 'load' }).catch(() => { ok = false; }); }
     else await sleep(700);
     history.push({ step, url: snapshot.url, state: decision.state, action: a, target, ok, note });
@@ -73,10 +73,10 @@ export async function acceptPaused(page, merchant, found, maxSteps = 20, acc) {
   const want = (found.acceptText || '').trim();
   const el = snapshot.elements.find((e) => e.id === found.acceptId && (e.text || '').trim() === want) || snapshot.elements.find((e) => want && (e.text || '').trim() === want);
   const log = [...found.log];
-  if (!el || isFinalizeClick(el.text, snapshot.text)) { log.push(`  accept: recorded button not found or refused ("${want}")`); return { outcome: 'error', reason: 'accept button not found on the paused screen', history: found.history, log, steps: found.steps, ms: Date.now() - t0, phase: 'accept' }; }
-  const live = await page.evaluate(readElement, el.id);
-  if (!live || isFinalizeClick(live.text, snapshot.text)) { log.push('  accept: client guard refused click'); return { outcome: 'no_offer_backed_out', reason: 'client guard refused click', history: found.history, log, steps: found.steps, ms: Date.now() - t0, phase: 'accept' }; }
-  const r = await page.evaluate(performAction, { type: 'click', id: el.id }); await settle(page);
+  if (!el || !acceptLooksRight(el.text, want, snapshot.text, found.history)) { log.push(`  accept: recorded button not found or refused ("${want}")`); return { outcome: 'error', reason: 'accept button not found on the paused screen', history: found.history, log, steps: found.steps, ms: Date.now() - t0, phase: 'accept' }; }
+  const live = await page.evaluate(readElement, el.id, snapshot.gen);
+  if (!live || !acceptLooksRight(live.text, want, snapshot.text, found.history)) { log.push('  accept: client guard refused click'); return { outcome: 'no_offer_backed_out', reason: 'client guard refused click', history: found.history, log, steps: found.steps, ms: Date.now() - t0, phase: 'accept' }; }
+  const r = await page.evaluate(performAction, { type: 'click', id: el.id, gen: snapshot.gen }); await settle(page);
   log.push(`  accept: clicked "${el.text}" (${r.ok ? 'ok' : r.note})`);
   const rec = { step: found.steps, url: snapshot.url, state: 'save_offer_presented', action: { type: 'accept_offer', id: el.id, offer: found.offer || null }, target: el.text, ok: r.ok, note: 'accepted from pause' };
   const res = await hunt(page, merchant, maxSteps, acc, { goal: 'hunt', startStep: found.steps + 1, history: [...found.history.filter((h) => h.action && h.action.type !== 'finish'), rec], log });

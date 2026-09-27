@@ -8,11 +8,13 @@ a{color:inherit}
 .logo{width:26px;height:26px;border-radius:7px;background:var(--accent);display:inline-block;position:relative}
 .logo::after{content:"";position:absolute;left:10px;top:7px;border-left:9px solid #fff;border-top:6px solid transparent;border-bottom:6px solid transparent}
 .links{display:flex;gap:18px}.links a{text-decoration:none;color:var(--muted);font-weight:500}.links a:hover{color:var(--text)}
-.account{margin-left:auto;position:relative}
+.account{margin-left:auto;position:relative;display:flex;align-items:center;gap:18px}
+.acct-link{order:-1;text-decoration:none;color:var(--muted);font-weight:500}.acct-link:hover{color:var(--text)}
 .avatar{width:36px;height:36px;border-radius:50%;background:linear-gradient(135deg,#7C5CFF,#FF6BCB);border:0;color:#fff;font-weight:800;cursor:pointer}
 .menu{position:absolute;right:0;top:44px;background:var(--panel-2);border:1px solid var(--line);border-radius:10px;min-width:180px;padding:6px;display:flex;flex-direction:column;box-shadow:0 20px 40px -20px rgba(0,0,0,.8)}
 .menu a,.menu button{background:none;border:0;color:var(--text);text-align:left;padding:9px 10px;border-radius:7px;font:inherit;cursor:pointer;text-decoration:none}
 .menu a:hover,.menu button:hover{background:rgba(255,255,255,.06)}
+.menu-who{padding:8px 10px 10px;margin-bottom:4px;border-bottom:1px solid var(--line);font-size:12px;color:var(--muted);overflow-wrap:anywhere}
 main{max-width:980px;margin:0 auto;padding:36px 24px}
 h1{font-size:30px;letter-spacing:-.02em;margin:0 0 6px}
 h2{font-size:20px;margin:0 0 10px}
@@ -56,6 +58,8 @@ p{margin:0 0 10px;color:var(--muted)}
 .dev-btn{background:#3B2F00;color:#FFF7D6;border:0;border-radius:7px;padding:7px 11px;font:700 12px Inter,system-ui,sans-serif;cursor:pointer}
 
 .pagefoot{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted)}.pagefoot a{color:var(--muted)}
+.footlink{background:none;border:0;padding:0;font:inherit;color:var(--muted);text-decoration:underline;cursor:pointer}
+.org{margin-bottom:14px;border-color:rgba(232,201,74,.45)}
 .modal-back{position:fixed;inset:0;background:rgba(0,0,0,.6);display:grid;place-items:center;z-index:20;padding:20px}
 .modal{max-width:520px;width:100%;position:relative}
 .closex{position:absolute;top:10px;right:12px;background:none;border:0;color:var(--muted);font-size:22px;cursor:pointer}

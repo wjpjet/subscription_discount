@@ -22,9 +22,14 @@ build/
 
 # Logs
 *.log
+# Test-mode scan logs hold page data from the owner's accounts: never commit them
+walkaway-test-log-*.json
 
 # suite output
 results/
 
 # Wrangler local state
 .wrangler/
+
+# test harness bundles
+scripts/harness/**/.build/

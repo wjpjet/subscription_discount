@@ -2,20 +2,40 @@ import { useEffect, useRef, useState } from 'react';
 import { browser } from '#imports';
 import { DEFAULTS, getSettings, saveSettings, type Settings } from '@/src/settings';
 import { originsFor } from '@/src/discovery';
-import { runScan, discardScan, isBusy, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
-import { dealLine, payingLine } from '@/src/saving';
-import { acceptAll, requestStop, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
+import { runScan, discardScan, reconcileOnLoad, isBusy, PAYING, NEEDS_LOOK, type ScanItem, type ScanProgress, type ScanResult } from '@/src/scan';
+import { dealLine, paidSubLine, groupReveal, alsoLabel, countLine, bucketLine, monthlyOf, type StatusSets } from '@/src/saving';
+import { acceptAll, requestStop, releasePaused, type HuntEvent, type HuntResult, type HuntStep } from '@/src/hunt';
 import { startCheckout, waitForCheckout, settle } from '@/src/payment';
-import { focusTab, closeTab } from '@/src/tabs';
-import { money, outcomeLabel } from '@/src/format';
+import { focusTab } from '@/src/tabs';
+import { money, outcomeLabel, keptLabel, hostLabel } from '@/src/format';
 import type { CheckoutResult, Settlement } from '@/src/types';
-import { traceStart, traceEnd, trace, lastLog, downloadLog } from '@/src/trace';
+import { traceStart, traceEnd, trace, lastLog, downloadLog, maskForLog, redactForLog } from '@/src/trace';
 
 type Screen = 'idle' | 'consent' | 'scanning' | 'reveal' | 'checkout' | 'hunting' | 'done' | 'settings' | 'error';
 const SITE = ((import.meta as any).env?.WXT_API_BASE || '').replace(/\/+$/, '');
 const PRIVACY_URL = (SITE || 'https://walkaway.netlify.app') + '/privacy.html';
 interface HuntState { current: ScanItem | null; tabId: number | null; log: HuntStep[]; results: HuntResult[]; total: number; verifying: boolean; settlement: Settlement | null }
 const EMPTY_HUNT: HuntState = { current: null, tabId: null, log: [], results: [], total: 0, verifying: false, settlement: null };
+const SETS: StatusSets = { paying: PAYING, needsLook: NEEDS_LOOK };
+
+// Chrome gives every window its own side panel, so two panels could scan at once, and a panel opening while
+// another is mid-scan must not sweep that scan's live tabs as orphans. One run at a time, held by a Web Lock:
+// Chrome releases it by itself when the holding panel closes or reloads, so a crash can't leave it stuck.
+const RUN_LOCK = 'walkaway-run';
+const BUSY_ELSEWHERE = 'Walkaway is already running in another window. Let it finish there, then try again.';
+const hasLocks = () => typeof navigator !== 'undefined' && 'locks' in navigator;
+/** Run fn holding the lock; false (without running it) when another panel holds it. */
+async function runExclusive(fn: () => Promise<void>): Promise<boolean> {
+  if (!hasLocks()) { await fn(); return true; }
+  return navigator.locks.request(RUN_LOCK, { ifAvailable: true }, async (lock) => { if (!lock) return false; await fn(); return true; });
+}
+/** No panel in any window is scanning or hunting right now. */
+async function runIdle(): Promise<boolean> {
+  if (!hasLocks()) return true;
+  try { return await navigator.locks.request(RUN_LOCK, { ifAvailable: true }, async (lock) => lock != null); } catch { return true; }
+}
+/** Where "Open" goes: the page the scan landed on, else the account URL. Web pages only (never a chrome-error:// page). */
+const openUrl = (i: ScanItem) => [i.url, i.accountUrl].find((u) => !!u && /^https?:\/\//i.test(u)) || '';
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('idle');
@@ -36,7 +56,12 @@ export default function App() {
       const v = await browser.storage.local.get(['scanResult', 'huntResults', 'previewHunt', 'consentAt']);
       setConsented(!!v.consentAt);
       if (v.huntResults) setHunt((h) => ({ ...h, results: v.huntResults as HuntResult[] }));
-      if (v.scanResult) { setResult(v.scanResult as ScanResult); setScreen('reveal'); }
+      // Before showing a saved scan: close tabs a panel closed mid-scan left behind, and drop handles to paused
+      // tabs that are no longer ours (tab ids are reused after a browser restart). Skipped while another
+      // window's panel is running: its tabs are live, not orphans.
+      const saved = (v.scanResult as ScanResult | undefined) ?? null;
+      const r = (await runIdle()) ? await reconcileOnLoad(saved).catch(() => saved) : saved;
+      if (r) { setResult(r); setScreen('reveal'); }
       // Design previews only (sidepanel.html?preview=…); never used in the real flow.
       const pv = new URLSearchParams(location.search).get('preview');
       if (pv === 'settings') setScreen('settings');
@@ -61,16 +86,19 @@ export default function App() {
   }
   /** Run a scan; in test mode, record everything about it. */
   async function scanNow(s: Settings) {
-    setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
-    if (s.testMode) await traceStart(await runMeta(s), { pageText: s.testPageText });
-    try {
-      const r = await runScan(s, setProgress);
-      if (s.testMode) await traceEnd(scanSummary(r));
-      setResult(r); setScreen('reveal');
-    } catch (e: any) {
-      if (s.testMode) { trace('run.error', { error: String(e?.message || e), stack: String(e?.stack || '').slice(0, 1500) }); await traceEnd({ error: String(e?.message || e) }); }
-      throw e;
-    }
+    const ran = await runExclusive(async () => {
+      setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
+      if (s.testMode) await traceStart(await runMeta(s), { pageText: s.testPageText });
+      try {
+        const r = await runScan(s, setProgress);
+        if (s.testMode) await traceEnd(scanSummary(r));
+        setResult(r); setScreen('reveal');
+      } catch (e: any) {
+        if (s.testMode) { trace('run.error', { error: String(e?.message || e), stack: String(e?.stack || '').slice(0, 1500) }); await traceEnd({ error: String(e?.message || e) }); }
+        throw e;
+      }
+    });
+    if (!ran) { setError(BUSY_ELSEWHERE); setScreen('idle'); }
   }
   async function agreeAndScan() {
     await browser.storage.local.set({ consentAt: Date.now() });
@@ -86,21 +114,36 @@ export default function App() {
       await scanNow(s);
     } catch (e: any) { setError(String(e?.message || e)); setScreen('error'); }
   }
-  async function rescan() { await discardScan(result); setResult(null); setHunt(EMPTY_HUNT); setExcluded([]); await startScan(); }
+  async function rescan() {
+    // Another window may be accepting from this very result: leave it (and its tabs) alone.
+    if (!(await runIdle())) { setError(BUSY_ELSEWHERE); setScreen('error'); return; }
+    await discardScan(result); setResult(null); setHunt(EMPTY_HUNT); setExcluded([]); await startScan();
+  }
   const toggle = (id: string) => setExcluded((x) => (x.includes(id) ? x.filter((v) => v !== id) : [...x, id]));
+  /** Test mode: close the tabs held on offer screens. Only tabs still ours on the same site are closed; nothing is clicked. */
+  async function releaseHeld() {
+    if (!result) return;
+    for (const i of result.items) if (i.paused) await releasePaused(i);
+    const r = { ...result, items: [...result.items] };
+    setResult(r); await browser.storage.local.set({ scanResult: r });
+  }
 
   async function startHunt() {
     if (!result) return;
     const s = await getSettings(); setSettings(s);
     if (s.testMode) return;   // test mode never accepts an offer and never charges
+    const ran = await runExclusive(() => huntNow(s, result));
+    if (!ran) { setError(BUSY_ELSEWHERE); setScreen('error'); }
+  }
+  async function huntNow(s: Settings, result: ScanResult) {
     // The services still ticked (all are ticked by default), best offer first, capped. Every figure was observed during the scan.
     const offers = result.items.filter((i) => i.hasOffer);
     const targets = offers.filter((i) => !excluded.includes(i.id)).slice(0, Math.max(1, s.maxHunts || 10));
     const skipped = offers.filter((i) => !targets.includes(i));
     const estimate = +targets.reduce((sum, i) => sum + i.estSavings, 0).toFixed(2);
     setError(null); setHunt({ ...EMPTY_HUNT, total: targets.length });
-    // Tabs paused on offers the user did not pick are simply closed. Nothing is clicked in them.
-    for (const i of skipped) if (i.paused) { await closeTab(i.paused.tabId); i.paused = null; }
+    // Tabs paused on offers the user did not pick are closed (only if still ours). Nothing is clicked in them.
+    for (const i of skipped) await releasePaused(i);
 
     let pay: CheckoutResult | null = null;
     if (!s.skipPayment) {
@@ -149,7 +192,7 @@ export default function App() {
       {screen === 'idle' && <Idle onScan={startScan} error={error} restricted={settings.restrictedMode} testMode={settings.testMode} testFind={settings.testFind} />}
       {screen === 'consent' && <Consent onAgree={agreeAndScan} onBack={() => setScreen('idle')} />}
       {screen === 'scanning' && <Scanning progress={progress} />}
-      {screen === 'reveal' && result && <Reveal result={result} excluded={excluded} onToggle={toggle} onHunt={startHunt} onRescan={rescan} restricted={settings.restrictedMode} skipPayment={settings.skipPayment} testMode={settings.testMode} />}
+      {screen === 'reveal' && result && <Reveal result={result} excluded={excluded} onToggle={toggle} onHunt={startHunt} onRescan={rescan} onRelease={releaseHeld} restricted={settings.restrictedMode} skipPayment={settings.skipPayment} testMode={settings.testMode} testFind={settings.testFind} />}
       {screen === 'checkout' && <Checkout msg={checkoutMsg} onCancel={() => { cancelCheckout.current = true; }} />}
       {screen === 'hunting' && <Hunting hunt={hunt} watch={settings.watch} />}
       {screen === 'done' && <Done hunt={hunt} onRescan={rescan} onAgain={startHunt} />}
@@ -196,6 +239,10 @@ function Scanning({ progress }: { progress: ScanProgress | null }) {
   const phase = progress?.phase ?? 'discover';
   const items = progress?.items ?? [];
   const offers = items.filter((i) => i.hasOffer);
+  // Only rows worth watching: being read or walked, paying, or holding an offer. Everything else is counted
+  // in one line, so the list doesn't fill up with sign-in pages.
+  const shown = items.filter((i) => i.hasOffer || isBusy(i) || PAYING.includes(i.status));
+  const rest = bucketLine(items.filter((i) => !shown.includes(i)), SETS);
   const pct = progress && progress.total > 0 ? Math.round((progress.done / progress.total) * 100) : 5;
   const headline = phase === 'discover' ? (progress?.message || 'Discovering…')
     : phase === 'pages' ? `Checking accounts · ${progress!.done} of ${progress!.total}`
@@ -206,16 +253,17 @@ function Scanning({ progress }: { progress: ScanProgress | null }) {
       <div className="prog"><i style={{ width: `${Math.max(5, pct)}%` }} /></div>
       <div className="count">{headline}</div>
       {offers.length > 0 && <div className="total"><small>Found so far</small><b>~{money(progress!.totalEstSavings)}</b><span>{offers.length} offer{offers.length === 1 ? '' : 's'} · more may appear as the scan continues.</span></div>}
-      {items.length > 0 && (
+      {shown.length > 0 && (
         <div className="card">
-          {items.map((i) => (
-            <div className={`row col${i.hasOffer ? ' won' : ''}`} key={i.id}>
-              <div className="rowline"><span>{i.name}</span>{i.hasOffer ? <b className="amt">~{money(i.estSavings)}</b> : <span className={`tag ${isBusy(i) ? 'busy' : 'skip'}`}>{isBusy(i) ? 'working' : keptLabel(i)}</span>}</div>
-              <span className={`sub${i.hasOffer ? ' offer' : ''}`}>{i.live || ''}</span>
+          {shown.map((i) => (
+            <div className={`row col scan${i.hasOffer ? ' won' : ''}`} key={i.id}>
+              <div className="rowline"><span className="nm">{i.name}</span>{i.hasOffer ? <b className="amt">~{money(i.estSavings)}</b> : <span className={`tag ${isBusy(i) ? 'busy' : 'skip'}`}>{isBusy(i) ? 'working' : keptLabel(i)}</span>}</div>
+              <span className={`sub${i.hasOffer ? ' offer' : ''}`} title={i.live || undefined}>{i.live || <>&nbsp;</>}</span>
             </div>
           ))}
         </div>
       )}
+      {rest && <p className="buckets">{rest}</p>}
       <p className="fine left">{phase === 'find'
         ? 'This is the slow part: it walks each cancellation flow up to the loyalty offer and stops there, three services at a time. Nothing is accepted yet.'
         : phase === 'pages' ? 'Account pages open briefly in background tabs and close on their own.'
@@ -224,48 +272,81 @@ function Scanning({ progress }: { progress: ScanProgress | null }) {
   );
 }
 
-function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skipPayment, testMode }: { result: ScanResult; excluded: string[]; onToggle: (id: string) => void; onHunt: () => void; onRescan: () => void; restricted: boolean; skipPayment: boolean; testMode: boolean }) {
+/**
+ * The result, in the order the owner acts on it: the total, the offers (tick what to take), what they pay
+ * for, what needs a look (one click to open it), then folded groups for everything left alone. Duplicates
+ * are hidden; their names show as "also: …" on the row they were merged into.
+ */
+function Reveal({ result, excluded, onToggle, onHunt, onRescan, onRelease, restricted, skipPayment, testMode, testFind }: { result: ScanResult; excluded: string[]; onToggle: (id: string) => void; onHunt: () => void; onRescan: () => void; onRelease: () => void; restricted: boolean; skipPayment: boolean; testMode: boolean; testFind: boolean }) {
   const [details, setDetails] = useState(false);
-  const found = result.items.filter((i) => i.status === 'signed_in' || i.status === 'unknown');
-  const offers = found.filter((i) => i.hasOffer);
-  const kept = found.filter((i) => !i.hasOffer);
+  const g = groupReveal(result.items, SETS);
+  const found = result.items.filter((i) => PAYING.includes(i.status)).length;
+  const offers = g.offers;
   const picked = offers.filter((i) => !excluded.includes(i.id));
   const total = Math.round(picked.reduce((s, i) => s + i.estSavings, 0));
+  // Say "not checked" when no cancellation flow was opened, never "0 made an offer".
+  const readOnly = result.items.some((i) => i.findOutcome === 'not_walked') || (testMode && !testFind);
+  const walked = result.items.some((i) => i.findOutcome != null && i.findOutcome !== 'not_walked');
+  const also = (i: ScanItem) => alsoLabel(i, result.items);
+  const who = (i: ScanItem) => i.email || i.accountName || '';
+  const workLine = (i: ScanItem) => [who(i), (i.live || '').replace(/^work account\s*[—–-]\s*/i, '')].filter(Boolean).join(' · ');
   return (
     <div className="body">
-      {found.length === 0 ? (
+      {found === 0 ? (
         <>
           <h1>Nothing found <em>yet.</em></h1>
-          <p>{restricted ? "None of the allowlisted sites looked signed in. Sign in to one in this browser, then rescan." : `We checked ${result.domainsChecked} sites you're signed into and didn't find a paid subscription we can work with. Sign in to a service in this browser, then rescan.`}</p>
+          <p>{restricted ? "None of the allowlisted sites showed a paid plan you're signed into." : `We checked ${result.domainsChecked} sites you're signed into and didn't confirm a paid subscription we can work with.`} {g.needsLook.length ? 'Some need a look — open them below to check.' : 'Sign in to a service in this browser, then rescan.'}</p>
         </>
       ) : (
         <>
           {offers.length > 0 && <div className="total"><small>{picked.length === offers.length ? 'You could save' : `${picked.length} of ${offers.length} picked · you could save`}</small><b>~{money(total)}</b><span>on your next bills, without cancelling anything.</span></div>}
-          <div className="count">{found.length} subscription{found.length === 1 ? '' : 's'} found · {offers.length} made an offer{offers.length > 0 ? ' · untick anything you\'d rather leave alone' : ''}</div>
-          <div className="card">
-            {offers.map((i) => { const on = !excluded.includes(i.id); return (
+          <div className="count">{countLine(found, offers.length, { readOnly, walked })}</div>
+          {offers.length > 0 && <div className="card">
+            {offers.map((i) => { const on = !excluded.includes(i.id); const a = also(i); return (
               <label className={`row pick${on ? '' : ' off'}`} key={i.id}>
                 <input type="checkbox" checked={on} onChange={() => onToggle(i.id)} aria-label={`Include ${i.name}`} />
                 <div className="rowmain">
                   <div className="rowline"><span>{i.name}</span><b className="amt">~{money(i.estSavings)}</b></div>
-                  {i.email && <span className="sub who">{i.email}</span>}
+                  {(who(i) || i.otherAccount) && <span className="sub who">{who(i) && `Signed in as ${who(i)}`}{i.otherAccount && <span className="chip">other account</span>}</span>}
                   <span className="sub deal">{dealLine(i)}</span>
+                  {a && <span className="sub also">{a}</span>}
                 </div>
               </label>
             ); })}
-            {kept.map((i) => (
-              <div className="row col skip" key={i.id}>
-                <div className="rowline"><span>{i.name}</span><span className="tag skip">{keptLabel(i)}</span></div>
-                {(i.email || i.monthlyPrice != null || i.isTrial) && <span className="sub">{[i.email, i.status === 'signed_in' ? payingLine(i) : null].filter(Boolean).join(' · ')}</span>}
-              </div>
-            ))}
-          </div>
+          </div>}
+          {g.paying.length > 0 && <>
+            <div className="sect">Paying</div>
+            <div className="card">
+              {g.paying.map((i) => { const sub = paidSubLine(i); const a = also(i); return (
+                <div className="row col" key={i.id} title={i.live || undefined}>
+                  <div className="rowline"><span className="nm">{i.name}</span><span className="tag skip">{keptLabel(i)}</span></div>
+                  {(sub || i.otherAccount) && <span className="sub">{sub}{i.otherAccount && <span className="chip">other account</span>}</span>}
+                  {a && <span className="sub also">{a}</span>}
+                </div>
+              ); })}
+            </div>
+          </>}
         </>
       )}
+      {g.needsLook.length > 0 && <>
+        <div className="sect">Needs a look ({g.needsLook.length})</div>
+        <div className="card">
+          {g.needsLook.map((i) => (
+            <div className="row col" key={i.id}>
+              <div className="rowline"><span className="nm">{i.name}</span><OpenLink item={i} /></div>
+              <span className="sub">{[i.live || keptLabel(i), who(i), also(i)].filter(Boolean).join(' · ')}</span>
+            </div>
+          ))}
+        </div>
+      </>}
+      <Folded title="Work accounts" items={g.work} line={workLine} also={also} />
+      <Folded title="Free plans" items={g.free} line={(i) => [i.planName ?? i.before?.planName, who(i)].filter(Boolean).join(' · ')} also={also} />
+      <Folded title="Signed out — sign in, then rescan" items={g.signedOut} line={() => ''} also={also} openLinks />
+      <Folded title="Skipped (sensitive)" items={g.sensitive} line={(i) => i.note || ''} also={also} />
       <div className="spacer" />
       {testMode ? (<>
         <button className="btn" onClick={async () => { const l = await lastLog(); if (l) downloadLog(l); }}>Download test log</button>
-        {result.items.some((i) => i.paused) && <button className="btn ghost" onClick={async () => { for (const i of result.items) if (i.paused) { await closeTab(i.paused.tabId); i.paused = null; } }}>Close the tabs held on offers</button>}
+        {result.items.some((i) => i.paused) && <button className="btn ghost" onClick={onRelease}>Close the tabs held on offers</button>}
         <p className="fine">Test mode: nothing was accepted and nothing will be charged. The tabs held on offer screens are real; leave them or close them.</p>
       </>) : (<>
         <button className="btn" onClick={onHunt} disabled={picked.length === 0}>Get these discounts →</button>
@@ -276,18 +357,28 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, restricted, skip
     </div>
   );
 }
-/** Why a subscription is listed without an offer. */
-function keptLabel(i: ScanItem): string {
-  if (i.status === 'login_wall') return 'Not signed in';
-  if (i.status === 'no_paid_plan') return 'No paid plan';
-  if (i.status === 'error') return "Couldn't check";
-  if (i.status === 'sensitive') return 'Skipped · sensitive account';
-  if (i.offerApplied) return 'Promo active · kept';
-  if (i.findOutcome === 'no_offer_backed_out') return 'No offer this time · left alone';
-  if (i.findOutcome === 'blocked_needs_you') return 'Needs you to sign in';
-  if (i.findOutcome === 'not_walked') return 'Signed in · not walked (read-only)';
-  if (i.findOutcome == null) return 'Not checked';
-  return "Couldn't check · left alone";
+/** A folded group of rows left alone (native <details>, closed by default). `openLinks` adds an Open link per row. */
+function Folded({ title, items, line, also, openLinks }: { title: string; items: ScanItem[]; line: (i: ScanItem) => string; also: (i: ScanItem) => string; openLinks?: boolean }) {
+  if (!items.length) return null;
+  return (
+    <details className="grp">
+      <summary>{title} <span className="n">({items.length})</span></summary>
+      <div className="card">
+        {items.map((i) => { const sub = [line(i), also(i)].filter(Boolean).join(' · '); return (
+          <div className="row col skip" key={i.id}>
+            <div className="rowline"><span className="nm">{i.name}</span>{openLinks && <OpenLink item={i} />}</div>
+            {sub && <span className="sub">{sub}</span>}
+          </div>
+        ); })}
+      </div>
+    </details>
+  );
+}
+/** Opens the page in a new tab in front, so the owner can check it (or sign in) in one click. */
+function OpenLink({ item }: { item: ScanItem }) {
+  const url = openUrl(item);
+  if (!url) return null;
+  return <a className="open" href={url} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); void browser.tabs.create({ url, active: true }); }}>Open ↗</a>;
 }
 
 function Checkout({ msg, onCancel }: { msg: string; onCancel: () => void }) {
@@ -395,11 +486,16 @@ function ErrorScreen({ error, onRetry, onSettings }: { error: string | null; onR
   );
 }
 
+/** Every row, raw: where the probe landed, what kind of page the classifier saw and how sure it was. Hover for its notes. */
 function DevTable({ items }: { items: ScanItem[] }) {
   return (
     <table className="dev">
-      <thead><tr><th>service</th><th>status</th><th>src</th><th>$/mo</th><th>est</th></tr></thead>
-      <tbody>{items.map((i) => (<tr key={i.id} title={(i.url ?? '') + (i.note ? ' — ' + i.note : '')}><td>{i.name}</td><td>{i.status}</td><td>{i.source}</td><td>{i.monthlyPrice ?? '–'}</td><td>{i.estSavings || '–'}</td></tr>))}</tbody>
+      <thead><tr><th>service</th><th>status</th><th>landed on</th><th>page · conf</th><th>$/mo</th></tr></thead>
+      <tbody>{items.map((i) => {
+        const m = monthlyOf(i), conf = i.before?.confidence;
+        const notes = [i.note, i.before?.notes].filter((x, k, a): x is string => !!x && a.indexOf(x) === k).join(' — ');
+        return (<tr key={i.id} title={notes || undefined}><td>{i.name}</td><td>{i.status}</td><td>{hostLabel(i.url) || '–'}</td><td>{[i.pageKind || '–', conf != null ? conf.toFixed(1) : ''].filter(Boolean).join(' · ')}</td><td>{m != null ? m.toFixed(2) : '–'}</td></tr>);
+      })}</tbody>
     </table>
   );
 }
@@ -415,12 +511,14 @@ async function runMeta(s: Settings): Promise<Record<string, unknown>> {
     startedAtLocal: new Date().toString(),
   };
 }
-/** The result in one object: counts plus one compact row per service. */
+/** The result in one object: counts, what the reveal screen showed, and one compact row per service. Emails masked, notes redacted. */
 function scanSummary(r: ScanResult): Record<string, unknown> {
   const by = (xs: string[]) => xs.reduce((o: Record<string, number>, x) => { o[x] = (o[x] || 0) + 1; return o; }, {});
+  const g = groupReveal(r.items, SETS);
   return {
-    domainsChecked: r.domainsChecked, found: r.found, withOffers: r.withOffers, totalEstSavings: r.totalEstSavings,
+    domainsChecked: r.domainsChecked, found: r.found, needsLook: r.needsLook, withOffers: r.withOffers, totalEstSavings: r.totalEstSavings,
     byStatus: by(r.items.map((i) => i.status)), byFindOutcome: by(r.items.map((i) => i.findOutcome || '-')),
-    services: r.items.map((i) => ({ domain: i.domain, name: i.name, status: i.status, email: i.email, monthlyPrice: i.monthlyPrice, cycleCharge: i.cycleCharge, cadence: i.cadence, renewalDate: i.renewalDate, isTrial: i.isTrial, offerApplied: i.offerApplied, findOutcome: i.findOutcome, offer: i.offer, estSavings: i.estSavings, deal: i.hasOffer ? dealLine(i) : null, note: i.note ?? null })),
+    reveal: { offers: g.offers.length, paying: g.paying.length, needsLook: g.needsLook.length, work: g.work.length, free: g.free.length, signedOut: g.signedOut.length, sensitive: g.sensitive.length, duplicates: g.duplicates.length },
+    services: r.items.map((i) => ({ domain: i.domain, name: i.name, status: i.status, pageKind: i.pageKind, billedVia: i.billedVia, email: maskForLog(i.email), rememberedEmail: maskForLog(i.rememberedEmail), otherAccount: i.otherAccount, dupOf: i.dupOf, aliases: i.aliases, planName: i.planName, monthlyPrice: i.monthlyPrice, cycleCharge: i.cycleCharge, cadence: i.cadence, renewalDate: i.renewalDate, isTrial: i.isTrial, offerApplied: i.offerApplied, findOutcome: i.findOutcome, offer: i.offer, estSavings: i.estSavings, deal: i.hasOffer ? dealLine(i) : null, note: i.note ? redactForLog(i.note).slice(0, 300) : null })),
   };
 }

@@ -534,6 +534,77 @@ gyms, phone plans, 1Password, QuickBooks kept) and an end-to-end run of the real
 browser held sessions for Chase, Bank of America, irs.gov and Navy Federal alongside Hulu and Netflix:
 only Hulu and Netflix were sent, and a Streamly page dressed as a bank dashboard was skipped unsent.
 
+## The first live scan, and what it taught, 2026-09-27
+
+Read-only test mode on the owner's own browser: 267 signed-in domains sent, 64 called subscriptions,
+all 64 account pages read in 93 seconds. The reveal said 7 found. Three were right (YouTube, LinkedIn,
+Netflix). The other four were a Google Workspace error page, a Walmart 404 and the owner's employer's
+Cursor seat, twice. Of the 47 "not signed in", only about 24 were real sign-in pages: 16 were 404 or
+error pages from made-up account URLs, and the rest were loading screens, a robot check and a sales
+page. Prime was called "no paid plan" on a page that said "Prime membership — Manage, update, or
+cancel". Emails were missing because 22 of the 64 page texts were mostly JavaScript source (the reader
+took each body child's `innerText`, which for a script is its code), and most sites keep the email in
+a hidden account menu. That same script text carried live session tokens into the model's input and
+into the log.
+
+A six-lens review with two adversarial verifiers per finding kept 49 findings and refuted none. The
+fix, in one pass:
+
+- **The page reader reads what a person sees.** `body.innerText` in priority order (open dialogs, then
+  the main content, then the rest, navigation last and capped), repeated lines collapsed, open shadow
+  roots included. Script text never. Custom controls (label-wrapped hidden radios, switches, tabindex
+  divs) are collected with their ARIA state. Element ids carry the snapshot they came from, so a stale
+  id can't click something else. Prices are currency-aware and ignore `"$1"`-style code tokens and cart
+  totals. A scoped identity reader finds the email in the account menu, a login form or the page's own
+  user record, and ignores support addresses.
+- **Waiting for the page to render.** Readiness is polled until the page holds still, instead of a
+  fixed 1.5 seconds after "complete", with robot checks and loading shells recognised.
+- **The classifier says what kind of page it is first**: plan page, other account page, sign-in,
+  re-auth, 404, error, loading, robot check, sales page. "No paid plan" only when the page says so;
+  prices only for the plan the account has now, tied to the numbered price list; work accounts and
+  billing through Apple or a carrier named. Gemini now generates fields in the declared order. On real
+  Gemini it got all 11 synthetic versions of the live failures right.
+- **Two recoveries per service**: a 404 tries the next known URL, then the home page; a signed-in page
+  without the plan follows its own Billing link by URL. On the testbed a wrong URL now ends on the plan
+  page with its price.
+- **New statuses** replace "signed in" meaning anything: paying, billed elsewhere, free plan, signed
+  out, work account (never walked), needs a look, same account, sensitive. Only a confirmed paid
+  personal plan is walked.
+- **Discovery**: a catalog of about 30 services with checked account URLs (not sent to the model);
+  employer tools, shops and usage APIs filtered; one row per account (cursor.sh and cursor.com);
+  guessed URLs on other companies' sites or sign-in pages replaced with the home page; all chunks in
+  parallel (about 17s → 6s).
+- **Never-click, widened**: "Finish cancellation", pause, downgrade, plan switches and purchases are
+  refused; a cancel button on an offer screen inside the cancel flow is refused; an offer's accept
+  button must not be any of those. The suite is unchanged by it (score 38, safety 100, achievable 49).
+- **Secrets and personal data**: tokens, JWTs, card digits, expiry dates and street addresses are
+  scrubbed before anything leaves the browser, emails are masked in logs, and every trace string passes
+  the same scrubber. Test logs are git-ignored.
+- **Tabs**: paused tabs are registered and only a provably-owned tab is ever clicked or closed after a
+  restart; orphaned tabs from a closed panel are closed on the next open; every script call and API call
+  has a timeout.
+- **The panel** groups the result: offers, paying, needs a look (with an Open link), then folded groups
+  for work accounts, free plans, signed out and sensitive.
+- **review-log** gained an owner view, a status × reason table, duplicates, a would-walk audit, identities,
+  a text-quality check that catches a return of the script-text bug, and a secrets check.
+
+A second adversarial review of the finished change found 27 more real problems, and they are fixed too. The
+worst: after payment, the accept step would press any button still labelled like the recorded one ("Continue",
+"Confirm"), even if the paused tab had since moved on to the final confirmation. It now presses in place only on
+the unchanged offer screen (same URL, same screen fingerprint, offer wording present, not a confirm page),
+and otherwise walks again. Also: work-account evidence is kept across the probe's hops; a walk checks a link or
+navigate target against the never-touch rules before opening it; a plain click on an accept button during the
+free scan is treated as the offer and paused on, never pressed; other people's emails in hidden JSON, share
+panels and team lists are no longer taken as the account's; telehealth, therapy and pharmacy sites joined the
+never-touch list; a Cloudflare Turnstile widget no longer makes an ordinary page a "robot check"; header
+account links survive the element cap so the home-page recovery can find them.
+
+Verified: unit tests 568 + 217 + 162 + 34 + 142, and two new harnesses that bundle the real hunt.ts (77 checks)
+and scan.ts (66 checks) against a fake Chrome; the extension end to end on the testbed in read-only (41),
+find (44), sensitive (18) and find with real Gemini (44); the suite unchanged (score 38, safety 100,
+achievable 49); and the new classifier on real Gemini against 12 synthetic versions of the live failures, all
+correct.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run
@@ -550,6 +621,9 @@ only Hulu and Netflix were sent, and a Streamly page dressed as a bank dashboard
   real error, and each row prints its own.
 - The testbed's yellow dev bar was polluting page snapshots. It is now marked `data-wa-ignore`.
 - Mobile landing page overflowed. Grid children got `min-width: 0` and the mock rows wrap.
+- The Anthropic provider path is broken with the installed SDK: its `zodOutputFormat` expects zod v4
+  schemas and the backend uses zod v3. Gemini and OpenAI-compatible paths are unaffected. Found
+  2026-09-27, not fixed; only matters if `AI_PROVIDER=anthropic`.
 
 ## Still true and worth remembering
 

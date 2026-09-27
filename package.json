@@ -21,7 +21,13 @@
     "testbed:dev": "node scripts/testbed-dev.mjs",
     "review-log": "node scripts/review-log.mjs",
     "e2e:extension": "node scripts/e2e-extension.mjs",
-    "test:sensitive": "node scripts/test-sensitive.mjs"
+    "test:sensitive": "node scripts/test-sensitive.mjs",
+    "test:guardrails": "node scripts/test-guardrails.mjs",
+    "test:scrub": "node scripts/test-scrub.mjs",
+    "test:reader": "node scripts/test-page-reader.mjs",
+    "test": "npm run test:sensitive && npm run test:guardrails && npm run test:scrub && npm run test:saving && npm run test:reader && npm run test:hunt && npm run test:scan",
+    "test:hunt": "node scripts/test-hunt.mjs",
+    "test:scan": "node scripts/test-scan.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

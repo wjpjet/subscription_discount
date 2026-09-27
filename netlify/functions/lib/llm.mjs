@@ -88,11 +88,17 @@ async function callAnthropic({ system, user, schema, maxTokens, effort, model })
   return { output: res.parsed_output, provider: 'anthropic', model, usage: { inputTokens: (u.input_tokens || 0) + (u.cache_read_input_tokens || 0) + (u.cache_creation_input_tokens || 0), outputTokens: u.output_tokens || 0, thinkingTokens: 0, calls: 1 } };
 }
 
+// Gemini generates object properties alphabetically unless told otherwise; propertyOrdering keeps the zod
+// declaration order, so fields declared first (e.g. PageClass.pageKind) are decided before the rest.
 export function geminiSchema(zodSchema) {
   const js = zodToJsonSchema(zodSchema, { target: 'openApi3', $refStrategy: 'none' });
   const strip = (o) => {
     if (Array.isArray(o)) return o.map(strip);
-    if (o && typeof o === 'object') { const out = {}; for (const [k, v] of Object.entries(o)) { if (['$schema', 'additionalProperties', 'default', '$ref', 'definitions'].includes(k)) continue; out[k] = strip(v); } return out; }
+    if (o && typeof o === 'object') {
+      const out = {}; for (const [k, v] of Object.entries(o)) { if (['$schema', 'additionalProperties', 'default', '$ref', 'definitions'].includes(k)) continue; out[k] = strip(v); }
+      if (out.type === 'object' && out.properties && typeof out.properties === 'object' && !Array.isArray(out.properties)) out.propertyOrdering = Object.keys(out.properties);
+      return out;
+    }
     return o;
   };
   return strip(js);
