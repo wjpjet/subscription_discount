@@ -182,6 +182,8 @@ try {
   check('page judged ready before it was read', local?.ready?.kind === 'ready', `${local?.ready?.kind} in ${local?.ready?.ms}ms`);
   check('page text recorded (and redacted)', typeof local?.page?.text === 'string' && local.page.text.length > 50 && !/\b\d{16}\b/.test(local.page.text), `${local?.page?.text?.length} chars`);
   check('page text has no inlined app state (no {"session" JSON)', typeof local?.page?.text === 'string' && !local.page.text.includes('{"session"') && !/csrfToken|sessionToken/.test(local.page.text), '');
+  const recProbe = ev('flow.page').filter((x) => x.svc === 'localhost' && x.phase === 'probe');
+  check('the account page is recorded for replay (whole snapshot, scrubbed)', recProbe.length > 0 && recProbe[0].snapshot?.elements?.length > 0 && typeof recProbe[0].snapshot?.text === 'string' && recProbe[0].classify?.pageKind === 'account_billing', `${recProbe.length} page(s)`);
   await leakChecks(log, [site], 'main scan');
   const hosted = ev('probe').find((p) => p.svc === 'streamly-testbed.netlify.app');
   check('hosted Streamly (not signed in there) reported as signed out (or not loaded when offline)', !hosted || hosted.status === 'login_wall' || hosted.status === 'not_loaded', hosted ? `${hosted.status} · ${hosted.pageKind}` : 'not probed');
@@ -198,6 +200,8 @@ try {
     check('every walk step recorded with state, action and timing', steps.length > 0 && steps.every((x) => x.state && x.action && typeof x.brainMs === 'number'), `${steps.length} steps`);
     check('walk step reasoning recorded', steps.some((x) => typeof x.reasoning === 'string' && x.reasoning.length > 0), (steps.find((x) => x.reasoning) || {}).reasoning?.slice(0, 80));
     check('the final step paused on the offer (find mode)', steps.some((x) => x.terminal && x.action?.outcome === 'offer_found'), '');
+    const recSteps = ev('flow.page').filter((x) => x.svc === 'localhost' && x.phase === 'find');
+    check('every walk step is recorded for replay, with its decision', recSteps.length === steps.length && recSteps.every((x) => x.snapshot?.elements && x.action?.type && x.state), `${recSteps.length} recorded, ${steps.length} steps`);
   } else {
     const sk = ev('phase').find((p) => p.phase === 'find');
     check('read-only: no cancellation flow opened', sk?.skipped === true && !ev('step').length, `would have walked: ${(sk?.wouldWalk || []).join(', ')}`);

@@ -21,9 +21,9 @@ import { scrubUrl, scrubSecrets, scrubPii, redactForLog } from '../../shared/scr
 import { financialPageReason } from '../../shared/sensitive.js';
 import { apiAvailable, apiPost } from './api';
 import { discoverCandidates, type Candidate } from './discovery';
-import { openTab, waitForPage, waitForContent, runInTab, closeTab, navigateTab, classifyTabError, closeOrphanTabs, ownedPausedTab } from './tabs';
+import { openTab, waitForPage, waitForContent, runInTab, closeTab, navigateTab, sleep, classifyTabError, closeOrphanTabs, ownedPausedTab } from './tabs';
 import { findAll, closePaused, type FindResult, type HuntStep, type PausedAt } from './hunt';
-import { trace, snapSummary, maskForLog } from './trace';
+import { trace, snapSummary, maskForLog, recordPage } from './trace';
 import { hostOf, blockReason } from './lists';
 import { money } from './format';
 import type { Settings } from './settings';
@@ -80,6 +80,8 @@ const SHARED_IDP_RE = /^(login\.microsoftonline\.com|login\.live\.com|accounts\.
 /** Paid, but not through the service: never walked. */
 const ELSEWHERE = ['app_store', 'carrier', 'bundle_or_partner'];
 const ROBOT = 'The site asked for a robot check — open it yourself';
+/** A bare "404: Not Found" (no links, a few words) is a wrong URL, not a page that failed to render. */
+const NOT_FOUND_TEXT_RE = /\b404\b|not found|page (could not|couldn['’]t|can['’]t) be found|doesn['’]t exist/i;
 
 /** Walked by the find pass: a confirmed paid plan on a personal account, not already discounted. */
 const walkable = (i: ScanItem) => i.status === 'signed_in' && !i.offerApplied && i.before?.hasPaidPlan === true;
@@ -291,20 +293,24 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
       return usable(u.href) ? u.href : null;   // usable() also refuses sign-in URLs and blocked hosts
     };
 
-    let url = c.accountUrl, first = true;
+    let url = c.accountUrl, first = true, reread = false, rereadDone = false, pricing = false;
     for (;;) {
       try {
         // Load, then wait until the page has actually rendered (SPAs render well after 'complete').
         const tl = Date.now();
         let loadKind: string;
-        if (first) { tabId = await openTab(url, false, { purpose: 'probe', svc: c.domain }); loadKind = (await waitForPage(tabId, LOAD_CAP_MS)).kind; }
+        // A re-read stays on the same page: an app that was still filling in gets a little more time.
+        if (reread) { loadKind = 'reread'; await sleep(1500); }
+        else if (first) { tabId = await openTab(url, false, { purpose: 'probe', svc: c.domain }); loadKind = (await waitForPage(tabId, LOAD_CAP_MS)).kind; }
         else loadKind = (await navigateTab(tabId!, url)) ? 'complete' : 'timeout';
+        reread = false;
+        const pricingNow: boolean = pricing; pricing = false;   // this page was opened only to find the plan's price
         const loadMs = Date.now() - tl;
         if (first) { rec.loadMs = loadMs; rec.loadTimedOut = loadKind === 'timeout'; }
         first = false;
         if (loadKind === 'gone') throw new Error('tab was closed');
         item.live = 'Reading the account page…';
-        const ready = await waitForContent(tabId!, { capMs: CONTENT_CAP_MS });
+        const ready = await waitForContent(tabId!, { capMs: CONTENT_CAP_MS, patientSparse: true });
         const r = { kind: ready.kind, ms: ready.ms, visibleTextLen: ready.probe?.visibleTextLen ?? null, interactiveCount: ready.probe?.interactiveCount ?? null };
         const load: Record<string, unknown> = { url: scrubUrl(url), load: loadKind, loadMs, ready: ready.kind, readyMs: ready.ms };
         loads.push(load); lastReady = r;
@@ -316,7 +322,7 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
         }
         if (netError || !snap) {
           // The browser's own error page (DNS failure, refused connection): try the next URL, else give up.
-          const next = best ? null : fallback(null, true);
+          const next = best && !BAD_PAGE.includes(best.cls.pageKind as string) ? null : fallback(null, true);
           if (next && canHop()) { hops.push({ why: 'error_page', from: scrubUrl(url), to: scrubUrl(next) }); tried.add(pageKey(next)); url = next; continue; }
           if (!best) local = { status: 'not_loaded', live: "The site didn't load", pageKind: null };
           break;
@@ -337,22 +343,43 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
         }
         const textLen = snap.textLength ?? (snap.text || '').length;
         const empty = textLen < 40 && !(snap.elements || []).length && (!ready.probe || (ready.probe.visibleTextLen < 40 && ready.probe.interactiveCount === 0));
+        const bareNotFound = textLen < 60 && !(snap.elements || []).length && NOT_FOUND_TEXT_RE.test(`${snap.title || ''} ${snap.text || ''}`);
+        if (!onLogin && bareNotFound) {
+          // "404: Not Found" and nothing else (Oura's guessed billing URL): recover like any other 404.
+          load.pageKind = 'not_found';
+          const next = best && !BAD_PAGE.includes(best.cls.pageKind as string) ? null : fallback(snap.url || url, false);
+          if (next && canHop()) { hops.push({ why: 'not_found', from: scrubUrl(snap.url || url), to: scrubUrl(next) }); tried.add(pageKey(next)); url = next; continue; }
+          if (!best) local = { status: 'wrong_page', live: "Couldn't find the account page", pageKind: 'not_found' };
+          break;
+        }
         if (!onLogin && empty) {
           load.pageKind = 'loading';
           if (!best) local = { status: 'not_loaded', live: "The page didn't finish loading — open it yourself", pageKind: 'loading' };
           break;
         }
         const tc = Date.now();
+        const readiness = ready.probe && { ...ready.probe, url: scrubUrl(ready.probe.url), dialog: scrubPii(scrubSecrets(ready.probe.dialog || '')) };
         const cls: PageClass = useApi
-          ? (await apiPost<{ result: PageClass }>('/api/classify', { domain: c.domain, name: c.name, snapshot: snap, readiness: ready.probe && { ...ready.probe, url: scrubUrl(ready.probe.url), dialog: scrubPii(scrubSecrets(ready.probe.dialog || '')) } })).result
+          ? (await apiPost<{ result: PageClass }>('/api/classify', { domain: c.domain, name: c.name, snapshot: snap, readiness })).result
           : (mockClassify(snap, c.domain) as unknown as PageClass);
         classifyMs += Date.now() - tc;
+        recordPage({ svc: c.domain, name: c.name, phase: 'probe', hop: hops.length, reread: loadKind === 'reread', readiness,
+          classify: { pageKind: cls.pageKind ?? null, signedIn: cls.signedIn, accountType: cls.accountType ?? null, billedVia: cls.billedVia ?? null, isPlanPage: cls.isPlanPage ?? null,
+            hasPaidPlan: cls.hasPaidPlan, planName: cls.planName, monthlyPriceUsd: cls.monthlyPriceUsd, cycleChargeUsd: cls.cycleChargeUsd, cadence: cls.cadence,
+            detailsLinkId: cls.detailsLinkId ?? null, confidence: cls.confidence, notes: cls.notes } }, snap);
         Object.assign(load, { pageKind: cls.pageKind ?? null, signedIn: cls.signedIn, hasPaidPlan: cls.hasPaidPlan, confidence: cls.confidence });
-        const improved = better(cls, best?.cls ?? null);
+        // A price page that shows no price must not replace the reading it was meant to complete (its renewal date, plan name).
+        const improved = better(cls, best?.cls ?? null) && (!pricingNow || cls.monthlyPriceUsd != null || cls.cycleChargeUsd != null);
         if (improved) best = { cls, snap, ready: r };
         // Who pays is read on EVERY page, whichever one is kept. An employer's or team's page settles it: no hop
         // can make that seat the person's to cancel, and a hop could land where it no longer shows (Google One).
         if (noteEvidence(ev, cls, snap, url)) { load.work = true; break; }
+        // Still filling in (a loading screen, or a near-empty frame the classifier wasn't sure about): read the same
+        // page once more before judging it. The second live run read YouTube and Reddit this way, blank.
+        const sparse = textLen < 150 && (snap.elements || []).length < 8;
+        if (!rereadDone && (cls.pageKind === 'loading' || (sparse && (cls.confidence ?? 1) < 0.7)) && Date.now() - t0 < PROBE_BUDGET_MS) {
+          rereadDone = true; reread = true; rec.reread = true; pricing = pricingNow; continue;   // same page, same purpose
+        }
         // Hop 1: a 404 / error page, while nothing useful has been seen yet.
         if ((cls.pageKind === 'not_found' || cls.pageKind === 'error') && BAD_PAGE.includes(best!.cls.pageKind as string)) {
           const next = fallback(snap.url || url, false);
@@ -365,6 +392,13 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
           && !['login', 'reauth', 'bot_challenge', 'loading'].includes(cls.pageKind as string)) {
           const next = detailsLink(cls, snap);
           if (next && canHop()) { hops.push({ why: 'details_link', from: scrubUrl(snap.url || url), to: scrubUrl(next) }); tried.add(pageKey(next)); url = next; continue; }
+        }
+        // Hop 3: a confirmed paid plan whose price no page has shown yet: the catalog's other account page for it
+        // (Amazon's Prime page, Netflix's membership page). Without a price an offer can't be valued.
+        const b = best!.cls;
+        if (b.signedIn === true && b.hasPaidPlan === true && b.monthlyPriceUsd == null && b.cycleChargeUsd == null && canHop()) {
+          const next = (c.altUrls || []).find((u) => usable(u));
+          if (next) { hops.push({ why: 'price', from: scrubUrl(snap.url || url), to: scrubUrl(next) }); tried.add(pageKey(next)); url = next; pricing = true; continue; }
         }
         break;
       } catch (e) {
@@ -440,11 +474,13 @@ function mapStatus(item: ScanItem, c: Candidate, cls: PageClass, snap: PageSnaps
   }
   if (kind === 'not_found' || kind === 'error') return set('wrong_page', "Couldn't find the account page");
   if (kind === 'login') return set('login_wall', 'Not signed in here');
-  if (kind === 'marketing' && !signedIn) return hasSignInControl(snap) ? set('login_wall', 'Not signed in here') : set('wrong_page', "Couldn't find the account page");
+  // A public sales page with no signed-in chrome: for the person that's "not signed in here", whether or not a Sign
+  // in link survived the element cap. "Needs a look" is for pages worth opening; the second run filled it with these.
+  if (kind === 'marketing' && !signedIn) return set('login_wall', 'Not signed in here');
   if (!signedIn) return set('login_wall', 'Not signed in here');
   item.planName = cls.planName ?? null;
   // "No paid plan" only when the plan page says so; absence on some other page proves nothing.
-  if (cls.hasPaidPlan === false && (cls.isPlanPage || kind === 'account_billing')) {
+  if (cls.hasPaidPlan === false && (cls.isPlanPage || kind === 'account_billing' || kind === 'marketing')) {
     const pn = item.planName;
     return set('no_paid_plan', pn ? (/free/i.test(pn) ? pn : `Free plan · ${pn}`) : 'Free plan');
   }

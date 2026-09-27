@@ -29,7 +29,7 @@ import type { Settings } from './settings';
 import type { ScanItem } from './scan';
 import type { AgentAction, Decision, FinishDetails, Offer, PageClass, StepResponse } from './types';
 import { isBlocked, blockReason, hostOf } from './lists';
-import { trace, snapSummary } from './trace';
+import { trace, snapSummary, recordPage } from './trace';
 
 export interface HuntStep { step: number; url: string; state: string; action: AgentAction; target?: string; ok?: boolean; note?: string; guardrails?: string[]; ts: number }
 /** Where a find left off: the open tab, the accept button it stopped in front of, and a fingerprint of that screen
@@ -222,6 +222,11 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
       changedByGuardrail: !!res.proposed && res.proposed.type !== a.type, guardrails: rec.guardrails,
       offer: a.offer ?? null, snapMs, brainMs, page: snapSummary(snapshot),
     };
+    // The page exactly as the model saw it, with its decision: a real cancellation flow, replayable as a test.
+    recordPage({ svc: item.domain, name: item.name, phase: opts.goal, step, state: decision.state, reasoning: (res.decision as any)?.reasoning ?? null,
+      proposed: res.proposed ? { type: res.proposed.type, id: res.proposed.id ?? null } : null,
+      action: { type: a.type, id: a.id ?? null, target: target ?? null, outcome: a.outcome ?? null, url: a.url ? scrubUrl(a.url) : null, reason: a.reason ?? null, offer: a.offer ?? null },
+      guardrails: rec.guardrails, siteDomains: sites }, snapshot);
     const ta = Date.now();
     /** Nothing was done: the ids are from an older read of the page. Read it again next step. */
     const stale = () => { rec.ok = false; rec.note = STALE_NOTE; record(rec); trace('step', { ...stepTrace, stale: true, note: rec.note, actMs: Date.now() - ta }); };

@@ -605,6 +605,44 @@ find (44), sensitive (18) and find with real Gemini (44); the suite unchanged (s
 achievable 49); and the new classifier on real Gemini against 12 synthetic versions of the live failures, all
 correct.
 
+## The second live scan, and recording real flows, 2026-09-27
+
+Read-only, 41 seconds, on the new build. Five real paid plans and nothing false in Paying: Prime, Claude
+Max, LinkedIn Premium, Netflix, and a Twitch "Prime Subscription". No script text in any page, no secret in
+the log, 22 sites withheld (21 never-touch, 1 from the Never-explore list), discovery 5s instead of 17s.
+
+What it showed, and the fixes:
+- **Pages read too early.** YouTube, Reddit and Cursor were read at under a second as an app's empty frame
+  ("Skip to main content", a menu button). A sparse page now has to hold still for 2.5s and be at least
+  3.5s old before the probe reads it, and a sparse page the classifier is unsure of is read once more.
+  Walks are unaffected: small dialogs are normal there.
+- **A bare "404: Not Found"** (Oura's guessed billing URL) was skipped as an empty page. It now recovers
+  through the site's home page like any other 404.
+- **Signed-out sales pages** (a nutrition blog, Snapchat's landing page) sat in "Needs a look". They now
+  count as signed out.
+- **No price on any paid plan.** Netflix, Amazon and LinkedIn don't show one on the page read, and Claude
+  shows only its invoice history. The classifier now takes the most recent recurring charge from a
+  billing history, points to the page's own Membership link when the plan is shown without a price, and a
+  confirmed plan without a price tries the catalog's other account page (Netflix's membership page,
+  Amazon's Prime page).
+- **Twitch's "Prime Subscription"** is a free Prime Gaming benefit, now "billed elsewhere" and not walked.
+  A channel's name is no longer taken for the account's.
+- **Google One** went unchecked because the model filed google.com under infrastructure; it is in the
+  catalog now.
+- **Emails** are still missing where the site draws the address only when its account menu opens (Amazon,
+  Claude, Netflix, Twitch). The probe never clicks, so those rows show the account's name instead.
+
+**Paid tests are small by default.** `npm run suite` now runs 5 representative scenarios on the real model
+(a plain offer, no offer behind decoys, a pause trap before a modal offer, a modal whose decline is the
+final cancel, and everything at once); all 100 need `npm run suite:full`. The owner judged the 100
+synthetic scenarios repetitive; realistic edge cases will come from recorded real flows instead.
+
+**Recording real flows.** In test mode, with "Record each page for replay tests" on, every account page
+and every walk step is kept exactly as the model saw it, scrubbed like the rest of the log.
+`npm run flows -- <log>` writes one file per service and phase to `flows/` (git-ignored), and `--replay`
+re-decides every recorded page with the current brain and guardrails: free with the mock brain, capped
+with `--real --max=N`. A replay never visits the sites again.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

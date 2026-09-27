@@ -33,3 +33,6 @@ results/
 
 # test harness bundles
 scripts/harness/**/.build/
+
+# recorded cancellation flows (scrubbed page text; local only)
+flows/

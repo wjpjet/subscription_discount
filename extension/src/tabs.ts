@@ -203,6 +203,11 @@ export type ContentKind = 'ready' | 'empty' | 'loading' | 'challenge' | 'timeout
 /** What "the page changed" means: another URL, more or fewer controls, ~50 chars more or less text, another dialog. */
 const sigOf = (p: Readiness) => `${p.url}|${p.interactiveCount}|${Math.round(p.visibleTextLen / 50)}|${p.dialog || ''}`;
 const hasContent = (p: Readiness) => p.interactiveCount >= 1 || p.visibleTextLen >= 120;
+/** A page with real content. A sparse one (an app's frame: a menu button and a search box, or just "Skip to main
+ *  content") is often a single-page app that fills in seconds later, even after it has held still for a moment:
+ *  the second live run read YouTube, Reddit and Cursor that way at under a second. */
+const isRich = (p: Readiness) => p.visibleTextLen >= 200 || p.interactiveCount >= 10;
+const SPARSE_STABLE_MS = 2500, SPARSE_MIN_MS = 3500;
 /** A visible progress bar blocks readiness only this long: storage and usage meters on account pages are progress
  *  bars that never go away, and must not cost every such page the full cap. */
 const BUSY_GRACE_MS = 4000;
@@ -231,7 +236,7 @@ function atCap(p: Readiness | null, err: TabErrorKind | null): ContentKind {
  * starts the stability count over. At the cap the kind says why it wasn't ready (challenge / loading / empty /
  * timeout); an error page or a closed tab ends the wait at once.
  */
-export async function waitForContent(tabId: number, opts: { floorMs?: number; stableMs?: number; pollMs?: number; capMs?: number } = {}): Promise<{ kind: ContentKind; ms: number; probe: Readiness | null; urlChanged: boolean }> {
+export async function waitForContent(tabId: number, opts: { floorMs?: number; stableMs?: number; pollMs?: number; capMs?: number; patientSparse?: boolean } = {}): Promise<{ kind: ContentKind; ms: number; probe: Readiness | null; urlChanged: boolean }> {
   const floorMs = opts.floorMs ?? 300, stableMs = opts.stableMs ?? 700, pollMs = opts.pollMs ?? 300, capMs = opts.capMs ?? 8000;
   const t0 = Date.now(), el = () => Date.now() - t0;
   let probe: Readiness | null = null, sig = '', since = t0, urlChanged = false, lastErr: TabErrorKind | null = null;
@@ -254,7 +259,8 @@ export async function waitForContent(tabId: number, opts: { floorMs?: number; st
         const s = sigOf(r);
         if (s !== sig) { sig = s; since = Date.now(); }
         const held = r.loadingText || r.challenge || (r.busy && el() < BUSY_GRACE_MS);
-        if (!held && hasContent(r) && el() >= floorMs && Date.now() - since >= stableMs) return done('ready');
+        const rich = !opts.patientSparse || isRich(r);   // walks: small dialogs are normal there, read them at once
+        if (!held && hasContent(r) && el() >= (rich ? floorMs : Math.max(floorMs, SPARSE_MIN_MS)) && Date.now() - since >= (rich ? stableMs : Math.max(stableMs, SPARSE_STABLE_MS))) return done('ready');
       }
     }
     if (el() >= capMs) break;

@@ -88,7 +88,7 @@ export default function App() {
   async function scanNow(s: Settings) {
     const ran = await runExclusive(async () => {
       setScreen('scanning'); setProgress({ phase: 'discover', done: 0, total: 0, message: 'Starting…', items: [], totalEstSavings: 0 });
-      if (s.testMode) await traceStart(await runMeta(s), { pageText: s.testPageText });
+      if (s.testMode) await traceStart(await runMeta(s), { pageText: s.testPageText, record: s.testRecord });
       try {
         const r = await runScan(s, setProgress);
         if (s.testMode) await traceEnd(scanSummary(r));
@@ -465,7 +465,8 @@ function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; on
       <h2 className="settings-h">Test mode</h2>
       <label className="check"><input type="checkbox" checked={s.testMode} onChange={(e) => setS({ ...s, testMode: e.target.checked })} /> Test mode — scan and log everything; never accept an offer, never charge</label>
       <label className="check"><input type="checkbox" checked={s.testFind} disabled={!s.testMode} onChange={(e) => setS({ ...s, testFind: e.target.checked })} /> Also walk cancellation flows to find offers <span className="hint">off = read-only: account pages only, no cancellation flow opened</span></label>
-      <label className="check"><input type="checkbox" checked={s.testPageText} disabled={!s.testMode} onChange={(e) => setS({ ...s, testPageText: e.target.checked })} /> Include page text in the log <span className="hint">helps find bugs; may contain your name or address; long numbers are removed</span></label>
+      <label className="check"><input type="checkbox" checked={s.testPageText} disabled={!s.testMode} onChange={(e) => setS({ ...s, testPageText: e.target.checked })} /> Include page text in the log <span className="hint">helps find bugs; tokens, card numbers and addresses are removed and emails masked, but names can remain</span></label>
+      <label className="check"><input type="checkbox" checked={s.testRecord} disabled={!s.testMode || !s.testPageText} onChange={(e) => setS({ ...s, testRecord: e.target.checked })} /> Record each page for replay tests <span className="hint">keeps what the AI saw on every account page and walk step, scrubbed the same way, so real cancellation flows can be replayed as tests</span></label>
       <button className="btn ghost" onClick={async () => { const l = await lastLog(); if (l) downloadLog(l); else alert('No test log yet. Turn on test mode and run a scan.'); }}>Download last test log</button>
       <div className="spacer" />
       <button className="btn" onClick={() => onSave(s)}>Save</button>

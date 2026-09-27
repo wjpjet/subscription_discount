@@ -15,10 +15,14 @@ The first live test-mode scan found 49 problems; all are fixed (HISTORY.md, 2026
   - Move `walkaway-test-log-2026-09-27T00-21-25.json` out of the repo folder, or delete it. Test logs
     are git-ignored now, but never share that one.
 - [ ] **Rotate the Gemini API key and revoke the Together key.** Both were pasted into a chat.
-- [ ] **Second live run, read-only**, with the new build. Same steps as below. Check in the report:
-      emails now shown, the 404s recovered, the employer's accounts marked "work account", nothing in
-      "Paying" that you don't pay for.
-- [ ] **Then a live run with walks** (Also walk cancellation flows on).
+- [x] **Second live run, read-only** (2026-09-27). 5 real paid plans found and nothing false in Paying;
+      fixes for what it showed are in HISTORY.md.
+- [ ] **Live run with walks, recording on.** Settings → Test mode: turn on **Also walk cancellation
+      flows**, keep **Include page text** and **Record each page for replay tests** on. Then
+      `npm run review-log -- <log>` and `npm run flows -- <log>`: every real cancellation flow it walked
+      becomes a flow file in `flows/` (local only, git-ignored).
+- [ ] **Build the realistic edge cases from those flows.** Replay them free with
+      `npm run flows -- flows/<run> --replay`, and mimic the interesting ones on Streamly.
 - [ ] **Retire the Netlify function site** once the Worker has been used for a while. Keep Streamly
       where it is; it is a static testbed and costs nothing.
 - [ ] **Delete the environment variables from the Streamly site.** It is static and never used them.
@@ -107,8 +111,10 @@ npm run testbed:dev        # Streamly locally, http://localhost:8081 (already in
 npm run cf:deploy          # publish the Worker
 npm run cf:tail            # live logs from the deployed Worker
 npm run api:dev            # the same handlers as a plain Node server, reads .env
-npm run suite              # all 100 scenarios, scored, real model
-npm run suite:mock         # same, no API key needed
+npm run suite              # 5 representative scenarios, real model (a few cents)
+npm run suite:full         # all 100, real model (about a dollar or two): only on purpose
+npm run suite:mock         # all 100, mock brain, free
+npm run flows -- <log|flows/run> [--replay [--real --max=10]]   # recorded real flows: list, replay (mock is free)
 npm run latency            # p50/p95 per endpoint
 npm run test:stripe        # 10 checks against Stripe test mode
 npm run package:extension  # build + zip + copy into landing/downloads

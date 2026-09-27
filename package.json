@@ -6,7 +6,7 @@
     "api:dev": "node --env-file-if-exists=.env scripts/api-server.mjs",
     "e2e:testbed": "node --env-file-if-exists=.env scripts/e2e-testbed.mjs",
     "e2e:testbed:mock": "WALKAWAY_BRAIN=mock node scripts/e2e-testbed.mjs",
-    "suite": "node --env-file-if-exists=.env scripts/suite.mjs",
+    "suite": "node --env-file-if-exists=.env scripts/suite.mjs --quick",
     "suite:mock": "WALKAWAY_BRAIN=mock node scripts/suite.mjs",
     "test:stripe": "node --env-file-if-exists=.env scripts/test-stripe.mjs",
     "package:extension": "node scripts/package-extension.mjs",
@@ -27,7 +27,9 @@
     "test:reader": "node scripts/test-page-reader.mjs",
     "test": "npm run test:sensitive && npm run test:guardrails && npm run test:scrub && npm run test:saving && npm run test:reader && npm run test:hunt && npm run test:scan",
     "test:hunt": "node scripts/test-hunt.mjs",
-    "test:scan": "node scripts/test-scan.mjs"
+    "test:scan": "node scripts/test-scan.mjs",
+    "suite:full": "node --env-file-if-exists=.env scripts/suite.mjs",
+    "flows": "node --env-file-if-exists=.env scripts/flows.mjs"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",

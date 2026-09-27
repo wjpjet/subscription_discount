@@ -13,6 +13,11 @@
  *   segments → [token], user:pass@ dropped).
  * Page text, headings and button labels are recorded only when "include page text" is on (scrubbed as above);
  * otherwise a page is summed up by its URL, title and counts.
+ *
+ * Recording ("record pages for replay", needs page text on): every page the scan reads and every walk step also
+ * keeps the whole snapshot the model saw, scrubbed the same way and with form-field contents replaced by "[filled]",
+ * as a `flow.page` event. `npm run flows` turns
+ * them into replayable flows, so real cancellation flows become test cases without visiting the sites again.
  */
 import { browser } from '#imports';
 import { redactForLog, sanitizeSnapshot, scrubUrl, maskEmail } from '../../shared/scrub.js';
@@ -27,14 +32,17 @@ const MAX_BYTES = 7_000_000;            // storage.local allows ~10MB without un
 const DROPPED = '[dropped: log size cap]';
 let log: TraceLog | null = null;
 let pageText = true;
+let recording = false;
 let persistFailed = false;
 let timer: ReturnType<typeof setTimeout> | null = null;
 
 export const tracing = () => log != null;
 export const tracePageText = () => log != null && pageText;
+export const traceRecording = () => log != null && pageText && recording;
 
-export async function traceStart(meta: Record<string, unknown>, opts: { pageText: boolean }): Promise<void> {
+export async function traceStart(meta: Record<string, unknown>, opts: { pageText: boolean; record?: boolean }): Promise<void> {
   pageText = opts.pageText;
+  recording = !!opts.record;
   persistFailed = false;
   const now = Date.now();
   log = { format: 'walkaway-test-log', version: 1, meta: clean(meta) as Record<string, unknown>, startedAt: now, endedAt: null, events: [] };
@@ -145,6 +153,31 @@ export function snapSummary(snap: any): Record<string, unknown> {
   };
 }
 
+/** The whole snapshot the model saw, scrubbed as it was sent (sanitizeSnapshot) and capped; trace() then masks every
+ *  email and secret left in any string. Element ids are kept, so a recorded decision still points at its element. */
+const LABEL_VALUE_TYPES = new Set(['submit', 'button', 'reset', 'image']);   // their value is the button's label
+function recordElement(e: any): any {
+  if (!e || typeof e !== 'object') return e;
+  const tag = e.tag, o = { ...e };
+  if ((tag === 'input' || tag === 'textarea' || tag === 'select') && o.value != null && o.value !== '' && !LABEL_VALUE_TYPES.has(String(o.type || ''))) o.value = '[filled]';
+  if (tag === 'select' && o.text) o.text = '[selected]';
+  return o;
+}
+export function recordSnapshot(snap: any): Record<string, unknown> | null {
+  if (!snap) return null;
+  const s: any = sanitizeSnapshot(snap);
+  return {
+    url: s.url, title: s.title ?? '', headings: (s.headings || []).slice(0, 12), text: String(s.text || '').slice(0, 6000),
+    textLength: s.textLength ?? String(s.text || '').length, hasPassword: !!s.hasPassword, prices: (s.prices || []).slice(0, 20),
+    elements: (s.elements || []).slice(0, 120).map(recordElement), identity: s.identity ?? null, frames: s.frames ?? [],
+  };
+}
+/** One recorded page of a flow (a probe page or a walk step), when recording is on. */
+export function recordPage(data: Record<string, unknown>, snap: any): void {
+  if (!traceRecording()) return;
+  trace('flow.page', { ...data, snapshot: recordSnapshot(snap) });
+}
+
 async function persist(): Promise<void> {
   if (!log) return;
   let size = JSON.stringify(log).length;
@@ -163,6 +196,7 @@ async function persist(): Promise<void> {
   if (size > MAX_BYTES) shed(page, 'text', DROPPED);
   if (size > MAX_BYTES) shed(page, 'buttons', []);
   if (size > MAX_BYTES) shed((e) => e, 'text', DROPPED);
+  if (size > MAX_BYTES) shed((e) => e, 'snapshot', null);   // recorded pages go last: they are what a walk run is for
   try { await browser.storage.local.set({ [KEY]: log }); persistFailed = false; }
   catch (err: any) {
     // Storage full or unavailable: the in-memory log still exists (traceEnd returns it). Say so once, in the log.

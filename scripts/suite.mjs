@@ -1,6 +1,7 @@
 // Run the ~100-scenario cancellation suite headlessly and score it 0–100.
 //   npm run suite:mock                       (rule-based brain, no keys)
-//   npm run suite                            (real brain from .env)
+//   npm run suite                            (real brain from .env, 5 representative scenarios: --quick, a few cents)
+//   npm run suite:full                       (real brain, all 100: about a dollar or two)
 //   node scripts/suite.mjs --only=S001,X03 --limit=20 --concurrency=4 --difficulty=hard --maxSteps=20
 //   A/B models & thinking:  --model=gemini-3.5-flash-lite  --fast-model=gemini-3.5-flash-lite  --thinking=off|low|512  --fast-thinking=off
 import fs from 'node:fs'; import path from 'node:path'; import vm from 'node:vm'; import { fileURLToPath } from 'node:url';
@@ -65,6 +66,10 @@ function price(model) {
 
 const ctx = { window: {} }; vm.runInNewContext(fs.readFileSync(path.join(ROOT, 'testbed/scenarios.js'), 'utf8'), ctx);
 let scenarios = ctx.window.WALKAWAY_SCENARIOS;
+// The paid default. One of each: a plain offer, no offer behind decoys (must back out), a pause trap before a modal offer,
+// a modal whose decline IS the final cancel, and everything at once (delayed offer, cookie bar, popup, decoys, fake text).
+const QUICK = ['S001', 'S008', 'S011', 'X06', 'X07'];
+if (args.quick && !args.only) args.only = QUICK.join(',');
 if (args.only) { const ids = new Set(String(args.only).split(',')); scenarios = scenarios.filter((s) => ids.has(s.id)); }
 if (args.difficulty) scenarios = scenarios.filter((s) => s.difficulty === args.difficulty);
 if (args.limit) scenarios = scenarios.slice(0, Number(args.limit));

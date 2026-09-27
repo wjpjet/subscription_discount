@@ -216,5 +216,51 @@ console.log('\nR21: discovery withholds the Never-explore list before anything i
   check('counts split: 1 sensitive, 2 never-explore', cookies.withheldSensitive === 1 && cookies.withheldNeverExplore === 2, cookies);
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+console.log('\nSecond live run: sales pages, bare 404s, missing prices, pages still filling in');
+{
+  const plan = (price, extra = {}) => ({ title: 'Membership', headings: ['Your membership'], text: `Your membership: Plus ${price ? `$${price}/month. ` : ''}Next payment: October 3, 2026. Manage membership. Cancel membership. Sign out`,
+    prices: price ? [{ amount: price, currency: 'USD', unit: 'month', context: `Plus $${price}/month. Next payment` }] : [], elements: [{ id: 1, tag: 'button', text: 'Cancel membership' }, { id: 2, tag: 'button', text: 'Sign out' }], identity: menu('you@example.com'), ...extra });
+  // A public sales page, not signed in, with no Log in link left in the snapshot: "Signed out", not "Needs a look".
+  const sales = { 'https://www.salesy-example.com/': { snap: { title: 'Plans', headings: ['Choose your plan'], text: 'Choose your plan. Premium $9.99/month. Start your free trial today.',
+    prices: [{ amount: 9.99, currency: 'USD', unit: 'month', context: 'Premium $9.99/month' }], elements: [{ id: 1, tag: 'a', text: 'Start free trial', href: '/trial' }] } } };
+  const r1 = await scan([cand('salesy-example.com', 'https://www.salesy-example.com/')], sales, (s, c) => ({ ...c, pageKind: 'marketing', signedIn: false }));
+  check('signed-out sales page → login_wall', r1.items['salesy-example.com'].status === 'login_wall', r1.items['salesy-example.com'].status);
+  // A bare "404: Not Found" (no links) is a wrong URL: recover through the site root like any 404.
+  const bare = { 'https://cloud.ring-example.com/account/billing': { snap: { title: '', text: '404: Not Found', elements: [] } },
+    'https://cloud.ring-example.com/': { snap: plan(5.99) } };
+  const r2 = await scan([cand('ring-example.com', 'https://cloud.ring-example.com/account/billing')], bare);
+  check('bare "404: Not Found" → hops to the root and reads the plan', r2.items['ring-example.com'].status === 'signed_in' && r2.items['ring-example.com'].monthlyPrice === 5.99, r2.items['ring-example.com']);
+  check('the hop is traced as not_found', r2.probe('ring-example.com').hops.some((h) => h.why === 'not_found'), r2.probe('ring-example.com').hops);
+  // A confirmed plan with no price: the catalog's other account page for it is read for the price.
+  const priced = { 'https://www.bigshop-example.com/video/settings': { snap: plan(null) }, 'https://www.bigshop-example.com/membership': { snap: plan(14.99) } };
+  const paidNoPrice = (s, c) => (/video\/settings/.test(s.url) ? { ...c, hasPaidPlan: true, isPlanPage: true, pageKind: 'account_billing', monthlyPriceUsd: null, cycleChargeUsd: null, currentPriceIndex: null, detailsLinkId: null } : null);
+  const r3 = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings', { altUrls: ['https://www.bigshop-example.com/membership'] })], priced, paidNoPrice);
+  check('paid, no price → reads the price from the catalog alt URL', r3.items['bigshop-example.com'].monthlyPrice === 14.99 && r3.items['bigshop-example.com'].status === 'signed_in', r3.items['bigshop-example.com']);
+  check('the hop is traced as price', r3.probe('bigshop-example.com').hops.some((h) => h.why === 'price'), r3.probe('bigshop-example.com').hops);
+  const r3b = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings')], priced, paidNoPrice);
+  check('no alt URL → no price hop, still signed_in', r3b.items['bigshop-example.com'].status === 'signed_in' && !r3b.probe('bigshop-example.com').hops.some((h) => h.why === 'price'), r3b.probe('bigshop-example.com').hops);
+  // An app frame that fills in a moment later: read again once, then judged on the full page.
+  const filling = { 'https://www.tube-example.com/paid_memberships': { snap: { title: 'Tube', text: 'Skip to main content', elements: [{ id: 1, tag: 'button', text: 'Guide' }] }, later: plan(13.99) } };
+  const r4 = await scan([cand('tube-example.com', 'https://www.tube-example.com/paid_memberships')], filling, (s, c) => ((s.text || '').length < 50 ? { ...c, pageKind: 'account_billing', signedIn: true, hasPaidPlan: null, confidence: 0.5 } : null));
+  check('sparse, unsure first read → read again → signed_in with the price', r4.items['tube-example.com'].status === 'signed_in' && r4.items['tube-example.com'].monthlyPrice === 13.99, r4.items['tube-example.com']);
+  check('the re-read is traced', r4.probe('tube-example.com').reread === true, r4.probe('tube-example.com'));
+  const r5 = await scan([cand('tube-example.com', 'https://www.tube-example.com/paid_memberships')], { 'https://www.tube-example.com/paid_memberships': { snap: plan(13.99) } });
+  check('a full first read is not read again', !r5.probe('tube-example.com').reread && r5.items['tube-example.com'].status === 'signed_in', r5.probe('tube-example.com'));
+  // Review of this round: a free tier on a signed-in sales page, a 404 chain, and a price page that shows no price.
+  const upsell = { 'https://one.cloud-example.com/settings': { snap: { title: 'Storage', headings: ['Your storage'], text: 'You have 15 GB of free storage. Get more storage from $1.99/month. Sign out',
+    prices: [{ amount: 1.99, currency: 'USD', unit: 'month', context: 'more storage from $1.99/month' }], elements: [{ id: 1, tag: 'button', text: 'Sign out' }], identity: menu('you@example.com') } } };
+  const r6 = await scan([cand('cloud-example.com', 'https://one.cloud-example.com/settings')], upsell, (s, c) => ({ ...c, pageKind: 'marketing', signedIn: true, hasPaidPlan: false, isPlanPage: false }));
+  check('signed in, sales page, explicitly no paid plan → Free plan (not Needs a look)', r6.items['cloud-example.com'].status === 'no_paid_plan', r6.items['cloud-example.com'].status);
+  const chain = { 'https://www.chain-example.com/account': { snap: { title: 'Page not found', headings: ['404 Not Found'], text: 'Sorry, this page could not be found. Go home.', elements: [{ id: 1, tag: 'a', text: 'Go home', href: '/' }] } },
+    'https://www.chain-example.com/membership': { snap: { title: '', text: '404: Not Found', elements: [] } }, 'https://www.chain-example.com/': { snap: plan(7.99) } };
+  const r7 = await scan([cand('chain-example.com', 'https://www.chain-example.com/account', { altUrls: ['https://www.chain-example.com/membership'] })], chain);
+  check('styled 404 → alt URL is a bare 404 → still recovers at the root', r7.items['chain-example.com'].status === 'signed_in' && r7.items['chain-example.com'].monthlyPrice === 7.99, r7.probe('chain-example.com').hops);
+  const noPriceAlt = { 'https://www.plain-example.com/account': { snap: plan(null) }, 'https://www.plain-example.com/account/membership': { snap: { ...plan(null), text: 'Your membership: Plus. Manage membership. Sign out' } } };
+  const r8 = await scan([cand('plain-example.com', 'https://www.plain-example.com/account', { altUrls: ['https://www.plain-example.com/account/membership'] })], noPriceAlt,
+    (s, c) => ({ ...c, hasPaidPlan: true, isPlanPage: true, pageKind: 'account_billing', monthlyPriceUsd: null, cycleChargeUsd: null, currentPriceIndex: null, detailsLinkId: null, renewalDate: /Next payment/.test(s.text) ? '2026-10-03' : null }));
+  check('price page without a price keeps the first reading (its renewal date)', r8.items['plain-example.com'].renewalDate === '2026-10-03' && /\/account$/.test(r8.items['plain-example.com'].url), r8.items['plain-example.com']);
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

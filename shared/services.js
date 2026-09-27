@@ -10,8 +10,9 @@ import { etld1 } from './domains.js';
 
 /** @type {{ id: string, name: string, domains: string[], accountUrl: string, altUrls?: string[] }[]} */
 export const CATALOG = [
-  { id: 'netflix', name: 'Netflix', domains: ['netflix.com'], accountUrl: 'https://www.netflix.com/account' },
+  { id: 'netflix', name: 'Netflix', domains: ['netflix.com'], accountUrl: 'https://www.netflix.com/account', altUrls: ['https://www.netflix.com/account/membership'] },
   { id: 'youtube-premium', name: 'YouTube Premium', domains: ['youtube.com'], accountUrl: 'https://www.youtube.com/paid_memberships' },
+  { id: 'google-one', name: 'Google One', domains: ['google.com'], accountUrl: 'https://one.google.com/settings', altUrls: ['https://one.google.com/storage'] },
   { id: 'linkedin-premium', name: 'LinkedIn Premium', domains: ['linkedin.com'], accountUrl: 'https://www.linkedin.com/premium/manage' },
   { id: 'twitch', name: 'Twitch', domains: ['twitch.tv'], accountUrl: 'https://www.twitch.tv/subscriptions' },
   { id: 'peacock', name: 'Peacock', domains: ['peacocktv.com'], accountUrl: 'https://www.peacocktv.com/account/plans' },

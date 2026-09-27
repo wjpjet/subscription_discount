@@ -530,5 +530,16 @@ check('trace: steps carry settle {kind, ms, navigated, loadTimedOut} and gen', s
 check('trace: a no_effect settle was recorded', stepsWithSettle.some((e) => e.settle.kind === 'no_effect'));
 check('trace: tab errors recorded by kind', log.events.some((e) => e.kind === 'step.tab_error' && e.errorKind === 'error_page') && log.events.some((e) => e.kind === 'step.tab_error' && e.errorKind === 'tab_gone'));
 check('trace: no one-time token in any traced url', !JSON.stringify(log.events).includes('abc123def456abc123def456abc'));
+{ // Recorded pages keep that a field is filled, never what is in it.
+  const rs = M.recordSnapshot({ url: 'https://example.com/profile', title: 'Profile', text: 'Profile', elements: [
+    { id: 1, tag: 'input', type: 'text', name: 'fullName', value: 'Jane Q Example' }, { id: 2, tag: 'input', type: 'tel', name: 'phone', value: '4155550123' },
+    { id: 3, tag: 'input', type: 'date', name: 'birthday', value: '1990-04-02' }, { id: 4, tag: 'input', type: 'text', name: 'zip', value: '94107' },
+    { id: 5, tag: 'select', text: 'California', value: 'CA', options: ['Alabama', 'California'] }, { id: 6, tag: 'input', type: 'submit', value: 'Save changes' },
+    { id: 7, tag: 'input', type: 'checkbox', checked: true, value: 'on' }, { id: 8, tag: 'textarea', value: 'lives at 12 elm st' }] });
+  const blob = JSON.stringify(rs);
+  check('record: no field contents survive (name, phone, birthday, ZIP, selection, free text)', !/Jane Q|4155550123|1990-04-02|94107|"CA"|California"|elm st/.test(blob.replace('"options":["Alabama","California"]', '')), blob.slice(0, 300));
+  check('record: filled fields say [filled]; a submit keeps its label', rs.elements[0].value === '[filled]' && rs.elements[4].text === '[selected]' && rs.elements[5].value === 'Save changes', JSON.stringify(rs.elements.map((e) => [e.value, e.text])));
+}
+
 console.log(`\n${pass} passed, ${fail} failed`);
 process.exit(fail ? 1 : 0);

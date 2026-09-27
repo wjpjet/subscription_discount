@@ -116,6 +116,8 @@ if (opt.svc) {
       textOut(e.page);
     } else if (e.kind === 'api') {
       console.log(`+${s(e.dt)}  api ${e.path}${e.goal ? ' ' + e.goal : ''}${e.step != null ? ' step ' + e.step : ''} ${e.ok ? 'ok' : '⚠ ' + safe(e.error, 200)}${e.timedOut ? ' (timed out)' : ''} · ${s(e.ms)} (server ${s(e.serverMs)}, network ${s(e.networkMs)})${e.usage ? ` · ${e.usage.inputTokens}+${e.usage.outputTokens}+${e.usage.thinkingTokens} tok` : ''}`);
+    } else if (e.kind === 'flow.page') {
+      console.log(`+${s(e.dt)}  recorded ${e.phase} ${e.phase === 'probe' ? `page (hop ${e.hop ?? 0}${e.reread ? ', re-read' : ''})` : `step ${e.step}`} · ${e.snapshot?.elements?.length ?? 0} elements, ${e.snapshot?.textLength ?? 0} chars`);
     } else if (e.kind === 'probe') {
       const pg = e.page || {}, c = e.classify || {};
       console.log(`+${s(e.dt)}  probe: status ${e.status} · why ${pageWhy(e)}${kindOf(e) ? ` · pageKind ${kindOf(e)}` : ''} · load ${s(e.loadMs)}${e.loadTimedOut ? ' ⚠ TIMEOUT' : ''} · classify ${s(e.classifyMs)}`);
@@ -160,6 +162,13 @@ console.log(`extension ${m.extensionVersion} · API ${st.apiBase} · ${st.restri
 if (m.network) console.log(`network: ${m.network.effectiveType}, ~${m.network.downlinkMbps} Mbps, rtt ~${m.network.rttMs}ms`);
 console.log(`duration ${s(dur)} · ${E.length} events${log.endedAt ? '' : ' · ⚠ LOG NEVER FINISHED (panel closed or crash?)'}`);
 console.log(`K1 (script/JSON in page text): ${k1.length} of ${texty.filter((x) => x.p.page?.text).length} pages with text${k1suspect.length ? ` · ${k1suspect.length} more suspect (no text logged)` : ''}`);
+{ // Pages recorded for replay tests ("Record each page for replay tests").
+  const rec = E.filter((e) => e.kind === 'flow.page');
+  if (rec.length) {
+    const walks = rec.filter((e) => e.phase !== 'probe'), svcs = new Set(walks.map((e) => e.svc));
+    console.log(`recorded for replay: ${rec.length - walks.length} account page(s), ${walks.length} walk step(s) across ${svcs.size} flow(s) → npm run flows -- ${file}`);
+  } else if (st.testRecord === false) console.log('recorded for replay: off');
+}
 if (!log.endedAt) flag('high', 'run never finished', 'the log has no run.end: the panel was closed mid-scan or something threw without being caught');
 const err = one('run.error');
 if (err) flag('high', 'scan threw', safe(err.error, 300));
@@ -284,8 +293,9 @@ if (probes.length) {
   for (const p of probes.filter((p) => p.status === 'signed_in' && (p.classify?.hasPaidPlan ?? null) === null)) flag('high', `${p.svc}: counted as a subscription without a confirmed plan${pageWhy(p) === 'wrong URL' ? ', on a 404/error page' : ''}`, `hasPaidPlan is null · page "${safe(p.page?.title, 60)}" · why ${pageWhy(p)}`);
   const noPrice = probes.filter((p) => PAYING.includes(p.status) && p.classify?.hasPaidPlan === true && p.monthlyPrice == null && p.cycleCharge == null && !p.isTrial).map((p) => p.svc);
   if (noPrice.length) flag('medium', `${noPrice.length} paid plan(s) with no price read`, `an offer can't be valued: ${list(noPrice)}`);
-  const noEmail = probes.filter((p) => PAYING.includes(p.status) && !emailOf(p)).map((p) => p.svc);
-  if (noEmail.length) flag('low', `${noEmail.length} paying service(s) with no account email`, list(noEmail));
+  // The panel shows the account's name when there is no email, so only a row with neither is anonymous.
+  const noEmail = probes.filter((p) => PAYING.includes(p.status) && !emailOf(p) && !p.accountName).map((p) => p.svc);
+  if (noEmail.length) flag('low', `${noEmail.length} paying service(s) with no account email or name`, list(noEmail));
   for (const p of probes.filter((p) => p.status === 'error')) flag('high', `${p.svc}: probe error`, safe(p.error, 200));
   for (const p of probes.filter((p) => p.status === 'sensitive')) flag('info', `${p.svc}: skipped as a sensitive account, nothing sent`, `${safe(p.sensitive, 80)} · landed on ${short(p.finalUrl)}. If this is a normal subscription, the page check is too strict`);
   for (const p of probes.filter((p) => p.isTrial)) flag('info', `${p.svc}: on a trial`, `after trial ${$(p.classify?.priceAfterTrialUsd)}, trial ends ${p.classify?.trialEndsOn}`);
