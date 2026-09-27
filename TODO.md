@@ -20,6 +20,20 @@ Current state and a handoff summary: **[STATUS.md](STATUS.md)**.
       fixes for what it showed are in HISTORY.md.
 - [ ] **Live run with walks, recording on.** Steps below, under "Live walk run". Every real cancellation
       flow it walks becomes a flow file in `flows/` (local only, git-ignored).
+- [ ] **Next release: what the review of the second-run release found.** None of it blocks the walk run.
+  - Add `pay.google.com` and `payments.google.com` to the never-touch hosts in `shared/sensitive.js` (only
+    `wallet.google.com` is there; a Google One walk may go anywhere on google.com). Until then, list them
+    in **Never explore**: that blocks just those hosts, and Google One is still checked.
+  - A re-read or price page that clearly says "no paid plan" can't replace an unsure "paid" first read:
+    `better()` in `scan.ts` ranks hasPaidPlan above confidence. Take the re-read unless it is a bad page or
+    signed out.
+  - The price hop opens any alternate URL, including model-guessed ones merged in by discovery. Limit it to
+    the catalog's own.
+  - Recording: mask every element's `value` except button labels (a `<label>` carries its hidden control's
+    value), and keep links as origin + path. The settings hint overstates what is removed.
+  - `npm run flows`: clean the run name; an odd log file name can make it write into the repo root.
+  - Optional: refuse a second press of the same cancel label inside one flow (a confirm that reuses the
+    entry label). Measure on the mock suite first: it will back out of some real flows early.
 - [ ] **Build the realistic edge cases from those flows.** Replay them free with
       `npm run flows -- flows/<run> --replay`, and mimic the interesting ones on Streamly.
 - [ ] **Retire the Netlify function site** once the Worker has been used for a while. Keep Streamly
@@ -135,8 +149,9 @@ The two read-only runs are done. This one walks each confirmed paid plan up to i
 1. `chrome://extensions` → Walkaway → reload. Settings (gear) should show **Record each page for replay
    tests**; if it doesn't, the old build is still loaded.
 2. Settings: **Test mode**, **Also walk cancellation flows**, **Include page text** and **Record each
-   page for replay tests** on; **Restricted mode** off. In **Never explore**, your employer's domains and
-   any service you don't want walked this time. Max steps 25. Save.
+   page for replay tests** on; **Restricted mode** off. In **Never explore**, your employer's domains,
+   `pay.google.com` and `payments.google.com` (until the next release blocks them), and any service you
+   don't want walked this time. Max steps 25. Save.
 3. Scan, and keep the side panel open until the result shows: closing it ends the run and leaves the log
    unfinished. Tabs open and close in the background; don't click in them. Walks run 3 at a time.
 4. Press **Download test log**. Then **Close the tabs held on offers**: it closes them without clicking

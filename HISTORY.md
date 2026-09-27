@@ -645,7 +645,9 @@ with `--real --max=N`. A replay never visits the sites again.
 
 **Shipped the same day** (Worker version `9d05cccb`, extension zip rebuilt), checked first with the free set
 only: unit tests and both harnesses, the extension end to end read-only (42 checks) and find (46, including the
-new recording checks), and the mock suite unchanged (score 38, safety 100, achievable 49).
+new recording checks), and the mock suite unchanged (score 38, safety 100, achievable 49). An adversarial
+review of the release found nothing that could make a walk click or walk anything it must not, and the
+recording scrubbed to the same standard as the page-text log; its smaller findings are in TODO.md.
 
 ## Bugs fixed along the way
 
