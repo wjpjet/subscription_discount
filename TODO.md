@@ -7,7 +7,10 @@ The short list. Background and measurements live in **[HISTORY.md](HISTORY.md)**
 ## Now
 
 The backend runs as one Cloudflare Worker at <https://walkaway.willem-jeffrey-prins.workers.dev>.
-The first live test-mode scan found 49 problems; all are fixed (HISTORY.md, 2026-09-27).
+Current state and a handoff summary: **[STATUS.md](STATUS.md)**.
+
+- [ ] **Ship main.** Production is one commit behind (the second-run fixes and page recording). Commands in
+      STATUS.md, "Not shipped yet". Needed before the walk run below.
 
 - [ ] **Clean up after the first live log.** It captured live session tokens from page text.
   - Sign out of all Together AI sessions.
@@ -32,6 +35,12 @@ The first live test-mode scan found 49 problems; all are fixed (HISTORY.md, 2026
 Tested on the full suite through Together AI. Neither GLM-5.3-Flash nor DeepSeek V4.1 Flash is
 close: best achievable 72 against Gemini's 100, and win rate is the revenue. Gemini 3.8 Flash stays.
 Numbers and reasoning in HISTORY.md. The Together key in `.env` can be revoked.
+
+## Then — logging, the offer database and learning
+
+The plan is in **[LOGGING_TODO.md](LOGGING_TODO.md)**: D1 + R2 on the existing Worker, three tiers (anonymous
+offer database, short-lived run records, 24-month dispute evidence for paid runs), learned paths fed back as
+priorPath. Needs two decisions first (where users are based; retention periods) and privacy/consent updates.
 
 ## Then — scan quality
 
