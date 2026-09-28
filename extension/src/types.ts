@@ -14,7 +14,9 @@ export interface PageClass {
   detailsLinkId: number | null;   // element id of a same-site <a> that likely shows the plan/price; null when this page does
   confidence: number; notes: string;
 }
-export interface Offer { description: string; newMonthlyPriceUsd: number | null; discountPct: number | null; termMonths: number | null; freeMonths: number | null }
+export interface Offer { description: string; newMonthlyPriceUsd: number | null; discountPct: number | null; termMonths: number | null; freeMonths: number | null;
+  /** The price before the discount when the offer shows it ("$89.99 $44.99/month"). Missing from an older backend. */
+  regularMonthlyPriceUsd?: number | null }
 export interface FinishDetails { beforeMonthlyPriceUsd: number | null; afterMonthlyPriceUsd: number | null; termMonths: number | null; savingsUsd: number | null; summary: string }
 export interface AgentAction { type: string; id?: number | null; text?: string | null; value?: string | null; url?: string | null; direction?: 'up' | 'down' | null; reason?: string | null; offer?: Offer | null; outcome?: string | null; details?: FinishDetails | null }
 export interface Decision { state: string; reasoning: string; action: AgentAction }

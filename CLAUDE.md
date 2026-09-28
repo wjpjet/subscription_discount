@@ -7,6 +7,9 @@ LOGGING_TODO.md holds the plan for server-side logging and the offer database.
 
 - Nothing may ever finalize a cancellation, decline an offer, pause, downgrade, switch plans or buy. The model has
   no finalize action; `shared/guardrails.js` enforces the rest on the server and again in the extension.
+- Every walk tab is locked (`extension/src/netlock.ts`: Chrome refuses changing requests that name a cancellation).
+  Never walk without it; lift it only for the accept's own press. A page that says "cancelled" after a press must
+  stop the walk and reach the person (`may_have_cancelled`), never a quiet "backed out".
 - Banks, government, health, insurance and payroll sites (`shared/sensitive.js`) and the user's Never-explore list
   are never sent to the model, opened or walked.
 - Only confirmed paid **personal** plans are walked (never work accounts, duplicates, unconfirmed or billed-elsewhere).

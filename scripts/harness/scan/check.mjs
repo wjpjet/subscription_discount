@@ -235,11 +235,21 @@ console.log('\nSecond live run: sales pages, bare 404s, missing prices, pages st
   // A confirmed plan with no price: the catalog's other account page for it is read for the price.
   const priced = { 'https://www.bigshop-example.com/video/settings': { snap: plan(null) }, 'https://www.bigshop-example.com/membership': { snap: plan(14.99) } };
   const paidNoPrice = (s, c) => (/video\/settings/.test(s.url) ? { ...c, hasPaidPlan: true, isPlanPage: true, pageKind: 'account_billing', monthlyPriceUsd: null, cycleChargeUsd: null, currentPriceIndex: null, detailsLinkId: null } : null);
-  const r3 = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings', { altUrls: ['https://www.bigshop-example.com/membership'] })], priced, paidNoPrice);
+  const r3 = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings', { altUrls: ['https://www.bigshop-example.com/membership'], knownAltUrls: ['https://www.bigshop-example.com/membership'] })], priced, paidNoPrice);
   check('paid, no price → reads the price from the catalog alt URL', r3.items['bigshop-example.com'].monthlyPrice === 14.99 && r3.items['bigshop-example.com'].status === 'signed_in', r3.items['bigshop-example.com']);
   check('the hop is traced as price', r3.probe('bigshop-example.com').hops.some((h) => h.why === 'price'), r3.probe('bigshop-example.com').hops);
   const r3b = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings')], priced, paidNoPrice);
   check('no alt URL → no price hop, still signed_in', r3b.items['bigshop-example.com'].status === 'signed_in' && !r3b.probe('bigshop-example.com').hops.some((h) => h.why === 'price'), r3b.probe('bigshop-example.com').hops);
+  // Only the catalog's own pages are opened just for a price: a URL a model guessed (merged in by discovery) is not.
+  const r3c = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings', { altUrls: ['https://www.bigshop-example.com/membership'] })], priced, paidNoPrice);
+  check('a guessed alt URL is never opened for a price', !r3c.probe('bigshop-example.com').hops.some((h) => h.why === 'price') && r3c.items['bigshop-example.com'].monthlyPrice == null, r3c.probe('bigshop-example.com').hops);
+  // The re-read sees the finished page: a clear "no paid plan" there beats an unsure "paid" from the half-drawn frame.
+  const halfDrawn = { 'https://www.halfdrawn-example.com/account': { snap: { title: 'Account', text: 'Loading your account', elements: [{ id: 1, tag: 'button', text: 'Menu' }] },
+    later: { title: 'Account', headings: ['Your plan'], text: 'Your plan: Free. You are not subscribed to Premium. Upgrade to Premium for $9.99/month. Sign out', elements: [{ id: 1, tag: 'a', text: 'Upgrade', href: '/upgrade' }, { id: 2, tag: 'button', text: 'Sign out' }] } } };
+  const r3d = await scan([cand('halfdrawn-example.com', 'https://www.halfdrawn-example.com/account')], halfDrawn, (s2, c) => ((s2.text || '').length < 30
+    ? { ...c, pageKind: 'account_billing', signedIn: true, hasPaidPlan: true, isPlanPage: false, confidence: 0.6 }
+    : { ...c, pageKind: 'account_billing', signedIn: true, hasPaidPlan: false, isPlanPage: true, monthlyPriceUsd: null, cycleChargeUsd: null, confidence: 0.95 }));
+  check('unsure "paid" on the half-drawn page, clear "free" on the re-read → free plan, not walked', r3d.items['halfdrawn-example.com'].status === 'no_paid_plan', r3d.items['halfdrawn-example.com'].status);
   // An app frame that fills in a moment later: read again once, then judged on the full page.
   const filling = { 'https://www.tube-example.com/paid_memberships': { snap: { title: 'Tube', text: 'Skip to main content', elements: [{ id: 1, tag: 'button', text: 'Guide' }] }, later: plan(13.99) } };
   const r4 = await scan([cand('tube-example.com', 'https://www.tube-example.com/paid_memberships')], filling, (s, c) => ((s.text || '').length < 50 ? { ...c, pageKind: 'account_billing', signedIn: true, hasPaidPlan: null, confidence: 0.5 } : null));

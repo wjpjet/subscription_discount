@@ -44,7 +44,7 @@ export function payingLine(i: SavingInput, today = new Date()): string {
   const renewal = parseDate(i.renewalDate);
   if (i.isTrial) {
     const end = parseDate(i.trialEndsOn) || renewal;
-    const after = i.priceAfterTrial ?? i.monthlyPrice;
+    const after = i.priceAfterTrial ?? (i.monthlyPrice ? i.monthlyPrice : null);   // a trial's $0 today is not its price
     return `Free${end ? ` until ${fmtDate(end, today)}` : ' trial'}${after != null ? `, then ${money(after)}/${cad}` : ''}`;
   }
   const now = i.cycleCharge ?? i.monthlyPrice;
@@ -66,22 +66,28 @@ export function dealLine(i: SavingInput, today = new Date()): string {
   const renewal = parseDate(i.renewalDate);
   const start = i.isTrial ? (parseDate(i.trialEndsOn) || renewal) : renewal;
   const from = start ? `from ${fmtDate(start, today)}` : 'from your next charge';
-  const base = i.isTrial && i.priceAfterTrial != null ? i.priceAfterTrial : (i.monthlyPrice ?? 0);
   let pct = o.discountPct ?? 0; if (pct > 1) pct /= 100;
+  // What it costs without the offer. A trial shows $0 today and some pages show no price: the offer's own "was"
+  // price stands in ("$89.99 $44.99/month"), else its new price undone by its percentage. Never "instead of $0".
+  const known = (i.isTrial ? i.priceAfterTrial : null) ?? i.monthlyPrice;
+  const regular = o.regularMonthlyPriceUsd ?? (o.newMonthlyPriceUsd != null && pct > 0 && pct < 1 ? round2(o.newMonthlyPriceUsd / (1 - pct)) : null);
+  const base = known != null && known > 0 ? known : regular;
   const term = o.termMonths ?? 0;
 
   if (i.cadence === 'year') {
-    const yearNow = i.cycleCharge ?? base * 12;
+    const yearNow = i.cycleCharge ?? (base ?? 0) * 12;
     const next = o.newMonthlyPriceUsd != null ? round2(o.newMonthlyPriceUsd * 12) : pct ? round2(yearNow * (1 - pct)) : null;
     return `${money(yearNow)}/yr → ${next != null ? money(next) : o.description} at your next renewal${renewal ? `, ${fmtDate(renewal, today)}` : ''}`;
   }
   if (o.freeMonths && !o.newMonthlyPriceUsd) {
-    return `${months(o.freeMonths)} free ${from}, then ${money(base)}/${cad}`;
+    return `${months(o.freeMonths)} free ${from}${base != null ? `, then ${money(base)}/${cad}` : ''}`;
   }
-  const newPrice = o.newMonthlyPriceUsd != null ? o.newMonthlyPriceUsd : pct ? round2(base * (1 - pct)) : null;
+  const newPrice = o.newMonthlyPriceUsd != null ? o.newMonthlyPriceUsd : pct && base != null ? round2(base * (1 - pct)) : null;
   if (newPrice == null) return `${o.description || 'Offer'} ${from}`;
-  if (i.isTrial) return `Free until ${start ? fmtDate(start, today) : 'the trial ends'}, then ${money(newPrice)}/${cad} instead of ${money(base)}${term ? ` for ${months(term)}` : ''}`;
-  return `${money(base)}/${cad} → ${money(newPrice)}/${cad}${term ? ` for ${months(term)}` : ''}, ${from}`;
+  const was = base != null && base > newPrice ? base : null;
+  const forTerm = term ? ` for ${months(term)}` : '';
+  if (i.isTrial) return `Free until ${start ? fmtDate(start, today) : 'the trial ends'}, then ${money(newPrice)}/${cad}${was != null ? ` instead of ${money(was)}` : ''}${forTerm}`;
+  return was != null ? `${money(was)}/${cad} → ${money(newPrice)}/${cad}${forTerm}, ${from}` : `${money(newPrice)}/${cad}${forTerm}, ${from}`;
 }
 
 // ---- The reveal screen: which section each service lands in, and the lines around them ----
@@ -93,20 +99,21 @@ export interface RevealItem extends SavingInput {
 }
 /** scan.ts owns the status lists (PAYING, NEEDS_LOOK); they are passed in so there is one source of truth. */
 export interface StatusSets { paying: readonly string[]; needsLook: readonly string[] }
-export interface RevealGroups<T> { offers: T[]; paying: T[]; needsLook: T[]; work: T[]; free: T[]; signedOut: T[]; sensitive: T[]; duplicates: T[] }
+export interface RevealGroups<T> { offers: T[]; trials: T[]; paying: T[]; needsLook: T[]; work: T[]; free: T[]; signedOut: T[]; sensitive: T[]; duplicates: T[] }
 type GroupKey = keyof RevealGroups<unknown>;
 const GROUP_OF: Record<string, GroupKey> = { work_account: 'work', no_paid_plan: 'free', login_wall: 'signedOut', sensitive: 'sensitive', duplicate: 'duplicates' };
 
 /**
- * Sections in reveal order. Offers first (best first), then the plans they pay for (dearest first, unpriced
- * last), then what needs a look. A status this build doesn't know (an older saved scan's 'unknown') asks
+ * Sections in reveal order. Offers first (best first), then offers on free trials (their own section: accepting
+ * one turns a trial the person might have cancelled into paid months), then the plans they pay for (dearest first,
+ * unpriced last), then what needs a look. A status this build doesn't know (an older saved scan's 'unknown') asks
  * for a look rather than being hidden.
  */
 export function groupReveal<T extends RevealItem>(items: readonly T[], s: StatusSets): RevealGroups<T> {
-  const g: RevealGroups<T> = { offers: [], paying: [], needsLook: [], work: [], free: [], signedOut: [], sensitive: [], duplicates: [] };
+  const g: RevealGroups<T> = { offers: [], trials: [], paying: [], needsLook: [], work: [], free: [], signedOut: [], sensitive: [], duplicates: [] };
   for (const i of items) {
     if (i.status === 'duplicate') g.duplicates.push(i);
-    else if (i.hasOffer) g.offers.push(i);
+    else if (i.hasOffer) (i.isTrial ? g.trials : g.offers).push(i);
     else if (s.paying.includes(i.status)) g.paying.push(i);
     else if (s.needsLook.includes(i.status)) g.needsLook.push(i);
     else g[GROUP_OF[i.status] ?? 'needsLook'].push(i);
@@ -115,6 +122,7 @@ export function groupReveal<T extends RevealItem>(items: readonly T[], s: Status
   // Needs a look follows the NEEDS_LOOK order: signed in with the plan not shown (likeliest to be paying) first.
   const lookRank = (i: T) => { const k = s.needsLook.indexOf(i.status); return k < 0 ? s.needsLook.length : k; };
   g.offers.sort((a, b) => b.estSavings - a.estSavings || byName(a, b));
+  g.trials.sort((a, b) => b.estSavings - a.estSavings || byName(a, b));
   g.paying.sort((a, b) => (monthlyOf(b) ?? -1) - (monthlyOf(a) ?? -1) || byName(a, b));
   g.needsLook.sort((a, b) => lookRank(a) - lookRank(b) || byName(a, b));
   for (const k of ['work', 'free', 'signedOut', 'sensitive'] as const) g[k].sort(byName);

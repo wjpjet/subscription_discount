@@ -16,7 +16,7 @@ import { snapshotPage, type PageSnapshot } from '../../shared/page-scripts.js';
 import { mockClassify } from '../../shared/brain-mock.js';
 import { etld1, hostMatches } from '../../shared/domains.js';
 import { orgAccountReason, isIdpHost, isLoginUrl, hasSignInControl, isConsumerEmail } from '../../shared/accounts.js';
-import { isFinalizeText } from '../../shared/guardrails.js';
+import { isFinalizeText, CANCELLED_RE } from '../../shared/guardrails.js';
 import { scrubUrl, scrubSecrets, scrubPii, redactForLog } from '../../shared/scrub.js';
 import { financialPageReason } from '../../shared/sensitive.js';
 import { apiAvailable, apiPost } from './api';
@@ -24,6 +24,7 @@ import { discoverCandidates, type Candidate } from './discovery';
 import { openTab, waitForPage, waitForContent, runInTab, closeTab, navigateTab, sleep, classifyTabError, closeOrphanTabs, ownedPausedTab } from './tabs';
 import { findAll, closePaused, type FindResult, type HuntStep, type PausedAt } from './hunt';
 import { trace, snapSummary, maskForLog, recordPage } from './trace';
+import { unlockAllExcept } from './netlock';
 import { hostOf, blockReason } from './lists';
 import { money } from './format';
 import type { Settings } from './settings';
@@ -60,6 +61,8 @@ export interface ScanItem {
   /** What is happening to this service right now, in plain words. */
   live?: string;
   url?: string; note?: string; before: PageClass | null;
+  /** The account page already said it was cancelled when the scan read it: after an accept, that is not news. */
+  pageSaidCancelled?: boolean;
 }
 export interface ScanProgress { phase: 'discover' | 'pages' | 'find' | 'done'; done: number; total: number; current?: string; message?: string; items: ScanItem[]; totalEstSavings: number }
 export interface ScanResult { at: number; restrictedMode: boolean; domainsChecked: number; items: ScanItem[]; found: number; needsLook: number; withOffers: number; totalEstSavings: number }
@@ -172,12 +175,14 @@ export async function reconcileOnLoad(result: ScanResult | null): Promise<ScanRe
     // Paused tabs the saved result still points at are kept; any other paused tab belonged to the interrupted run.
     if (v.scanRunning) { await closeOrphanTabs({ pausedToKeep: (result?.items || []).filter((i) => i.paused).map((i) => i.paused!.tabId) }); await browser.storage.local.set({ scanRunning: false }); }
   } catch { /* storage or tabs unavailable: nothing to reconcile */ }
-  if (!result) return result;
+  if (!result) { await unlockAllExcept([]); return result; }
   for (const i of result.items) {
     // Results stored by an older version lack the newer fields; fill them so the panel can render them.
     if (upgradeItem(i)) changed = true;
     if (i.paused) { let owned = false; try { owned = await ownedPausedTab(i.paused); } catch { /* gone */ } if (!owned) { i.paused = null; changed = true; } }
   }
+  // Safety locks a closed panel left behind come off, except on the tabs still held on an offer.
+  await unlockAllExcept(result.items.filter((i) => i.paused).map((i) => i.paused!.tabId));
   if (result.needsLook == null) { result.needsLook = result.items.filter((i) => NEEDS_LOOK.includes(i.status)).length; changed = true; }
   if (changed) { try { await browser.storage.local.set({ scanResult: result }); } catch { /* keep the in-memory copy */ } }
   return result;
@@ -293,7 +298,7 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
       return usable(u.href) ? u.href : null;   // usable() also refuses sign-in URLs and blocked hosts
     };
 
-    let url = c.accountUrl, first = true, reread = false, rereadDone = false, pricing = false;
+    let url = c.accountUrl, first = true, reread = false, rereadDone = false, pricing = false, keptLast = false;
     for (;;) {
       try {
         // Load, then wait until the page has actually rendered (SPAs render well after 'complete').
@@ -369,8 +374,12 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
             detailsLinkId: cls.detailsLinkId ?? null, confidence: cls.confidence, notes: cls.notes } }, snap);
         Object.assign(load, { pageKind: cls.pageKind ?? null, signedIn: cls.signedIn, hasPaidPlan: cls.hasPaidPlan, confidence: cls.confidence });
         // A price page that shows no price must not replace the reading it was meant to complete (its renewal date, plan name).
-        const improved = better(cls, best?.cls ?? null) && (!pricingNow || cls.monthlyPriceUsd != null || cls.cycleChargeUsd != null);
+        // A re-read is the same page, finished: it replaces the reading of the half-rendered one it was kept from (a
+        // clear "no paid plan" beats an unsure "paid"), unless the page fell over or now reads signed out.
+        const rereadWins: boolean = loadKind === 'reread' && keptLast && !BAD_PAGE.includes(cls.pageKind as string) && !(best?.cls.signedIn === true && cls.signedIn !== true);
+        const improved: boolean = rereadWins || (better(cls, best?.cls ?? null) && (!pricingNow || cls.monthlyPriceUsd != null || cls.cycleChargeUsd != null));
         if (improved) best = { cls, snap, ready: r };
+        keptLast = improved;
         // Who pays is read on EVERY page, whichever one is kept. An employer's or team's page settles it: no hop
         // can make that seat the person's to cancel, and a hop could land where it no longer shows (Google One).
         if (noteEvidence(ev, cls, snap, url)) { load.work = true; break; }
@@ -397,7 +406,7 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
         // (Amazon's Prime page, Netflix's membership page). Without a price an offer can't be valued.
         const b = best!.cls;
         if (b.signedIn === true && b.hasPaidPlan === true && b.monthlyPriceUsd == null && b.cycleChargeUsd == null && canHop()) {
-          const next = (c.altUrls || []).find((u) => usable(u));
+          const next = (c.knownAltUrls || []).find((u) => usable(u));   // the catalog's own pages only, never a model's guess
           if (next) { hops.push({ why: 'price', from: scrubUrl(snap.url || url), to: scrubUrl(next) }); tried.add(pageKey(next)); url = next; pricing = true; continue; }
         }
         break;
@@ -412,6 +421,7 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
     if (best) {
       const { cls, snap } = best;
       item.url = snap.url;
+      item.pageSaidCancelled = CANCELLED_RE.test(snap.text || '');
       rec.page = snapSummary(snap); rec.ready = best.ready;
       mapStatus(item, c, cls, snap, rec, ev);
       rec.classify = { ...cls, accountEmail: maskForLog(cls.accountEmail), accountName: cls.accountName ? redactForLog(cls.accountName) : null, notes: redactForLog(cls.notes || ''), pageEvidence: cls.pageEvidence ? redactForLog(cls.pageEvidence) : cls.pageEvidence, priceEvidence: cls.priceEvidence ? redactForLog(cls.priceEvidence) : cls.priceEvidence };
@@ -555,9 +565,12 @@ function applyFind(i: ScanItem, f: FindResult): void {
   trace('find.result', { svc: i.domain, name: i.name, outcome: f.outcome, reason: f.reason ?? null, error: f.error ?? null, offer: f.offer, paused: f.paused ? { url: scrubUrl(f.paused.url), acceptText: f.paused.acceptText } : null, steps: f.path.length, price: i.monthlyPrice, isTrial: i.isTrial });
   i.findOutcome = f.outcome; i.findReason = f.reason ?? null; i.offer = f.offer; i.paused = f.paused; i.path = f.path;
   i.hasOffer = f.outcome === 'offer_found' && !!f.paused;
+  // A trial's page shows $0 today; the offer usually shows the price it takes off ("$89.99 $44.99/month").
+  if (i.isTrial && i.priceAfterTrial == null && f.offer) { const reg = regularPrice(f.offer); if (reg != null) i.priceAfterTrial = reg; }
   const sv = offerSavings(f.offer, i.isTrial && i.priceAfterTrial != null ? i.priceAfterTrial : i.monthlyPrice);
   i.estSavings = i.hasOffer ? sv.savingsUsd : 0; i.termMonths = sv.termMonths; i.discountPct = sv.discountPct; i.offerText = i.hasOffer ? sv.text : '';
   if (i.hasOffer) { i.live = `Offer found: ${sv.text} — holding it for you`; return; }
+  if (f.outcome === 'may_have_cancelled') { i.note = 'may have been cancelled: check it'; i.live = `${i.name} may have been cancelled. Open it and look for Restart or Resume`; return; }
   i.note = f.outcome === 'no_offer_backed_out' ? 'no offer this time' : f.outcome === 'blocked_needs_you' ? 'needs you to sign in' : f.outcome === 'ai_declined' ? 'left alone' : (f.reason || f.error || 'could not check');
   i.live = f.outcome === 'no_offer_backed_out' ? `No offer from ${i.name} this time — backed out, nothing changed`
     : f.outcome === 'blocked_needs_you' ? 'Needs you to sign in — left alone'
@@ -591,10 +604,17 @@ export function liveText(s: HuntStep): string {
 }
 
 /** Turn an observed offer into money and a one-line description in the service's own shape. */
+/** The price an offer takes off: the one it shows (often struck through), else its new price undone by its percentage. */
+export function regularPrice(o: Offer): number | null {
+  if (o.regularMonthlyPriceUsd != null && o.regularMonthlyPriceUsd > 0) return o.regularMonthlyPriceUsd;
+  let pct = o.discountPct ?? 0; if (pct > 1) pct = pct / 100;
+  return o.newMonthlyPriceUsd != null && pct > 0 && pct < 1 ? +(o.newMonthlyPriceUsd / (1 - pct)).toFixed(2) : null;
+}
 export function offerSavings(o: Offer | null, price: number | null): { savingsUsd: number; termMonths: number; discountPct: number; text: string } {
   if (!o) return { savingsUsd: 0, termMonths: 0, discountPct: 0, text: '' };
   const r = (n: number) => +n.toFixed(2);
-  const p = price ?? 0;
+  // Unknown or $0 today (a trial, a page without a price): measure against the offer's own regular price.
+  const p = price != null && price > 0 ? price : (regularPrice(o) ?? 0);
   let pct = o.discountPct ?? 0; if (pct > 1) pct = pct / 100;
   const term = o.termMonths ?? 0;
   if (o.newMonthlyPriceUsd != null && p > 0 && o.newMonthlyPriceUsd < p) {

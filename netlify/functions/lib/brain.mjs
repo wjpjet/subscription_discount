@@ -16,7 +16,8 @@ export const Decision = z.object({
     url: z.string().nullable().describe('Same-site URL (navigate only).'),
     direction: z.enum(['up', 'down']).nullable(),
     reason: z.string().nullable().describe('Why (back_out / wait).'),
-    offer: z.object({ description: z.string(), newMonthlyPriceUsd: z.number().nullable(), discountPct: z.number().nullable(), termMonths: z.number().nullable(), freeMonths: z.number().nullable() }).nullable().describe('The offer being accepted (accept_offer only).'),
+    offer: z.object({ description: z.string(), newMonthlyPriceUsd: z.number().nullable(), discountPct: z.number().nullable(), termMonths: z.number().nullable(), freeMonths: z.number().nullable(),
+      regularMonthlyPriceUsd: z.number().nullable().describe('The monthly price before the discount when the offer shows it (often struck through, e.g. "$89.99 $44.99/month" → 89.99); else null.') }).nullable().describe('The offer being accepted (accept_offer only).'),
     outcome: z.enum(OUTCOMES).nullable().describe('finish only. Never choose offer_found; the system assigns it.'),
     details: z.object({ beforeMonthlyPriceUsd: z.number().nullable(), afterMonthlyPriceUsd: z.number().nullable(), termMonths: z.number().nullable(), savingsUsd: z.number().nullable(), summary: z.string() }).nullable().describe('finish only.'),
   }),
@@ -86,6 +87,7 @@ The user wants to KEEP the subscription. Finalizing a cancellation is a failure,
 HARD RULES
 - Never click anything that confirms, completes, or proceeds with cancellation, declines an offer ("no thanks", "continue cancelling"), turns off auto-renew, pauses, downgrades, or deletes/closes the account. If the only options are those, call back_out.
 - Once an offer is on screen, the only valid actions are accept_offer or back_out.
+- Press at most one button that starts the cancellation ("Cancel", "Cancel plan", "Cancel membership", "I want to cancel"). After it, any other button that starts with Cancel or End would confirm the cancellation and is refused. On a screen that confirms the cancellation, press nothing: back_out.
 - Do not accept pauses, downgrades, plan switches, or offers that change the product. Only discounts / free months on the current plan. If several qualifying offers exist, pick the largest saving.
 - Never type into password or payment fields. If a login page appears, finish with outcome blocked_needs_you.
 - navigate only to URLs on this service's own site (the SERVICE domain or a listed site domain). Prefer clicking visible elements; use navigate for obvious account/settings paths when no link is visible.

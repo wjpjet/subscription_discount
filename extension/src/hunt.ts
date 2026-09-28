@@ -14,7 +14,7 @@
  * Element ids carry the snapshot's generation, so a click can never land on an element from an older read.
  */
 import { snapshotPage, readElement, performAction, type LiveElement, type PageSnapshot, type SnapshotElement } from '../../shared/page-scripts.js';
-import { clickRefusal, acceptLooksRight, applyGuardrails, isAcceptText, looksLikeConfirmPage, OFFER_TEXT_RE } from '../../shared/guardrails.js';
+import { clickRefusal, acceptLooksRight, applyGuardrails, isAcceptText, looksLikeConfirmPage, newlyCancelled, sameSite, CANCELLED_RE, OFFER_TEXT_RE } from '../../shared/guardrails.js';
 import { mockClassify } from '../../shared/brain-mock.js';
 import { hostMatches, etld1 } from '../../shared/domains.js';
 import { isIdpHost, isLoginUrl } from '../../shared/accounts.js';
@@ -30,6 +30,7 @@ import type { ScanItem } from './scan';
 import type { AgentAction, Decision, FinishDetails, Offer, PageClass, StepResponse } from './types';
 import { isBlocked, blockReason, hostOf } from './lists';
 import { trace, snapSummary, recordPage } from './trace';
+import { lockTab, unlockTab, isLocked } from './netlock';
 
 export interface HuntStep { step: number; url: string; state: string; action: AgentAction; target?: string; ok?: boolean; note?: string; guardrails?: string[]; ts: number }
 /** Where a find left off: the open tab, the accept button it stopped in front of, and a fingerprint of that screen
@@ -48,7 +49,7 @@ let stopRequested = false;
 export function requestStop() { stopRequested = true; }
 
 type Goal = 'find' | 'hunt';
-interface LoopOpts { goal: Goal; startStep?: number; history?: HuntStep[]; priorPath?: string[] | null }
+interface LoopOpts { goal: Goal; startStep?: number; history?: HuntStep[]; priorPath?: string[] | null; afterPress?: string }
 interface LoopOut { outcome: string; reason: string | null; details: FinishDetails | null; offer: Offer | null; acceptId: number | null; acceptText: string | null; url: string; screen: string }
 
 const errText = (e: unknown) => String((e as any)?.message || e);
@@ -67,6 +68,7 @@ function reasonFor(e: unknown): string {
   if (/^brain unavailable/i.test(m)) return 'brain unavailable';
   if (/^No API URL/i.test(m)) return 'no backend configured — open Settings';
   if (/^timeout: /i.test(m)) return 'the backend did not answer in time';
+  if (/^no safety lock/i.test(m)) return 'the safety lock could not be set, so it was not walked';
   return TAB_REASON[classifyTabError(e)];
 }
 const settleTrace = (s: { kind: string; ms: number; navigated: boolean; loadTimedOut: boolean }) => ({ kind: s.kind, ms: s.ms, navigated: s.navigated, loadTimedOut: s.loadTimedOut });
@@ -174,6 +176,7 @@ async function readSnapshot(tabId: number, domain: string): Promise<PageSnapshot
   return snap;
 }
 const STALE_NOTE = 'page changed since it was read — reading it again';
+const NO_LOCK = 'no safety lock: the tab could not be locked, so nothing was pressed';
 
 /** One decision-act loop on an open tab. Shared by find, accept and the re-walk fallback. */
 async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEvent: (e: HuntEvent) => void, steps: HuntStep[], opts: LoopOpts): Promise<LoopOut> {
@@ -183,10 +186,20 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
   const history: HuntStep[] = opts.history ? [...opts.history] : [];
   const out: LoopOut = { outcome: 'error', reason: 'step budget exhausted', details: null, offer: null, acceptId: null, acceptText: null, url: '', screen: '' };
   const record = (rec: HuntStep) => { steps.push(rec); history.push(rec); onEvent({ type: 'step', item, step: rec }); };
+  // Never silent: once one of our presses went through, a page that newly says the subscription was cancelled ends
+  // the walk with an alarm the person sees at once, instead of a quiet "backed out".
+  // afterPress: the loop continues right after a press made outside it (the in-place accept), with the page it was made on.
+  let acted = opts.afterPress != null, prevText = opts.afterPress ?? '';
+  const alarm = (step: number, url: string, why: string) => {
+    out.outcome = 'may_have_cancelled'; out.reason = `${why} after our last press. Nothing more was done`;
+    trace('step.cancelled', { svc: item.domain, goal: opts.goal, step, url, why });
+  };
   /** The tab can't be worked any more (closed, error page, hung): stop with a plain reason. */
   const stopOn = (kind: TabErrorKind, step: number, why: string) => { out.outcome = 'error'; out.reason = TAB_REASON[kind]; trace('step.tab_error', { svc: item.domain, goal: opts.goal, step, errorKind: kind, error: why }); };
   for (let step = opts.startStep || 0; step <= maxSteps; step++) {
     if (stopRequested) { out.outcome = 'error'; out.reason = 'stopped by user'; break; }
+    // Never a press without the lock: it came off (the accept's own press) and could not be put back.
+    if (!isLocked(tabId)) { out.outcome = 'error'; out.reason = 'the safety lock is off, so nothing more was pressed'; trace('step.unlocked', { svc: item.domain, goal: opts.goal, step }); break; }
     const ts = Date.now();
     let snapshot: PageSnapshot;
     try { snapshot = await readSnapshot(tabId, item.domain); } catch (e) { stopOn(classifyTabError(e), step, errText(e)); break; }
@@ -197,6 +210,8 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
     if (isBlocked(host, settings.extraBlock)) { out.outcome = 'error'; out.reason = 'landed on a blocked or sensitive site — stopped'; trace('step.blocked', { svc: item.domain, step, url }); break; }
     const fin = financialPageReason(snapshot.text);
     if (fin) { out.outcome = 'error'; out.reason = 'reached a banking or other sensitive page — stopped, nothing clicked'; trace('step.sensitive_page', { svc: item.domain, step, url, why: fin }); break; }
+    if (acted && newlyCancelled(snapshot.text, prevText)) { alarm(step, url, 'the page says the subscription was cancelled'); break; }
+    prevText = snapshot.text;
     // A password prompt on an identity provider or a sign-in URL: only the person can get past it. No model call.
     if (snapshot.hasPassword && (isIdpHost(host) || isLoginUrl(snapshot.url))) {
       record({ step, url, state: 'login', action: { type: 'finish', outcome: 'blocked_needs_you', reason: 'sign-in required' }, ok: true, ts: Date.now() });
@@ -227,6 +242,10 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
       proposed: res.proposed ? { type: res.proposed.type, id: res.proposed.id ?? null } : null,
       action: { type: a.type, id: a.id ?? null, target: target ?? null, outcome: a.outcome ?? null, url: a.url ? scrubUrl(a.url) : null, reason: a.reason ?? null, offer: a.offer ?? null },
       guardrails: rec.guardrails, siteDomains: sites }, snapshot);
+    if (acted && decision.state === 'cancellation_completed') {
+      rec.ok = true; record(rec); trace('step', { ...stepTrace, terminal: true });
+      alarm(step, url, 'the model read this page as a finished cancellation'); break;
+    }
     const ta = Date.now();
     /** Nothing was done: the ids are from an older read of the page. Read it again next step. */
     const stale = () => { rec.ok = false; rec.note = STALE_NOTE; record(rec); trace('step', { ...stepTrace, stale: true, note: rec.note, actMs: Date.now() - ta }); };
@@ -260,13 +279,18 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
         if (!live || (!!el && !!live.tag && live.tag !== el.tag)) { stale(); continue; }
         const refused = clickRefused(a.type, live, el, snapshot.text, history);
         if (refused) { refuse(`refused at click time: ${refused}`, { clickRefused: true, liveText: live.text }); break; }
+        // The accept's own request must reach the site: the lock is lifted for this press only, then put back.
+        const relock = a.type === 'accept_offer' && isLocked(tabId);
+        if (relock) await unlockTab(tabId);
         const before = await captureBefore(tabId);
         // Never retried: if the frame vanished mid-call the click may already have happened. `expect` makes the page
         // re-check the label at the click itself: it may have changed in place during captureBefore.
-        const r = await attempt(() => runInTab(tabId, performAction, [{ type: 'click', id: a.id, gen: snapshot.gen, expect: live.text }], { retry: false }));
-        if (!r.ok && r.kind !== 'frame_gone') { rec.ok = false; rec.note = TAB_REASON[r.kind]; stopKind = r.kind; }
-        else if (r.ok && /page changed since it was read/i.test(r.v?.note || '')) { stale(); continue; }
+        const sameTab = !!(el?.newTab && el.href && sameSite(el.href, sites));   // a same-site link that would open a blocked popup
+        const r = await attempt(() => runInTab(tabId, performAction, [{ type: 'click', id: a.id, gen: snapshot.gen, expect: live.text, sameTab }], { retry: false }));
+        if (!r.ok && r.kind !== 'frame_gone') { rec.ok = false; rec.note = TAB_REASON[r.kind]; stopKind = r.kind; if (relock) await lockTab(tabId, item.domain); }
+        else if (r.ok && /page changed since it was read/i.test(r.v?.note || '')) { if (relock) await lockTab(tabId, item.domain); stale(); continue; }
         else {
+          acted = true;
           const pr = r.ok ? r.v : { ok: true, note: 'the page changed during the click (it may have gone through)' };
           rec.ok = !!pr?.ok; rec.note = pr?.note;
           if (rec.ok) {
@@ -280,6 +304,7 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
             if (st.kind === 'no_effect' && !(await changedInPlace(tabId, a.id, snapshot.gen, live))) rec.note = `${rec.note || 'clicked'} · click had no visible effect`;
             if (st.kind === 'gone') stopKind = 'tab_gone'; else if (st.kind === 'error_page') stopKind = 'error_page';
           }
+          if (relock && stopKind !== 'tab_gone') await lockTab(tabId, item.domain);
         }
       }
     } else if (a.type === 'type' || a.type === 'select' || a.type === 'scroll') {
@@ -290,6 +315,7 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
       else {
         const pr = r.ok ? r.v : { ok: true, note: 'the page changed during the action' };
         rec.ok = !!pr?.ok; rec.note = pr?.note;
+        if (a.type !== 'scroll') acted = true;
         const st = await waitForSettle(tabId, before, { capMs: 1500, stableMs: 500 });
         stepTrace.settle = settleTrace(st);
         if (st.kind === 'gone') stopKind = 'tab_gone'; else if (st.kind === 'error_page') stopKind = 'error_page';
@@ -301,6 +327,7 @@ async function runLoop(tabId: number, item: ScanItem, settings: Settings, onEven
       // Same-site is not enough: wallet.google.com is on google.com, and your never-explore list is only known here.
       const navWhy = urlBlocked(raw || a.url, settings);
       if (navWhy) { refuse(`refused to open a blocked or sensitive site (${navWhy})`, { blockedNav: true }); break; }
+      acted = true;
       const w = await navigateAndWait(tabId, raw || a.url, 10000);
       let c = w.kind === 'gone' ? null : await waitForContent(tabId, { capMs: 8000 });
       if (c?.kind === 'error_page') {
@@ -339,6 +366,8 @@ export async function findOne(item: ScanItem, settings: Settings, onEvent: (e: H
     if (!(await apiAvailable())) throw new Error('No API URL configured — open Settings (⚙).');
     const startUrl = startUrlOf(item);
     tabId = await openTab(startUrl, false, { purpose: 'walk', svc: item.domain });   // the scan always works in the background
+    // Before any press: a wrong one can't reach the site. Without the lock there is no walk.
+    if (!(await lockTab(tabId, item.domain))) throw new Error(NO_LOCK);
     onEvent({ type: 'start', item, tabId });
     const load = await waitForPage(tabId, 12000);
     const ready = load.kind === 'gone' ? null : await waitForContent(tabId, { capMs: 8000 });
@@ -361,8 +390,12 @@ export async function findOne(item: ScanItem, settings: Settings, onEvent: (e: H
   } catch (e) {
     result.outcome = 'error'; result.error = errText(e); result.reason = reasonFor(e);
   } finally {
-    // Only a paused tab stays open, and only so the accept can happen on the very screen that was found.
-    if (tabId !== undefined && !result.paused) await closeTab(tabId);
+    // Only a paused tab stays open (and locked), so the accept can happen on the very screen that was found. After an
+    // alarm the tab is the person's: unlocked and left open, since the site's own undo is often right there.
+    if (tabId !== undefined && !result.paused) {
+      await unlockTab(tabId);
+      if (result.outcome === 'may_have_cancelled') await unregisterTab(tabId); else await closeTab(tabId);
+    }
   }
   onEvent({ type: 'found', item, result });
   return result;
@@ -402,6 +435,7 @@ export async function findAll(items: ScanItem[], settings: Settings, onEvent: (e
 export async function releasePaused(item: ScanItem): Promise<void> {
   const p = item.paused;
   item.paused = null;
+  if (p) await unlockTab(p.tabId);
   if (p && (await ownedPausedTab(p))) await closeTab(p.tabId);
 }
 /** Close the tabs left open for services the user did not pick. Nothing is clicked. */
@@ -465,7 +499,9 @@ export async function acceptOne(item: ScanItem, settings: Settings, onEvent: (e:
             : live.tag && live.tag !== el.tag ? 'not the same element any more' : clickRefused('accept_offer', live, el, snapshot.text, history);
           if (refused || !live) why = `live re-check: ${refused}`;
           else {
-            const tid = tabId, before = await captureBefore(tid);
+            const tid = tabId;
+            await unlockTab(tid);   // the accept's own request must reach the site
+            const before = await captureBefore(tid);
             attempted = true;
             // Never retried. A frame that vanishes mid-click usually means the click navigated: carry on to the
             // confirmation screen and let the billing page decide. Any other failure goes to verification. `expect`:
@@ -481,11 +517,13 @@ export async function acceptOne(item: ScanItem, settings: Settings, onEvent: (e:
               steps.push(rec); onEvent({ type: 'step', item, step: rec });
               trace('accept.click', { svc: item.domain, target: want, settle: settleTrace(st) });
               if (st.kind === 'gone' || st.kind === 'error_page') { result.outcome = 'error'; result.reason = TAB_REASON[st.kind === 'gone' ? 'tab_gone' : 'error_page']; }
-              else {
+              else if (!(await lockTab(tabId, item.domain))) {   // the rest of the flow is walked locked again, or not at all
+                result.outcome = 'error'; result.reason = 'the safety lock could not be put back after the accept, so nothing more was pressed';
+              } else {
                 // Carry the find path: the click-time rule then knows this screen is inside the cancel flow, so a
                 // "Continue to cancel" under the offer the user just paid for is refused, here and on the server.
                 const found = (item.path || []).filter((s) => s.action.type !== 'finish');
-                const out = await runLoop(tabId, item, settings, onEvent, steps, { goal: 'hunt', startStep: 1, history: [...found, rec] });
+                const out = await runLoop(tabId, item, settings, onEvent, steps, { goal: 'hunt', startStep: 1, history: [...found, rec], afterPress: snapshot.text });
                 result.outcome = out.outcome; result.reason = out.reason; result.details = out.details;
               }
             } else why = `click did not go through: ${rec.note}`;   // performAction refused before pressing: re-walk
@@ -506,10 +544,12 @@ export async function acceptOne(item: ScanItem, settings: Settings, onEvent: (e:
       const url = startUrlOf(item);
       if (tabId != null && (await tabAlive(tabId))) { await navigateAndWait(tabId, url, 12000); if (settings.watch) await focusTab(tabId); }   // ours; navigating also reloads a discarded tab
       else { tabId = await openTab(url, settings.watch, { purpose: 'accept', svc: item.domain }); await waitForPage(tabId, 12000); }
+      const walkLocked = await lockTab(tabId, item.domain);
       onEvent({ type: 'start', item, tabId });
       const ready = await waitForContent(tabId, { capMs: 8000 });
-      trace('accept.rewalk', { svc: item.domain, why, startUrl: scrubUrl(url), ready: { kind: ready.kind, ms: ready.ms } });
-      if (ready.kind === 'gone' || ready.kind === 'error_page') { result.outcome = 'error'; result.reason = TAB_REASON[ready.kind === 'gone' ? 'tab_gone' : 'error_page']; }
+      trace('accept.rewalk', { svc: item.domain, why, startUrl: scrubUrl(url), ready: { kind: ready.kind, ms: ready.ms }, locked: walkLocked });
+      if (!walkLocked) { result.outcome = 'error'; result.reason = 'the safety lock could not be set, so it was not walked again'; }
+      else if (ready.kind === 'gone' || ready.kind === 'error_page') { result.outcome = 'error'; result.reason = TAB_REASON[ready.kind === 'gone' ? 'tab_gone' : 'error_page']; }
       else {
         const priorPath = (item.path || []).filter((s) => s.action.type !== 'finish').map((s) => `${s.state}: ${s.action.type}${s.target ? ` "${s.target.slice(0, 60)}"` : ''} @ ${scrubUrl(s.url)}`);
         const out = await runLoop(tabId, item, settings, onEvent, steps, { goal: 'hunt', priorPath });
@@ -529,6 +569,11 @@ export async function acceptOne(item: ScanItem, settings: Settings, onEvent: (e:
     const snap = skip ? null : await runInTab(tabId, snapshotPage, [{ maxElements: 80, textChars: 4000, domain: item.domain }]);
     if (snap) skip = urlBlocked(snap.url, settings) || (financialPageReason(snap.text) ? 'reads like a banking or other sensitive page' : null);
     let after: PageClass | null = null;
+    // Never silent, here too: a billing page that says the subscription was cancelled overrides whatever the walk thought.
+    if (snap && !skip && !item.pageSaidCancelled && CANCELLED_RE.test(snap.text) && result.outcome !== 'may_have_cancelled') {
+      result.outcome = 'may_have_cancelled'; result.reason = 'the billing page says the subscription was cancelled';
+      trace('accept.cancelled', { svc: item.domain, url: scrubUrl(snap.url) });
+    }
     if (skip || !snap) trace('accept.verify_skipped', { svc: item.domain, why: skip });
     else after = (await apiPost<{ result: PageClass }>('/api/classify', { domain: item.domain, name: item.name, snapshot: snap, readiness: vr.probe ?? undefined }).catch(() => ({ result: mockClassify(snap, item.domain) }))).result;
     result.after = after;
@@ -546,8 +591,11 @@ export async function acceptOne(item: ScanItem, settings: Settings, onEvent: (e:
     result.outcome = 'error'; result.error = errText(e); result.reason = reasonFor(e);
   } finally {
     item.paused = null;
-    // Watching: the tab stays open for the user and is theirs now, so no later sweep may close it.
-    if (tabId !== undefined) { if (settings.watch) await unregisterTab(tabId); else await closeTab(tabId); }
+    // Watching, or after an alarm: the tab stays open for the user and is theirs now, so no later sweep may close it.
+    if (tabId !== undefined) {
+      await unlockTab(tabId);
+      if (settings.watch || result.outcome === 'may_have_cancelled') await unregisterTab(tabId); else await closeTab(tabId);
+    }
   }
   onEvent({ type: 'done', item, result });
   return result;

@@ -121,3 +121,11 @@ details.grp>.card{margin-top:8px}
 a.open{font-size:12px;font-weight:600;color:var(--ink);text-decoration:underline;text-underline-offset:2px;cursor:pointer;white-space:nowrap}
 .sub.also{color:var(--muted-2);font-weight:500}
 table.dev td{word-break:break-word}
+/* ---- safety alarm and free trials ---- */
+.alarm{background:#FDECEA;border:1px solid #F3B4AA;border-radius:10px;padding:10px 12px;font-size:13px;line-height:1.45;color:#7A1F12}
+.alarm b{color:#7A1F12}
+.alarm-links{display:flex;gap:12px;margin-top:6px}
+.sect .sect-note{text-transform:none;letter-spacing:0;font-weight:500}
+.row.pick.trial.off{opacity:1}
+.row.pick.trial.off .amt{text-decoration:none;color:var(--muted)}
+.tag.warn{background:#FDECEA;color:#7A1F12}

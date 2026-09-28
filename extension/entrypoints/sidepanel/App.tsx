@@ -36,6 +36,8 @@ async function runIdle(): Promise<boolean> {
 }
 /** Where "Open" goes: the page the scan landed on, else the account URL. Web pages only (never a chrome-error:// page). */
 const openUrl = (i: ScanItem) => [i.url, i.accountUrl].find((u) => !!u && /^https?:\/\//i.test(u)) || '';
+/** Offers on free trials start unticked: accepting one turns a trial the person may have meant to cancel into paid months. */
+const trialOffers = (r: ScanResult | null) => (r?.items || []).filter((i) => i.hasOffer && i.isTrial).map((i) => i.id);
 
 export default function App() {
   const [screen, setScreen] = useState<Screen>('idle');
@@ -61,7 +63,7 @@ export default function App() {
       // window's panel is running: its tabs are live, not orphans.
       const saved = (v.scanResult as ScanResult | undefined) ?? null;
       const r = (await runIdle()) ? await reconcileOnLoad(saved).catch(() => saved) : saved;
-      if (r) { setResult(r); setScreen('reveal'); }
+      if (r) { setResult(r); setExcluded(trialOffers(r)); setScreen('reveal'); }
       // Design previews only (sidepanel.html?preview=…); never used in the real flow.
       const pv = new URLSearchParams(location.search).get('preview');
       if (pv === 'settings') setScreen('settings');
@@ -92,7 +94,7 @@ export default function App() {
       try {
         const r = await runScan(s, setProgress);
         if (s.testMode) await traceEnd(scanSummary(r));
-        setResult(r); setScreen('reveal');
+        setResult(r); setExcluded(trialOffers(r)); setScreen('reveal');
       } catch (e: any) {
         if (s.testMode) { trace('run.error', { error: String(e?.message || e), stack: String(e?.stack || '').slice(0, 1500) }); await traceEnd({ error: String(e?.message || e) }); }
         throw e;
@@ -281,9 +283,11 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, onRelease, restr
   const [details, setDetails] = useState(false);
   const g = groupReveal(result.items, SETS);
   const found = result.items.filter((i) => PAYING.includes(i.status)).length;
-  const offers = g.offers;
-  const picked = offers.filter((i) => !excluded.includes(i.id));
+  const offers = g.offers, trials = g.trials;
+  const picked = [...offers, ...trials].filter((i) => !excluded.includes(i.id));
   const total = Math.round(picked.reduce((s, i) => s + i.estSavings, 0));
+  const pickedOffers = offers.filter((i) => !excluded.includes(i.id)).length;
+  const alarms = result.items.filter((i) => i.findOutcome === 'may_have_cancelled');
   // Say "not checked" when no cancellation flow was opened, never "0 made an offer".
   const readOnly = result.items.some((i) => i.findOutcome === 'not_walked') || (testMode && !testFind);
   const walked = result.items.some((i) => i.findOutcome != null && i.findOutcome !== 'not_walked');
@@ -292,6 +296,11 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, onRelease, restr
   const workLine = (i: ScanItem) => [who(i), (i.live || '').replace(/^work account\s*[—–-]\s*/i, '')].filter(Boolean).join(' · ');
   return (
     <div className="body">
+      {alarms.length > 0 && <div className="alarm">
+        <b>Check {alarms.map((i) => i.name).join(', ')} now.</b> After one of Walkaway's presses, the page said the subscription was cancelled. Nothing else was pressed.
+        Open it and look for Restart, Resume or Keep: most services let you undo this until the billing period ends.
+        <div className="alarm-links">{alarms.map((i) => <OpenLink key={i.id} item={i} label={`Open ${i.name}`} />)}</div>
+      </div>}
       {found === 0 ? (
         <>
           <h1>Nothing found <em>yet.</em></h1>
@@ -299,8 +308,8 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, onRelease, restr
         </>
       ) : (
         <>
-          {offers.length > 0 && <div className="total"><small>{picked.length === offers.length ? 'You could save' : `${picked.length} of ${offers.length} picked · you could save`}</small><b>~{money(total)}</b><span>on your next bills, without cancelling anything.</span></div>}
-          <div className="count">{countLine(found, offers.length, { readOnly, walked })}</div>
+          {picked.length > 0 && <div className="total"><small>{pickedOffers === offers.length ? 'You could save' : `${picked.length} picked · you could save`}</small><b>~{money(total)}</b><span>on your next bills, without cancelling anything.</span></div>}
+          <div className="count">{countLine(found, offers.length + trials.length, { readOnly, walked })}</div>
           {offers.length > 0 && <div className="card">
             {offers.map((i) => { const on = !excluded.includes(i.id); const a = also(i); return (
               <label className={`row pick${on ? '' : ' off'}`} key={i.id}>
@@ -314,12 +323,28 @@ function Reveal({ result, excluded, onToggle, onHunt, onRescan, onRelease, restr
               </label>
             ); })}
           </div>}
+          {trials.length > 0 && <>
+            <div className="sect">Free trials <span className="sect-note">· not counted unless you tick them</span></div>
+            <div className="card">
+              {trials.map((i) => { const on = !excluded.includes(i.id); return (
+                <label className={`row pick trial${on ? '' : ' off'}`} key={i.id}>
+                  <input type="checkbox" checked={on} onChange={() => onToggle(i.id)} aria-label={`Include ${i.name}`} />
+                  <div className="rowmain">
+                    <div className="rowline"><span>{i.name}</span><b className="amt">saves ~{money(i.estSavings)}</b></div>
+                    {who(i) && <span className="sub who">Signed in as {who(i)}</span>}
+                    <span className="sub deal">{dealLine(i)}</span>
+                    <span className="sub">Worth it only if you'd keep it after the trial.</span>
+                  </div>
+                </label>
+              ); })}
+            </div>
+          </>}
           {g.paying.length > 0 && <>
             <div className="sect">Paying</div>
             <div className="card">
               {g.paying.map((i) => { const sub = paidSubLine(i); const a = also(i); return (
                 <div className="row col" key={i.id} title={i.live || undefined}>
-                  <div className="rowline"><span className="nm">{i.name}</span><span className="tag skip">{keptLabel(i)}</span></div>
+                  <div className="rowline"><span className="nm">{i.name}</span><span className={`tag ${i.findOutcome === 'may_have_cancelled' ? 'warn' : 'skip'}`}>{keptLabel(i)}</span></div>
                   {(sub || i.otherAccount) && <span className="sub">{sub}{i.otherAccount && <span className="chip">other account</span>}</span>}
                   {a && <span className="sub also">{a}</span>}
                 </div>
@@ -375,10 +400,10 @@ function Folded({ title, items, line, also, openLinks }: { title: string; items:
   );
 }
 /** Opens the page in a new tab in front, so the owner can check it (or sign in) in one click. */
-function OpenLink({ item }: { item: ScanItem }) {
+function OpenLink({ item, label }: { item: ScanItem; label?: string }) {
   const url = openUrl(item);
   if (!url) return null;
-  return <a className="open" href={url} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); void browser.tabs.create({ url, active: true }); }}>Open ↗</a>;
+  return <a className="open" href={url} target="_blank" rel="noreferrer" onClick={(e) => { e.preventDefault(); void browser.tabs.create({ url, active: true }); }}>{label || 'Open'} ↗</a>;
 }
 
 function Checkout({ msg, onCancel }: { msg: string; onCancel: () => void }) {
@@ -428,18 +453,23 @@ function Done({ hunt, onRescan, onAgain }: { hunt: HuntState; onRescan: () => vo
     : st.waived ? `No charge — 15% came to ${money(st.feeCents / 100)}, less than a card can be charged, so it's on us.`
     : st.needsAction ? 'Your bank needs to authenticate this charge — we will follow up by email.'
     : 'No charge — nothing was verified, so your card was not used.';
+  const alarms = results.filter((r) => r.outcome === 'may_have_cancelled');
   return (
     <div className="body">
+      {alarms.length > 0 && <div className="alarm">
+        <b>Check {alarms.map((r) => r.name).join(', ')} now.</b> After one of Walkaway's presses, the page said the subscription was cancelled. Nothing else was pressed, and nothing is charged for it.
+        Open it and look for Restart, Resume or Keep: most services let you undo this until the billing period ends.
+      </div>}
       <h1>{wins ? <>You're paying <em>{money(total)} less</em> on your upcoming renewals.</> : <>No discounts <em>this time.</em></>}</h1>
       <div className="card">
         {results.map((r) => (
           <div className="row col" key={r.domain}>
-            <div className="rowline">{r.name}<span className={`tag ${r.outcome === 'discount_applied' ? 'ok' : 'skip'}`}>{outcomeLabel(r.outcome)}</span></div>
+            <div className="rowline">{r.name}<span className={`tag ${r.outcome === 'discount_applied' ? 'ok' : r.outcome === 'may_have_cancelled' ? 'warn' : 'skip'}`}>{outcomeLabel(r.outcome)}</span></div>
             <span className="sub">{r.outcome === 'discount_applied' ? `${money(r.before?.monthlyPriceUsd ?? null)}/mo → ${money(r.after?.monthlyPriceUsd ?? null)}/mo${r.termMonths ? ` for ${r.termMonths} months` : ''} · saves ${money(r.savingsUsd)}` : (r.reason || 'No offer was made, so it was left alone.')}</span>
           </div>
         ))}
       </div>
-      <p className="sub">Nothing was cancelled. {payment}</p>
+      <p className="sub">{alarms.length ? null : 'Nothing was cancelled. '}{payment}</p>
       <div className="spacer" />
       <button className="btn ghost" onClick={onAgain}>Run again</button>
       <p className="links"><a onClick={onRescan}>Rescan</a></p>
@@ -465,7 +495,7 @@ function SettingsScreen({ settings, onSave, onCancel }: { settings: Settings; on
       <h2 className="settings-h">Test mode</h2>
       <label className="check"><input type="checkbox" checked={s.testMode} onChange={(e) => setS({ ...s, testMode: e.target.checked })} /> Test mode — scan and log everything; never accept an offer, never charge</label>
       <label className="check"><input type="checkbox" checked={s.testFind} disabled={!s.testMode} onChange={(e) => setS({ ...s, testFind: e.target.checked })} /> Also walk cancellation flows to find offers <span className="hint">off = read-only: account pages only, no cancellation flow opened</span></label>
-      <label className="check"><input type="checkbox" checked={s.testPageText} disabled={!s.testMode} onChange={(e) => setS({ ...s, testPageText: e.target.checked })} /> Include page text in the log <span className="hint">helps find bugs; tokens, card numbers and addresses are removed and emails masked, but names can remain</span></label>
+      <label className="check"><input type="checkbox" checked={s.testPageText} disabled={!s.testMode} onChange={(e) => setS({ ...s, testPageText: e.target.checked })} /> Include page text in the log <span className="hint">helps find bugs; tokens, card numbers and street addresses are removed and emails masked, but names and other details can remain</span></label>
       <label className="check"><input type="checkbox" checked={s.testRecord} disabled={!s.testMode || !s.testPageText} onChange={(e) => setS({ ...s, testRecord: e.target.checked })} /> Record each page for replay tests <span className="hint">keeps what the AI saw on every account page and walk step, scrubbed the same way, so real cancellation flows can be replayed as tests</span></label>
       <button className="btn ghost" onClick={async () => { const l = await lastLog(); if (l) downloadLog(l); else alert('No test log yet. Turn on test mode and run a scan.'); }}>Download last test log</button>
       <div className="spacer" />

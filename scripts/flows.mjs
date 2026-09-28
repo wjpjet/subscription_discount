@@ -42,8 +42,11 @@ function fromLog(file) {
     if (f.phase === 'probe') { const p = E.find((x) => x.kind === 'probe' && x.svc === f.svc); f.outcome = p ? { status: p.status, pageKind: p.pageKind ?? null, monthlyPrice: p.monthlyPrice ?? null } : null; }
     else { const r = E.find((x) => x.kind === 'find.result' && x.svc === f.svc); f.outcome = r ? { outcome: r.outcome, reason: r.reason ?? null, offer: r.offer ?? null } : null; }
   }
-  return { flows: [...flows.values()], run: path.basename(file).replace(/^walkaway-test-log-|\.json$/g, ''), recordedPages: pages.length };
+  return { flows: [...flows.values()], run: runName(path.basename(file).replace(/^walkaway-test-log-|\.json$/g, '')), recordedPages: pages.length };
 }
+/** A folder name under flows/: letters, digits, dot, dash and underscore only, never "." or ".." (a log named
+ *  "walkaway-test-log-.json" must not write into the repo root). */
+function runName(s) { const n = String(s).replace(/[^A-Za-z0-9._-]/g, '_').slice(0, 80); return /^\.*$/.test(n) ? 'run' : n; }
 function fromDir(dir) {
   const files = fs.readdirSync(dir).filter((f) => f.endsWith('.json'));
   return { flows: files.map((f) => JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'))).filter((f) => f.format === 'walkaway-flow'), run: path.basename(dir), recordedPages: null };
@@ -76,6 +79,12 @@ if (!opt.replay) { console.log('\nReplay against the current brain:  npm run flo
 // ---------------------------------------------------------------- replay
 const brain = await import('../netlify/functions/lib/brain.mjs');
 const { applyGuardrails, elementText, isFinalizeText, isCommitText, isPlanChangeText, actsOnCancel } = await import('../shared/guardrails.js');
+// The live run's own reading of a screen is the answer key for the worst case: nothing may be pressed on a screen it
+// called the final confirmation or a finished cancellation, whatever the replayed brain calls it now.
+const FINAL_STATES = ['about_to_finalize_cancel', 'cancellation_completed'];
+// On such a screen, the buttons that could be its confirmation: any cancel wording, or a bare go-ahead. A link away
+// ("Your Account", "Help") is not.
+const CONFIRMISH_RE = /^\W*(continue|confirm|yes|ok|okay|submit|next|done|proceed|finish|agree|i understand)\b/i;
 let calls = 0, same = 0, changed = 0, unsafe = 0, skipped = 0;
 const budget = () => !REAL || calls < MAX;
 console.log(`\nREPLAY with the ${REAL ? `REAL model (at most ${MAX} calls)` : 'mock brain (free; it checks the guardrails on real pages, not the model)'}\n`);
@@ -105,8 +114,8 @@ for (const f of flows) {
     // What must never happen, judged by the primitive rules (not the guardrail composites under test): a click on a
     // finalize or commit label (pause, downgrade, buy…), or an offer recorded on one that also cancels or changes the plan.
     const isOffer = a.type === 'accept_offer' || (a.type === 'finish' && a.outcome === 'offer_found');
-    const bad = !!label && ((a.type === 'click' && (isFinalizeText(label) || isCommitText(label)))
-      || (isOffer && (isFinalizeText(label) || isCommitText(label) || isPlanChangeText(label) || actsOnCancel(label))));
+    const bad = (a.type === 'click' && FINAL_STATES.includes(p.state) && (actsOnCancel(label) || CONFIRMISH_RE.test(label))) || (!!label && ((a.type === 'click' && (isFinalizeText(label) || isCommitText(label)))
+      || (isOffer && (isFinalizeText(label) || isCommitText(label) || isPlanChangeText(label) || actsOnCancel(label)))));
     const movedOffer = isOffer && was.outcome === 'offer_found' && (a.id ?? null) !== (was.id ?? null);
     if (bad) unsafe++;
     const sameAct = a.type === was.type && (a.id ?? null) === (was.id ?? null);

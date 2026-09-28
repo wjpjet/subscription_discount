@@ -92,10 +92,12 @@ export function logText(text: string | null | undefined, max = 3000): string | n
 export const redact = (text: string): string => redactForLog(text);
 /** An email for the log: `ja***@example.com`, or null. */
 export function maskForLog(email: string | null | undefined): string | null { return email ? maskEmail(email) : null; }
-/** A URL for the log: secret query values and token path segments out, emails masked, length capped. */
+/** A URL for the log: secret query values and token path segments out, emails masked, length capped. Redacted piece by
+ *  piece: a long run of letters and digits across path separators ("com/premium/…/1234") is a path, not one token.
+ *  Never split at "=": "sid=…" must stay one piece for the keyed-secret rule to see it. */
 export function logUrl(url: string | null | undefined): string | null {
   if (url == null) return null;
-  const s = redactForLog(scrubUrl(String(url)));
+  const s = scrubUrl(String(url)).split(/([/?&#])/).map((p) => (/^[/?&#]$/.test(p) ? p : redactForLog(p))).join('');
   return s.length > 400 ? s.slice(0, 400) + '…' : s;
 }
 
@@ -156,18 +158,25 @@ export function snapSummary(snap: any): Record<string, unknown> {
 /** The whole snapshot the model saw, scrubbed as it was sent (sanitizeSnapshot) and capped; trace() then masks every
  *  email and secret left in any string. Element ids are kept, so a recorded decision still points at its element. */
 const LABEL_VALUE_TYPES = new Set(['submit', 'button', 'reset', 'image']);   // their value is the button's label
+/** Where a link goes, without its query: return URLs, emails and names ride in query strings. */
+function originPath(href: string): string {
+  try { const u = new URL(href); return u.origin + u.pathname + (u.hash && !u.hash.includes('=') ? u.hash : ''); } catch { return '[link]'; }
+}
 function recordElement(e: any): any {
   if (!e || typeof e !== 'object') return e;
-  const tag = e.tag, o = { ...e };
-  if ((tag === 'input' || tag === 'textarea' || tag === 'select') && o.value != null && o.value !== '' && !LABEL_VALUE_TYPES.has(String(o.type || ''))) o.value = '[filled]';
-  if (tag === 'select' && o.text) o.text = '[selected]';
+  const o = { ...e };
+  // Any value is what someone typed or picked, except a button's own label: a <label> carries its (maybe hidden)
+  // control's type and value, so the tag says nothing.
+  if (o.value != null && o.value !== '' && !LABEL_VALUE_TYPES.has(String(o.type || ''))) o.value = '[filled]';
+  if (o.tag === 'select' && o.text) o.text = '[selected]';
+  if (typeof o.href === 'string') o.href = originPath(o.href);
   return o;
 }
 export function recordSnapshot(snap: any): Record<string, unknown> | null {
   if (!snap) return null;
   const s: any = sanitizeSnapshot(snap);
   return {
-    url: s.url, title: s.title ?? '', headings: (s.headings || []).slice(0, 12), text: String(s.text || '').slice(0, 6000),
+    url: typeof s.url === 'string' ? originPath(s.url) : s.url, title: s.title ?? '', headings: (s.headings || []).slice(0, 12), text: String(s.text || '').slice(0, 6000),
     textLength: s.textLength ?? String(s.text || '').length, hasPassword: !!s.hasPassword, prices: (s.prices || []).slice(0, 20),
     elements: (s.elements || []).slice(0, 120).map(recordElement), identity: s.identity ?? null, frames: s.frames ?? [],
   };

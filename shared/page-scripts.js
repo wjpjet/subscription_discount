@@ -153,7 +153,7 @@ export function snapshotPage(opts) {
     var e = { id: id, tag: ye.tagName.toLowerCase(), text: txt(ye) };
     var nm = accName(ye, e.text); if (nm && nm !== e.text) e.label = nm.slice(0, 80);
     var role = ye.getAttribute('role'); if (role) e.role = role;
-    if (ye.tagName === 'A' && ye.href) e.href = String(ye.href).slice(0, 200);
+    if (ye.tagName === 'A' && ye.href) { e.href = String(ye.href).slice(0, 200); if (/^_blank$/i.test(ye.getAttribute('target') || '')) e.newTab = true; }
     if (fld.tagName === 'INPUT') {
       e.type = fld.type; if (fld.name) e.name = fld.name; if (fld.placeholder) e.placeholder = fld.placeholder;
       if (fld.type !== 'password' && fld.value) e.value = String(fld.value).slice(0, 60);
@@ -519,8 +519,22 @@ export function performAction(action) {
       var text = name(el);
       el.scrollIntoView({ block: 'center' });
       if (el.tagName === 'LABEL') { var inp = el.control || el.querySelector('input'); if (inp) { inp.click(); return { ok: true, note: 'clicked label → ' + text }; } }
+      // A person's click: pointer and mouse down/up at the element's centre, then click. Some menus open on pointerdown
+      // and never see a bare click() (the walk read those as "no visible effect").
+      var rc = el.getBoundingClientRect(), cx = rc.left + rc.width / 2, cy = rc.top + rc.height / 2;
+      var seq = [['pointerdown', 1], ['mousedown', 1], ['pointerup', 0], ['mouseup', 0]];   // no hover: it opens and closes menus
+      for (var si = 0; si < seq.length; si++) {
+        var init = { bubbles: true, cancelable: true, composed: true, view: window, clientX: cx, clientY: cy, button: 0, buttons: seq[si][1] };
+        var isPtr = seq[si][0].indexOf('pointer') === 0;
+        if (isPtr) { init.pointerId = 1; init.pointerType = 'mouse'; init.isPrimary = true; }
+        try { el.dispatchEvent(isPtr && typeof PointerEvent === 'function' ? new PointerEvent(seq[si][0], init) : new MouseEvent(seq[si][0], init)); } catch (err) { /* an engine without the constructor */ }
+      }
+      // A same-site link that opens a new window: without a real gesture Chrome blocks the popup, so open it here instead.
+      var tgt = action.sameTab && el.tagName === 'A' ? el.getAttribute('target') : null;
+      if (tgt != null) el.removeAttribute('target');
       el.click();
-      return { ok: true, note: 'clicked "' + text + '"' };
+      if (tgt != null) el.setAttribute('target', tgt);
+      return { ok: true, note: 'clicked "' + text + '"' + (tgt != null ? ' (opened here, not in a new tab)' : '') };
     }
     if (t === 'type') {
       var tf = byId(action.id); if (!tf) return { ok: false, note: 'element not found' };

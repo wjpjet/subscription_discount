@@ -79,7 +79,8 @@ export function mockDecide(input) {
       const pm = bt.match(/(\d+)%\s*off\s*(?:for\s*)?(\d+)\s*months?/i) || src.match(/(\d+)%\s*off\s*(?:for\s*)?(\d+)\s*months?/i);
       const fm = src.match(/(\d+)\s*(?:free\s+months?|months?\s+free)/i);
       const dm = src.match(/\$\s?(\d+(?:\.\d{2})?)\s*\/\s*(?:mo|month)\b[^.]*?(\d+)\s*months?/i);
-      const base = { description: bt || 'offer', newMonthlyPriceUsd: null, discountPct: null, termMonths: null, freeMonths: null };
+      const was = src.match(/\$\s?(\d+(?:\.\d{2})?)\s+\$\s?\d+(?:\.\d{2})?\s*\/\s*(?:mo|month)\b/i);   // "$89.99 $44.99/month": the struck-through price first
+      const base = { description: bt || 'offer', newMonthlyPriceUsd: null, discountPct: null, termMonths: null, freeMonths: null, regularMonthlyPriceUsd: was ? +was[1] : null };
       const offer = pm ? { ...base, discountPct: +pm[1] / 100, termMonths: +pm[2] }
         : fm ? { ...base, freeMonths: +fm[1] }
         : dm ? { ...base, newMonthlyPriceUsd: +dm[1], termMonths: +dm[2] }

@@ -649,6 +649,77 @@ new recording checks), and the mock suite unchanged (score 38, safety 100, achie
 review of the release found nothing that could make a walk click or walk anything it must not, and the
 recording scrubbed to the same standard as the page-text log; its smaller findings are in TODO.md.
 
+## The first live walk, and the safety lock, 2026-09-27
+
+Test mode with walks and recording on: 78 seconds, about 15¢ of Gemini, five services walked, nothing accepted
+and nothing cancelled. LinkedIn Premium, on a free trial, offered 50% off for two months, and the walk paused on
+it (the "Confirm cancel" beside it refused by rule). Claude, Netflix and Amazon reached their final confirmation
+screens without a discount and backed out. YouTube Premium's "Cancel" did nothing visible, twice, and the walk
+gave up. YouTube Premium showed up as paying for the first time (the sparse-page wait), and 40 real flows were
+recorded for replay. The log's one high flag, a secret-looking link, was a Prime Video title id the scrubber had
+already cut.
+
+What it showed:
+- **A real gap in the click rules.** Claude's entry was a bare "Cancel", and its confirmation dialog offered
+  "Cancel plan" with no "are you sure" wording and no offer text. No fixed rule refused "Cancel plan"; only the
+  model calling the dialog the final screen held it back. Replaying the recording with the rule-based mock brain
+  pressed it. Amazon's final button, "Cancel on <date>", was refused only because the page happened to show a price.
+- **Trials were valued at $0.** A trial's page shows $0 today and no later price, so the saving read ~$0.00 and
+  the line said "instead of $0".
+- **Some buttons ignore a bare click().** YouTube's "Cancel" never reacted.
+
+The owner asked for a way not to gamble the subscription at all. The walk has to start a cancellation to see the
+offer, so the answer is to make a wrong press harmless, not only unlikely:
+- **The safety lock** (`extension/src/netlock.ts`). While a walk is in a cancellation flow, Chrome refuses every
+  POST, PUT, PATCH or DELETE from that tab whose address names a cancellation, termination, unsubscribe,
+  deactivation, pause or downgrade: declarativeNetRequest session rules scoped to the tab, one substring rule per
+  word (a single regex over all of them compiles past Chrome's 2KB limit and was skipped, which the end-to-end
+  test caught), ids from a reserved range because real tab ids run into the billions. Pages, surveys and offers
+  load as usual. Held tabs stay locked; the accept lifts it for its own press only. It can't see inside request
+  bodies, so a GraphQL mutation to /graphql passes: it sits under the click rules, not instead of them. In test
+  mode every changing request from a locked tab is logged, blocked or not.
+- **One cancel press per walk.** After the press that started the cancellation, any button that starts with
+  Cancel or End (or names the cancellation) is refused, whatever the page says. A bare "Cancel" counts as the
+  start only where the model saw a subscription page (a popup's "Cancel" must not), and a press with no visible
+  effect doesn't count. "Cancel on <date>", "End my benefits" and "Cancel now" joined the never-press list, links
+  whose address confirms a cancellation are refused, and a walk with no offer six presses after starting the
+  cancellation backs out.
+- **Never silent.** After any press, a page that newly says the subscription was cancelled, or that the model
+  reads as a finished cancellation, stops the walk as `may_have_cancelled`: the tab is left open (unlocked, the
+  person's now) and the panel opens with a red "Check <service> now" and how to undo it. The same holds right after
+  the accept's own press and on the billing page read after the run (then nothing is charged). Before, that would
+  have read as a quiet "backed out".
+- **Replay** now flags any confirming press on a screen the live run called final; on the recorded Claude dialog,
+  "Cancel plan" is refused.
+- **Trials**: the offer's own regular price (a new `regularMonthlyPriceUsd`, or the new price undone by its
+  percentage) stands in for a trial's $0, so a trial's offer reads "Free until <date>, then $44.99/mo instead of
+  $89.99 for 2 months", saving ~$90. Offers on trials get their own "Free trials" section, unticked and out of the total
+  until ticked: accepting one turns a trial the person may have meant to cancel into paid months.
+- **Clicks** send pointer and mouse down/up before click(), and a same-site link that would open a blocked popup
+  opens in the walk tab.
+- From the review of the previous release: a re-read replaces the half-drawn reading it was kept from (a clear
+  "free" beats an unsure "paid"); the price hop opens only the catalog's own pages, with Netflix's payment
+  history added; recorded pages mask every field value and keep links as origin and path; log URLs are redacted
+  piece by piece (LinkedIn's billing URL had been cut to "www.linkedin.[token]"); `npm run flows` can't write
+  outside flows/.
+- **Not done, on purpose:** pay.google.com and payments.google.com on the never-touch list. The list's own test
+  keeps them allowed because Google One cancels through them. An owner decision, in TODO.md.
+
+The adversarial review of this release found three high problems, all fixed before it shipped: the one-press rule
+still missed Claude's case when the model called the billing page "settings" (a bare "Cancel" now counts on any
+page, and so does a press with no visible effect: a slow dialog opens after the wait, and its confirmation can carry
+the same label, so even a retry is refused); the new prompt line nudged the model toward "Continue", and a go-ahead
+("Continue", "Yes", "Confirm") on a final confirmation that states when access ends ("until October 10", "until the
+end of your billing period") is now refused once the cancellation started, unless it names the offer ("Yes, give me
+50% off"; an "Are you sure?" step with no end, which often comes before the offer, is left alone); and the lock
+failed open (a tab that
+can't be locked is now not walked, every step checks the lock is on, and the permission is plain
+declarativeNetRequest, which blocks on any host, not only granted ones: install warning "Block content on any
+page"). Also fixed: "When your membership is cancelled…" no longer reads as a cancellation, a billing page that
+already said "cancelled" at scan time raises no alarm, the Done screen shows the alarm instead of "Nothing was
+cancelled", a keyed secret in a URL path is redacted again, and "Cancellation" tabs, choosers and survey answers
+no longer count as the cancel press.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

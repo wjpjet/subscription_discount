@@ -22,9 +22,9 @@ minimum; under 50¢ is waived). It can never finalize a cancellation.
 
 ## Shipping
 
-Nothing is waiting: the "second live run" commit (sparse-page waits, 404 recovery, price hops, Twitch/Google One
-handling, page **recording** for replay tests) went live on 2026-09-27. To ship a later change (from the main
-checkout, after the free checks in "Testing"):
+Nothing is waiting: the safety release (the lock on walk tabs, one cancel press per walk, the never-silent alarm,
+the Free trials section) went live on 2026-09-27. To ship a later change (from the main checkout, after the free
+checks in "Testing" and an adversarial review):
 
 ```
 npm run cf:deploy
@@ -43,9 +43,10 @@ Then reload the extension at `chrome://extensions`.
     review of the fix.
   - Run 2 (`walkaway-test-log-2026-09-27T16-29-55.json`): 5 real paid plans found, nothing false under Paying, no
     secrets in the log. Remaining issues fixed in the unshipped commit.
-- **No real walk run yet.** Next live run: test mode with **Also walk cancellation flows** on, and **Record each
-  page for replay tests** on. Step by step in TODO.md, "Live walk run". Then `npm run review-log -- <log>` and
-  `npm run flows -- <log>`.
+- **First live walk done** (`walkaway-test-log-2026-09-27T20-53-52.json`, flows in `flows/2026-09-27T20-53-52/`):
+  five services walked, LinkedIn's trial made a real offer, nothing accepted or cancelled. It showed that no fixed
+  rule would have refused Claude's "Cancel plan" confirmation (only the model did), which led to the safety
+  release. Next: a second live walk on the new build (TODO.md, "Second live walk", with what to check).
 - **Plan after that:** build realistic edge-case tests from the recorded real flows (the 100 synthetic Streamly
   scenarios were judged repetitive), then the logging/offer-database foundation (LOGGING_TODO.md).
 
@@ -72,8 +73,11 @@ Then reload the extension at `chrome://extensions`.
 
 Safety layers: the model has no "finalize" action; deterministic guardrails on the server and again in the
 extension (finalize/decline text, pause/downgrade/plan-switch/purchase buttons, cancel buttons on offer screens,
-never-touch hosts); the live button text is re-read at click time; element ids are tied to the snapshot they came
-from; everything is scrubbed (tokens, card data, addresses; emails masked in logs) before leaving the browser.
+one cancel press per walk, confirm-cancel links, six presses without an offer, never-touch hosts); the live button
+text is re-read at click time; element ids are tied to the snapshot they came from; **the safety lock** (Chrome
+refuses any POST/PUT/PATCH/DELETE from a walk tab whose address names a cancellation; `extension/src/netlock.ts`);
+**never silent** (a page that says it was cancelled after a press stops everything and shows a red warning);
+everything is scrubbed (tokens, card data, addresses; emails masked in logs) before leaving the browser.
 
 ## Testing (what's free and what costs money)
 
@@ -98,6 +102,10 @@ from; everything is scrubbed (tokens, card data, addresses; emails masked in log
 - Employer domains are still sent to discovery by name unless listed in Never-explore (TODO: a "work domains"
   setting).
 - Cookie-rule change (bare `user`/`secure` no longer count as session cookies) needs checking on the next log.
+- The safety lock can't see request bodies: a GraphQL mutation to /graphql passes it (TODO: part 2).
+- YouTube Premium's "Cancel" ignored the walk's click; the fuller click (pointer events) is untested on it.
+- Google's payment pages are allowed so Google One can be walked (owner decision in TODO.md).
+- A trial's discount can't be verified until the trial converts, so accepting one charges nothing today.
 - Iframes are recorded but not read.
 - The Anthropic provider path is broken with the installed SDK (zod v4 vs v3); Gemini is unaffected.
 

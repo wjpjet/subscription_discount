@@ -1,5 +1,5 @@
 export type SnapshotRegion = 'dialog' | 'main' | 'page' | 'nav';
-export interface SnapshotElement { id: number; tag: string; text: string; label?: string; role?: string; href?: string; type?: string; name?: string; placeholder?: string; value?: string; checked?: boolean; expanded?: boolean; options?: string[]; disabled?: boolean; offscreen?: boolean; region?: SnapshotRegion }
+export interface SnapshotElement { id: number; tag: string; text: string; label?: string; role?: string; href?: string; newTab?: boolean; type?: string; name?: string; placeholder?: string; value?: string; checked?: boolean; expanded?: boolean; options?: string[]; disabled?: boolean; offscreen?: boolean; region?: SnapshotRegion }
 export type PriceUnit = 'month' | 'year' | 'week' | 'quarter' | '';
 /** `currency` is an ISO code ('USD' for a bare `$`); `unit` is normalized. `context` is ~120 chars before and 45
  *  after, whole words only; sanitizeSnapshot scrubs it and trims the head. */

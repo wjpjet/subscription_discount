@@ -18,22 +18,28 @@ Current state and a handoff summary: **[STATUS.md](STATUS.md)**.
 - [ ] **Rotate the Gemini API key and revoke the Together key.** Both were pasted into a chat.
 - [x] **Second live run, read-only** (2026-09-27). 5 real paid plans found and nothing false in Paying;
       fixes for what it showed are in HISTORY.md.
-- [ ] **Live run with walks, recording on.** Steps below, under "Live walk run". Every real cancellation
-      flow it walks becomes a flow file in `flows/` (local only, git-ignored).
-- [ ] **Next release: what the review of the second-run release found.** None of it blocks the walk run.
-  - Add `pay.google.com` and `payments.google.com` to the never-touch hosts in `shared/sensitive.js` (only
-    `wallet.google.com` is there; a Google One walk may go anywhere on google.com). Until then, list them
-    in **Never explore**: that blocks just those hosts, and Google One is still checked.
-  - A re-read or price page that clearly says "no paid plan" can't replace an unsure "paid" first read:
-    `better()` in `scan.ts` ranks hasPaidPlan above confidence. Take the re-read unless it is a bad page or
-    signed out.
-  - The price hop opens any alternate URL, including model-guessed ones merged in by discovery. Limit it to
-    the catalog's own.
-  - Recording: mask every element's `value` except button labels (a `<label>` carries its hidden control's
-    value), and keep links as origin + path. The settings hint overstates what is removed.
-  - `npm run flows`: clean the run name; an odd log file name can make it write into the repo root.
-  - Optional: refuse a second press of the same cancel label inside one flow (a confirm that reuses the
-    entry label). Measure on the mock suite first: it will back out of some real flows early.
+- [x] **First live run with walks, recording on** (2026-09-27). Five walked, one real offer (a trial),
+      nothing accepted or cancelled; it showed a gap in the click rules. HISTORY.md, "The first live walk".
+- [x] **Safety lock, one cancel press per walk, never-silent alarm, trials section** (2026-09-27), and the
+      previous review's re-read, price-hop, recording and flows items. HISTORY.md.
+- [ ] **Second live walk** on the new build, same steps (below, "Live walk run"). Then check in review-log:
+  - SAFETY LOCK: did it engage on every walk, and did any flow stop because it blocked the offer's own
+    request (a blocked POST just before a walk that found nothing)?
+  - YouTube Premium: does "Cancel" react now (pointer events before click)? If not, look at what it opens.
+  - Amazon's price, Netflix's price (the catalog now tries its payment history).
+- [ ] **Owner decision: Google's payment pages.** `pay.google.com` and `payments.google.com` are allowed on
+      purpose (Google One, and likely YouTube Premium, cancel through them), so a Google walk can read a
+      payments page (card digits scrubbed). Options: keep as is; block them and give up those walks; or allow
+      only their subscription paths (needs path rules in `shared/sensitive.js`).
+- [ ] **Trials: the fee can't be verified until the trial converts.** After accepting a trial's offer, the
+      billing page still shows $0, so verification finds no lower price and nothing is charged. Decide:
+      charge nothing on trials, or verify again after the first paid bill.
+- [ ] **Known flows** (the lock's big brother, with the offer database in LOGGING_TODO.md): once a service's flow
+      is recorded, walks press only the buttons seen to lead to its offer, on screens that match, and stop if
+      the site changed. For the big services, no guessing at all.
+- [ ] **Safety lock, part 2:** request bodies. A GraphQL mutation to /graphql passes the lock today. Seeing
+      bodies needs chrome.debugger (a visible "debugging this browser" bar) or a page-level fetch hook; the
+      test-mode log (netlock.request, with GraphQL operation names) shows first whether real flows need it.
 - [ ] **Build the realistic edge cases from those flows.** Replay them free with
       `npm run flows -- flows/<run> --replay`, and mimic the interesting ones on Streamly.
 - [ ] **Retire the Netlify function site** once the Worker has been used for a while. Keep Streamly
@@ -104,6 +110,8 @@ The scan itself is fine. What is long is everything around it.
 - [ ] Short demo video for the reviewer, recorded against Streamly.
 - [ ] Switch Stripe to live keys, which requires the account activated and the Terms and Privacy
       pages published.
+- [ ] The install prompt now also says "Block content on any page" (declarativeNetRequest, the safety lock).
+      The justification is in `store/LISTING.md`; say it on the landing page too, in plain words.
 
 ## Closed: the timeout question
 
@@ -149,21 +157,25 @@ The two read-only runs are done. This one walks each confirmed paid plan up to i
 1. `chrome://extensions` → Walkaway → reload. Settings (gear) should show **Record each page for replay
    tests**; if it doesn't, the old build is still loaded.
 2. Settings: **Test mode**, **Also walk cancellation flows**, **Include page text** and **Record each
-   page for replay tests** on; **Restricted mode** off. In **Never explore**, your employer's domains,
-   `pay.google.com` and `payments.google.com` (until the next release blocks them), and any service you
-   don't want walked this time. Max steps 25. Save.
+   page for replay tests** on; **Restricted mode** off. In **Never explore**, your employer's domains and
+   any service you don't want walked this time. Max steps 25. Save.
 3. Scan, and keep the side panel open until the result shows: closing it ends the run and leaves the log
    unfinished. Tabs open and close in the background; don't click in them. Walks run 3 at a time.
 4. Press **Download test log**. Then **Close the tabs held on offers**: it closes them without clicking
    anything, and closing a tab mid-flow cancels nothing.
-5. Open each walked service's account page and check the plan still shows as active.
+5. Open each walked service's account page and check the plan still shows as active. If the panel shows a
+   red **Check … now**, do that one first: open it and look for Restart, Resume or Keep.
 6. `npm run review-log -- <log>` and `npm run flows -- <log>` (or send Claude the path), then replay the
    flows free with `npm run flows -- flows/<run> --replay`.
 
-What it can't guard against by rule: a final confirmation whose button has the same label as the entry
-button ("Cancel plan" twice) on a screen with no "are you sure" wording and no offer. There it relies on the
-model calling the screen a final confirmation. Keep any service you can't risk in **Never explore**.
-Banks, government, health, insurance and payroll sites are always skipped.
+What guards a walk: the click rules (never a final, decline, pause, downgrade or purchase button; one cancel
+press per walk, so no second "Cancel …" and no retry; no "Continue"/"Yes"/"Confirm" on a final confirmation
+that says when access ends; back out six presses in without an offer), the safety lock on the tab (Chrome
+refuses any changing request whose address names a cancellation; no lock, no walk), and the alarm if a page
+ever says it was cancelled. What's left: a final button with a generic label on a confirmation that doesn't
+say when access ends, whose request doesn't name the cancellation (a GraphQL call). There it relies on the
+model. Keep any service you can't risk in **Never explore**. Banks, government, health, insurance and payroll
+sites are always skipped.
 
 ## Testing by hand
 

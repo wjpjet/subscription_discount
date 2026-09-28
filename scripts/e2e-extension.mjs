@@ -202,6 +202,23 @@ try {
     check('the final step paused on the offer (find mode)', steps.some((x) => x.terminal && x.action?.outcome === 'offer_found'), '');
     const recSteps = ev('flow.page').filter((x) => x.svc === 'localhost' && x.phase === 'find');
     check('every walk step is recorded for replay, with its decision', recSteps.length === steps.length && recSteps.every((x) => x.snapshot?.elements && x.action?.type && x.state), `${recSteps.length} recorded, ${steps.length} steps`);
+    // The safety lock, in real Chrome: from the tab held on the offer, a POST that names a cancellation never leaves
+    // the browser; a GET to the same address and a POST elsewhere still do (the testbed server answers 200 to anything).
+    const lockProbe = await panel.evaluate(async () => {
+      const r = (await chrome.storage.local.get('scanResult')).scanResult;
+      const held = (r?.items || []).find((i) => i.paused);
+      if (!held) return { held: false };
+      const rules = await chrome.declarativeNetRequest.getSessionRules();
+      const [res] = await chrome.scripting.executeScript({ target: { tabId: held.paused.tabId }, world: 'MAIN', func: async () => {
+        const go = async (method, p) => { try { return (await fetch(p, { method, body: method === 'GET' ? undefined : '{}' })).status; } catch { return 'blocked'; } };
+        return { cancelPost: await go('POST', '/api/subscription/cancel'), cancelGet: await go('GET', '/api/subscription/cancel'), surveyPost: await go('POST', '/api/survey') };
+      } });
+      return { held: true, tabId: held.paused.tabId, rules: rules.map((x) => ({ id: x.id, tabIds: x.condition?.tabIds })), ...res.result };
+    });
+    check('safety lock: the held tab has its rule', lockProbe.held && lockProbe.rules.some((x) => (x.tabIds || []).includes(lockProbe.tabId)), JSON.stringify(lockProbe));
+    check('safety lock: a POST to a cancel address from the held tab is blocked', lockProbe.cancelPost === 'blocked', JSON.stringify(lockProbe));
+    check('safety lock: a GET to the same address and a POST to a survey still go through', lockProbe.cancelGet === 200 && lockProbe.surveyPost === 200, JSON.stringify(lockProbe));
+    check('safety lock: the log shows it engaged on the walk', ev('netlock.on').some((x) => x.svc === 'localhost'), JSON.stringify(ev('netlock.error').concat(ev('netlock.unavailable'))).slice(0, 400));
   } else {
     const sk = ev('phase').find((p) => p.phase === 'find');
     check('read-only: no cancellation flow opened', sk?.skipped === true && !ev('step').length, `would have walked: ${(sk?.wouldWalk || []).join(', ')}`);

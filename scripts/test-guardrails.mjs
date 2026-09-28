@@ -3,7 +3,7 @@
 // buttons and real offer labels must stay usable (so the suite's achievable count cannot drop).
 //   npm run test:guardrails
 import fs from 'node:fs'; import path from 'node:path'; import vm from 'node:vm'; import { fileURLToPath } from 'node:url';
-import { applyGuardrails, clickRefusal, isFinalizeClick, isFinalizeText, isAcceptText, isCommitText, isPlanChangeText, acceptLooksRight, sameSite, elementText } from '../shared/guardrails.js';
+import { applyGuardrails, clickRefusal, isFinalizeClick, isFinalizeText, isAcceptText, isCommitText, isPlanChangeText, acceptLooksRight, sameSite, elementText, CANCELLED_RE, newlyCancelled } from '../shared/guardrails.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 let pass = 0, fail = 0;
@@ -52,8 +52,12 @@ const ctx = [
   ['"Continue to cancel" on a survey that lists "a better deal"', 'Continue to cancel', SURVEY, surveyed, false],
   ['"Keep my discount" on an offer screen inside the flow', 'Keep my discount', OFFER, surveyed, false],
   ['"Don\'t cancel, apply discount" on an offer screen inside the flow', "Don't cancel, apply discount", OFFER, surveyed, false],
-  ['"Cancel subscription" on a settings page with a 10%-off popup, after closing a popup', 'Cancel subscription', SETTINGS + ' Get 10% off Streamly merch Subscribe Maybe later',
-    [{ state: 'settings', action: { type: 'click' }, target: 'Close', ok: true }, { state: 'settings', action: { type: 'click' }, target: 'Cancel', ok: true }], false],
+  ['"Cancel subscription" on a settings page with a 10%-off popup, after closing it with "Close"', 'Cancel subscription', SETTINGS + ' Get 10% off Streamly merch Subscribe Maybe later',
+    [{ state: 'settings', action: { type: 'click' }, target: 'Close', ok: true }, { state: 'settings', action: { type: 'click' }, target: 'Maybe later', ok: true }], false],
+  // A bare "Cancel" that closed a popup counts as the start of the cancellation: safe direction (the walk backs out
+  // early). The other way round left Claude's "Cancel" → "Cancel plan" open whenever the model called the page "settings".
+  ['"Cancel subscription" after a popup was closed with a bare "Cancel" (counted as the start: backs out)', 'Cancel subscription', SETTINGS + ' Get 10% off Streamly merch Subscribe Maybe later',
+    [{ state: 'settings', action: { type: 'click' }, target: 'Close', ok: true }, { state: 'settings', action: { type: 'click' }, target: 'Cancel', ok: true }], true],
   ['"Cancel my subscription" on a final-confirmation page', 'Cancel my subscription', CONFIRM, surveyed, true],
   ['"Accept and cancel" on a final-confirmation page', 'Accept and cancel', CONFIRM, surveyed, true],
   ['"Keep my subscription" on a final-confirmation page', 'Keep my subscription', CONFIRM, surveyed, false],
@@ -221,6 +225,94 @@ for (const l of ['Freeze my price at $8.99', 'Lock in and freeze your rate', 'Fr
 check('"Freeze my price at $8.99", recorded the same, is pressable', acceptLooksRight('Freeze my price at $8.99', 'Freeze my price at $8.99', OFFER, surveyed));
 for (const l of ['Put on hold or cancel', 'Cancel or take a break', 'Freeze or cancel membership'])
   check(`chooser "${l}" stays clickable`, !isFinalizeClick(l, SETTINGS, []), clickRefusal(l, SETTINGS, []) || '');
+
+// The first live walk: Claude's billing dialog reached "Cancel plan" after a bare "Cancel", and Amazon's single
+// cancellation page offered "Cancel on <date>"; neither page said "are you sure". Only the model held back.
+console.log('\nOne cancel press per walk (shaped like the first live walk)');
+const pressed = (target, o = {}) => [{ step: 0, url: 'https://example.com/settings/billing', state: o.state || 'subscription_page', action: { type: 'click', id: 1 }, target, ok: o.ok ?? true, ...(o.note ? { note: o.note } : {}) }];
+const CLAUDE_DIALOG = 'Cancel plan Your Max plan stays active until the end of the billing period. Switch to Max 5x instead Keep your Max plan Cancel plan';
+const AMAZON_PAGE = 'Consider before you cancel You still have 90 days left Pause Prime Keep Prime Cancel on 4/12/27';
+const press = [
+  ['"Cancel plan" in the dialog after a bare "Cancel" on the subscription page', 'Cancel plan', CLAUDE_DIALOG, pressed('Cancel'), true],
+  ['"Cancel subscription" after "Cancel free trial"', 'Cancel subscription', 'Tell us why you are leaving Cancel subscription', pressed('Cancel free trial'), true],
+  ['"Please cancel my subscription" after "I want to cancel"', 'Please cancel my subscription', 'Why are you leaving', pressed('I want to cancel'), true],
+  ['bare "Cancel" again after a "Cancel" that opened something', 'Cancel', 'Membership Cancel Pause Edit', pressed('Cancel', { state: 'cancel_entry' }), true],
+  ['"Keep your Max plan" in the same dialog', 'Keep your Max plan', CLAUDE_DIALOG, pressed('Cancel'), false],
+  ['"Continue to cancel" on a benefits page after the entry', 'Continue to cancel', BENEFITS, pressed('Cancel membership'), false],
+  ['"Don\'t cancel" after the entry', "Don't cancel", BENEFITS, pressed('Cancel membership'), false],
+  ['"Cancel membership" after a menu that only mentions cancelling', 'Cancel membership', SETTINGS, pressed('Manage, update, or cancel'), false],
+  ['"Cancel subscription" after "Change or cancel subscription" (a menu)', 'Cancel subscription', SETTINGS, pressed('Change or cancel subscription'), false],
+  // A slow dialog opens after the wait, and its confirmation can carry the very same label: no retries of a cancel press.
+  ['"Cancel" again after a "Cancel" with no visible effect (a retry is refused)', 'Cancel', 'Membership Cancel Pause Edit', pressed('Cancel', { state: 'cancel_entry', note: 'clicked "Cancel" · click had no visible effect' }), true],
+  ['"Cancel subscription" in a slow dialog after "Cancel subscription" showed no effect', 'Cancel subscription', 'Cancel subscription Your plan stays active until the end of the period. Keep Cancel subscription', pressed('Cancel subscription', { note: 'clicked "Cancel subscription" · click had no visible effect' }), true],
+  ['"Cancel plan" after a bare "Cancel" the model called a settings page', 'Cancel plan', CLAUDE_DIALOG, pressed('Cancel', { state: 'settings' }), true],
+  ['"Cancel plan" after a "Cancel" whose dialog opened too slowly to be seen', 'Cancel plan', CLAUDE_DIALOG, pressed('Cancel', { note: 'clicked "Cancel" · click had no visible effect' }), true],
+  ['"Cancel subscription" after a section tab called "Cancellation"', 'Cancel subscription', SETTINGS, pressed('Cancellation'), false],
+  ['"Cancel membership" after a chooser "Cancel or pause membership"', 'Cancel membership', SETTINGS, pressed('Cancel or pause membership'), false],
+  ['survey answer "I want to cancel because it is too expensive" after the entry', 'I want to cancel because it is too expensive', SURVEY, pressed('Cancel subscription'), false],
+  ['"End of season" after the entry', 'End of season', SURVEY, pressed('Cancel subscription'), false],
+  ['"Cancel subscription" after a "Cancel plan" click that failed', 'Cancel subscription', SETTINGS, pressed('Cancel plan', { ok: false }), false],
+];
+for (const [name, label, page, hist, refuse] of press) check(`${refuse ? 'refuse' : 'allow'} ${name}`, isFinalizeClick(label, page, hist) === refuse, clickRefusal(label, page, hist) || 'allowed');
+// Go-ahead buttons on the final confirmation: refused once it states when access ends; an "Are you sure?" step without a
+// date (often before the offer, as on the testbed) is left to the model and the lock.
+const FINAL_DATED = 'Final step Are you sure? If you cancel, you’ll keep access until October 10, 2026. Keep my subscription Continue';
+const SURE_STEP = 'Are you sure? Step 3 of 4 If you continue, you’ll lose your watchlist and personalized recommendations. Keep my subscription Continue';
+const goAhead = [
+  ['"Continue" on a dated final confirmation after the entry', 'Continue', FINAL_DATED, pressed('Cancel subscription'), true],
+  ['"Yes" on "Are you sure? Your membership ends on Oct 17." after the entry', 'Yes', 'Are you sure? Your membership ends on Oct 17. No Yes', pressed('Cancel membership'), true],
+  ['"Confirm" on a dated final confirmation after the entry', 'Confirm', FINAL_DATED, pressed('Cancel plan'), true],
+  ['"Continue" on an "Are you sure?" step with no date', 'Continue', SURE_STEP, pressed('Cancel subscription'), false],
+  ['"Yes, continue" on an "Are you sure?" step with no date', 'Yes, continue', SURE_STEP, pressed('Cancel subscription'), false],
+  ['"Continue" on a dated final confirmation with no cancel press yet', 'Continue', FINAL_DATED, [], false],
+  ['"Keep my subscription" on a dated final confirmation after the entry', 'Keep my subscription', FINAL_DATED, pressed('Cancel subscription'), false],
+  ['"Continue" on "You\'ll keep access until the end of your billing period"', 'Continue', 'Are you sure? You’ll keep access until the end of your billing period. Go back Continue', pressed('Cancel plan'), true],
+  ['"Confirm" in a two-step accept: "Are you sure? Your plan renews on Oct 10 at the discounted price"', 'Confirm', 'Are you sure? Your plan renews on Oct 10 at the discounted price. Go back Confirm', pressed('Cancel plan'), false],
+];
+// A go-ahead that names the offer accepts it, even on the final screen; with a decline word it stays refused.
+const OFFER_FINAL = 'Are you sure you want to cancel? Your membership ends on Oct 10. Stay and get 50% off for 3 months.';
+for (const l of ['Yes, give me 50% off', 'Continue with offer', 'Confirm my discount', 'OK, keep my plan at 50% off'])
+  goAhead.push([`"${l}" on an offer inside a dated final screen`, l, OFFER_FINAL, pressed('Cancel membership'), false]);
+goAhead.push(['"Continue without offer" on the same screen', 'Continue without offer', OFFER_FINAL, pressed('Cancel membership'), true]);
+for (const [name, label, page, hist, refuse] of goAhead) check(`${refuse ? 'refuse' : 'allow'} ${name}`, isFinalizeClick(label, page, hist) === refuse, clickRefusal(label, page, hist) || 'allowed');
+for (const l of ['Cancel on 4/12/27', 'End on September 30', 'Cancel membership on Oct 9', 'End my benefits', 'Cancel my benefits', 'Cancel now', 'End it now'])
+  check(`"${l}" is a final button everywhere`, isFinalizeText(l) && isFinalizeClick(l, SETTINGS, []));
+for (const l of ['Cancel online', 'Offer ends on Oct 9', 'Cancel subscription', 'Cancel plan', 'Cancel'])
+  check(`"${l}" is not a final button by itself`, !isFinalizeText(l));
+const amazon = run({ type: 'click', id: 2 }, { state: 'cancel_entry', history: pressed('Cancel membership'), snapshot: snap(['Pause Prime', 'Keep Prime', 'Cancel on 4/12/27'], AMAZON_PAGE) });
+check('Amazon-shaped page: "Cancel on 4/12/27" backs out whatever the model called the screen', amazon.type === 'back_out' && /refused/.test(amazon.reason), `${amazon.type} ${amazon.reason || ''}`);
+const claude = run({ type: 'click', id: 3 }, { state: 'cancel_entry', history: pressed('Cancel'), snapshot: snap(['Switch to Max 5x instead', 'Keep your Max plan', 'Cancel', 'Cancel plan'], CLAUDE_DIALOG) });
+check('Claude-shaped dialog: "Cancel plan" backs out whatever the model called the screen', claude.type === 'back_out' && /second cancel button/.test(claude.reason), `${claude.type} ${claude.reason || ''}`);
+
+console.log('\nLinks that confirm a cancellation');
+const clink = (href, label = 'Continue') => run({ type: 'click', id: 0 }, { state: 'cancel_entry', history: pressed('Cancel membership'), snapshot: snap([{ tag: 'a', text: label, href }], BENEFITS, 'https://www.example.com/cancel/1') });
+for (const h of ['/membership/cancel/confirm', 'https://www.example.com/cancel?step=confirm&x=1', '/account/confirmCancel', '/membership/end/complete'])
+  check(`click on a link to ${h} refused`, clink(h).type === 'back_out', clink(h).reason);
+for (const h of ['/account/cancel', '/cancelplan', '/premium/cancellation/?contract=x', '/mm/pipeline/cancellation?ref=x'])
+  check(`click on a link to ${h} allowed`, clink(h).type === 'click', `${clink(h).type} ${clink(h).reason || ''}`);
+const cnav = run({ type: 'navigate', url: 'https://www.example.com/subscription/cancel/confirm' }, { state: 'cancel_entry', history: pressed('Cancel membership'), snapshot: snap(['x'], BENEFITS) });
+check('navigate to a cancel-confirm address refused', cnav.type === 'back_out' && /confirms a cancellation/.test(cnav.reason), cnav.reason);
+
+console.log('\nNo offer within a few presses of starting the cancellation: back out');
+const deep = (n) => [...pressed('Cancel subscription'), ...Array.from({ length: n }, (_, i) => ({ step: i + 1, url: `https://www.example.com/cancel/${i + 1}`, state: 'reason_survey', action: { type: 'click', id: 2 }, target: 'Continue', ok: true }))];
+const at5 = run({ type: 'click', id: 0 }, { state: 'reason_survey', history: deep(5), snapshot: snap(['Continue'], SURVEY) });
+check('5 presses after the entry: a 6th is allowed', at5.type === 'click', `${at5.type} ${at5.reason || ''}`);
+const at6 = run({ type: 'click', id: 0 }, { state: 'reason_survey', history: deep(6), snapshot: snap(['Continue'], SURVEY) });
+check('6 presses after the entry: the next one backs out', at6.type === 'back_out' && /within 6 steps/.test(at6.reason), `${at6.type} ${at6.reason || ''}`);
+const acc6 = run({ type: 'accept_offer', id: 0 }, { state: 'save_offer_presented', history: deep(6), snapshot: snap(['Accept offer']) });
+check('6 presses after the entry: an offer can still be found', acc6.type === 'finish' && acc6.outcome === 'offer_found', `${acc6.type} ${acc6.reason || ''}`);
+const noEntry = run({ type: 'click', id: 0 }, { state: 'settings', history: deep(6).slice(1), snapshot: snap(['Continue'], SETTINGS) });
+check('no cancel press yet: no cap', noEntry.type === 'click', `${noEntry.type} ${noEntry.reason || ''}`);
+
+console.log('\nA page that says the subscription was cancelled');
+for (const t of ['Your subscription has been cancelled.', 'Cancellation complete. We’re sorry to see you go.', 'You have cancelled your membership', 'Your membership is canceled and ends Oct 9', 'You’re now unsubscribed'])
+  check(`"${t}" reads as cancelled`, CANCELLED_RE.test(t));
+for (const t of ['Your plan will end on Oct 9 if you cancel', 'If you cancel, your subscription will be cancelled at the end of the period', 'If you cancelled by mistake, restart any time', 'Your discount has been applied', 'We’re sorry to see you go',
+  'When your membership is cancelled, you’ll lose your downloads.', 'Once your cancellation is complete, we’ll email you.', 'Before your subscription is cancelled, take 50% off for 3 months.', 'Your trial has ended'])
+  check(`"${t}" does not read as cancelled`, !CANCELLED_RE.test(t));
+for (const t of ['If you need help, call us Your subscription has been cancelled', 'Questions after cancellation Your subscription has been cancelled'])
+  check(`"${t}" reads as cancelled (a conditional word further back doesn't hide it)`, CANCELLED_RE.test(t));
+check('newly cancelled only when the page before did not say so', newlyCancelled('Cancellation complete', 'Keep Prime') && !newlyCancelled('Cancellation complete? Here is what happens next', 'Cancellation complete? Here is what happens next'));
 
 // ---------------------------------------------------------------- testbed scenario sweep
 // Walk every scenario's buttons in the order a model meets them, with the history a model would leave, and

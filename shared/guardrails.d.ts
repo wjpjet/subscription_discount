@@ -1,17 +1,24 @@
 export const STATES: string[]; export const ACTIONS: string[]; export const OUTCOMES: string[];
 export const FINALIZE_RE: RegExp; export const ACCEPT_RE: RegExp; export const SENSITIVE_FIELD_RE: RegExp;
 export const COMMIT_VERB_RE: RegExp; export const PLAN_CHANGE_RE: RegExp;
-export const CONFIRM_PAGE_RE: RegExp; export const CANCEL_VERB_RE: RegExp; export const OFFER_TEXT_RE: RegExp;
+export const CONFIRM_PAGE_RE: RegExp; export const CANCEL_VERB_RE: RegExp; export const OFFER_TEXT_RE: RegExp; export const CANCELLED_RE: RegExp;
+export const MAX_STEPS_AFTER_CANCEL: number;
 type Text = string | null | undefined;
 /** What the guardrails read from a history step (HuntStep and the test driver's steps both fit). */
-export interface GuardStep { state?: string; action?: { type?: string } | null; target?: string | null; ok?: boolean | null }
+export interface GuardStep { state?: string; action?: { type?: string } | null; target?: string | null; ok?: boolean | null; note?: string | null }
 type History = ReadonlyArray<GuardStep | null | undefined> | null | undefined;
 export function elementText(el: { text?: Text; label?: Text; value?: Text; placeholder?: Text } | null | undefined): string;
 export function isFinalizeText(text: Text): boolean; export function isAcceptText(text: Text): boolean;
 export function isPlanChangeText(text: Text): boolean; export function isCommitText(text: Text): boolean;
 export function actsOnCancel(text: Text): boolean;
 export function looksLikeConfirmPage(pageText: Text): boolean;
-/** Why this button must not be clicked (finalize/decline, commit verb, cancel verb on a confirm or mid-flow offer page), or null. */
+/** The label starts the cancellation: a cancel verb first ("Cancel", "Cancel plan", "Unsubscribe") or "I want to cancel". */
+export function isCancelPress(text: Text): boolean;
+/** The page says the subscription was cancelled and the page before it did not. */
+export function newlyCancelled(pageText: Text, prevText: Text): boolean;
+/** Why following this address would confirm a cancellation (/cancel/confirm…), or null. */
+export function confirmLinkRefusal(href: Text, base?: Text): string | null;
+/** Why this button must not be clicked (finalize/decline, commit verb, a second cancel press, cancel verb on a confirm or mid-flow offer page), or null. */
 export function clickRefusal(elementText: Text, pageText: Text, history?: History): string | null;
 export function isFinalizeClick(elementText: Text, pageText: Text, history?: History): boolean;
 /** The accept-phase rule: not finalize/commit/plan-change/cancel, and accept-like or exactly the recorded label (never an empty one). */

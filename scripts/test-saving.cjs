@@ -39,6 +39,15 @@ const deals = [
 ];
 for (const [name, item, want] of deals) check(`deal: ${name}`, dealLine(item, today), want);
 
+// ---- Trials and pages without a price: never "instead of $0" (the first live walk's LinkedIn trial showed ~$0.00) ----
+const trial = { ...base, monthlyPrice: 0, cycleCharge: 0, isTrial: true, trialEndsOn: '2026-10-05', priceAfterTrial: null };
+check('deal: trial, the offer shows its regular price', dealLine({ ...trial, offer: O({ newMonthlyPriceUsd: 44.99, discountPct: 50, termMonths: 2, regularMonthlyPriceUsd: 89.99 }) }, today), 'Free until Oct 5, then $44.99/mo instead of $89.99 for 2 months');
+check('deal: trial, regular price undone from the percentage', dealLine({ ...trial, offer: O({ newMonthlyPriceUsd: 44.99, discountPct: 50, termMonths: 2 }) }, today), 'Free until Oct 5, then $44.99/mo instead of $89.98 for 2 months');
+check('deal: trial, nothing to compare with', dealLine({ ...trial, offer: O({ newMonthlyPriceUsd: 44.99, termMonths: 2 }) }, today), 'Free until Oct 5, then $44.99/mo for 2 months');
+check('deal: no price read, the offer shows its regular price', dealLine({ ...base, monthlyPrice: null, cycleCharge: null, offer: O({ newMonthlyPriceUsd: 7.99, termMonths: 3, regularMonthlyPriceUsd: 15.99 }) }, today), '$15.99/mo → $7.99/mo for 3 months, from Oct 10');
+check('deal: no price read and none on the offer', dealLine({ ...base, monthlyPrice: null, cycleCharge: null, offer: O({ newMonthlyPriceUsd: 7.99, termMonths: 3 }) }, today), '$7.99/mo for 3 months, from Oct 10');
+check('paying: a trial at $0 today with no later price says nothing about $0', payingLine({ ...trial, hasOffer: false, offer: null }, today), 'Free until Oct 5');
+
 // ---- What they pay today, when parts are missing (the "–/mo" glitch) ----
 const none = { ...base, hasOffer: false, offer: null, monthlyPrice: null, cycleCharge: null, renewalDate: null, cadence: 'unknown' };
 check('paying: nothing known → empty, never "–/mo"', payingLine(none, today), '');
@@ -92,6 +101,7 @@ check('an old saved "unknown" row asks for a look', groupReveal([row('Legacy', '
 check('a duplicate with another name shows its name', alsoLabel(row('Big Store', 'signed_in', { domain: 'bigstore.example' }), [row('Big Store', 'signed_in', { domain: 'bigstore.example' }), row('Store Video', 'duplicate', { dupOf: 'bigstore.example' })]), 'also: Store Video');
 check('offers sort best first and never count as paying rows', (() => { const x = groupReveal([row('A', 'signed_in', { hasOffer: true, estSavings: 5 }), row('B', 'signed_in', { hasOffer: true, estSavings: 20 }), row('C', 'signed_in')], SETS); return [x.offers.map((i) => i.name), x.paying.map((i) => i.name)]; })(), [['B', 'A'], ['C']]);
 check('count line: offers', countLine(3, 2, { readOnly: false, walked: true }), "3 subscriptions found · 2 made an offer · untick anything you'd rather leave alone");
+check('a trial with an offer gets its own section, never the offers', (() => { const x = groupReveal([row('A', 'signed_in', { hasOffer: true, estSavings: 5 }), row('T', 'signed_in', { hasOffer: true, estSavings: 90, isTrial: true }), row('P', 'signed_in', { isTrial: true })], SETS); return [x.offers.map((i) => i.name), x.trials.map((i) => i.name), x.paying.map((i) => i.name)]; })(), [['A'], ['T'], ['P']]);
 check('count line: walked, none made an offer', countLine(1, 0, { readOnly: false, walked: true }), '1 subscription found · none made an offer this time');
 check('count line: nothing walkable', countLine(2, 0, { readOnly: false, walked: false }), '2 subscriptions found');
 

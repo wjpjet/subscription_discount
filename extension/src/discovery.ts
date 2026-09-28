@@ -27,6 +27,8 @@ export interface Candidate {
   aliases: string[];
   /** Fallback account URLs, tried in order when accountUrl is a 404 or error page. */
   altUrls: string[];
+  /** The catalog's own other account pages (checked by hand): the only ones the probe opens just to find a price. */
+  knownAltUrls?: string[];
   /** 0..1 prior that an individual with a session here pays personally; probes run highest first. */
   payLikelihood: number;
   /** Stable service id (catalog id or the model's canonicalService), null when unknown. */
@@ -128,7 +130,7 @@ export async function discoverCandidates(settings: Settings, onProgress: (msg: s
     // The domain the account page is on leads (amazon.com for Prime), the other signed-in domains are aliases.
     const lead = url ? open.find((d) => d === etld1(hostOf(url))) || open[0] : undefined;
     if (!url || !lead) { catalogBlocked.push(...ds); continue; }
-    catalogCands.push({ domain: lead, name: e.name, accountUrl: url, source: 'catalog', ...DEFAULTS, confidence: 1, aliases: open.filter((d) => d !== lead), altUrls: alt, payLikelihood: 1, canonical: e.id });
+    catalogCands.push({ domain: lead, name: e.name, accountUrl: url, source: 'catalog', ...DEFAULTS, confidence: 1, aliases: open.filter((d) => d !== lead), altUrls: alt, knownAltUrls: [...alt], payLikelihood: 1, canonical: e.id });
   }
   trace('discover.catalog', { count: catalogCands.length, services: catalogCands.map((c) => ({ id: c.canonical, d: c.domain, aliases: c.aliases, url: scrubUrl(c.accountUrl), alt: c.altUrls.length })), blocked: catalogBlocked });
 
