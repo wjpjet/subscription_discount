@@ -718,7 +718,15 @@ declarativeNetRequest, which blocks on any host, not only granted ones: install 
 page"). Also fixed: "When your membership is cancelled…" no longer reads as a cancellation, a billing page that
 already said "cancelled" at scan time raises no alarm, the Done screen shows the alarm instead of "Nothing was
 cancelled", a keyed secret in a URL path is redacted again, and "Cancellation" tabs, choosers and survey answers
-no longer count as the cancel press.
+no longer count as the cancel press. A second look at the fixes found one more: with the "no visible effect"
+exemption, a slow dialog whose confirmation carried the entry's own label ("Cancel subscription" twice) got through,
+so there are no retries of a cancel press at all now.
+
+Shipped the same day (Worker version `f75cca49`, extension rebuilt), checked with the free set: unit tests
+(guardrails 294, walk harness 105, scan harness 80, the rest unchanged), the extension end to end (find 50 with the
+lock proven in real Chrome: a cancel POST from the held tab blocked, a GET and a survey POST through; read-only 42;
+never-touch 18), the mock suite unchanged (score 38, safety 100, achievable 49), and replay of the 60 recorded real
+pages with no unsafe decision (the recorded Claude dialog's "Cancel plan" is now refused).
 
 ## Bugs fixed along the way
 

@@ -14,8 +14,8 @@ minimum; under 50¢ is waived). It can never finalize a cancellation.
 
 | Piece | Where | State |
 |---|---|---|
-| Backend + landing page | One Cloudflare Worker, https://walkaway.willem-jeffrey-prins.workers.dev (Workers Paid plan) | Deployed from main with `9526ceb` (second-run fixes, page recording), 2026-09-27. Matches main |
-| Extension | `landing/downloads/walkaway-extension.zip`, served by the Worker; load unpacked from `extension/.output/chrome-mv3` | Built from `9526ceb` |
+| Backend + landing page | One Cloudflare Worker, https://walkaway.willem-jeffrey-prins.workers.dev (Workers Paid plan) | Deployed from main with `1a579fe` (the safety release), 2026-09-27, version `f75cca49`. Matches main |
+| Extension | `landing/downloads/walkaway-extension.zip`, served by the Worker; load unpacked from `extension/.output/chrome-mv3` | Built from `1a579fe`. New permissions: `declarativeNetRequest` (install warning "Block content on any page"), `webRequest` |
 | Test site "Streamly" | https://streamly-testbed.netlify.app (Netlify, rebuilds on every push to main) | Current |
 | Payments | Stripe **test mode** (setup mode: card saved, charged after the run) | Test keys only |
 | Model | Gemini 3.8 Flash for walk steps, 3.1 Flash-Lite for classify/discover; `AI_PROVIDER=gemini` pinned in `wrangler.jsonc` | GLM-5.3 and DeepSeek V4.1 were tested and rejected (HISTORY.md) |
