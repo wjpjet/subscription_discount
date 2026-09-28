@@ -238,6 +238,14 @@ console.log('\nSecond live run: sales pages, bare 404s, missing prices, pages st
   const r3 = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings', { altUrls: ['https://www.bigshop-example.com/membership'], knownAltUrls: ['https://www.bigshop-example.com/membership'] })], priced, paidNoPrice);
   check('paid, no price → reads the price from the catalog alt URL', r3.items['bigshop-example.com'].monthlyPrice === 14.99 && r3.items['bigshop-example.com'].status === 'signed_in', r3.items['bigshop-example.com']);
   check('the hop is traced as price', r3.probe('bigshop-example.com').hops.some((h) => h.why === 'price'), r3.probe('bigshop-example.com').hops);
+  check('the walk starts where the plan was shown, not on the page read for its price', r3.items['bigshop-example.com'].walkUrl === 'https://www.bigshop-example.com/video/settings', r3.items['bigshop-example.com'].walkUrl);
+  // "Other account" comes only from paid services: two unconfirmed sites under one email must not make it the owner.
+  const who = (email, price) => ({ snap: { ...plan(price), identity: menu(email) } });
+  const own = { 'https://www.a-example.com/account': who('pat@gmail.com', 9.99), 'https://www.b-example.com/account': { snap: { title: 'Home', text: 'Welcome back. Your feed. Sign out', elements: [{ id: 1, tag: 'a', text: 'Profile', href: '/me' }], identity: menu('sam@gmail.com') } },
+    'https://www.c-example.com/account': { snap: { title: 'Home', text: 'Welcome back. Your feed. Sign out', elements: [{ id: 1, tag: 'a', text: 'Profile', href: '/me' }], identity: menu('sam@gmail.com') } } };
+  const unsure = (s, c) => (/Your feed/.test(s.text || '') ? { ...c, pageKind: 'account_other', signedIn: true, hasPaidPlan: null, isPlanPage: false, confidence: 0.9 } : null);
+  const r3e = await scan([cand('a-example.com', 'https://www.a-example.com/account'), cand('b-example.com', 'https://www.b-example.com/account'), cand('c-example.com', 'https://www.c-example.com/account')], own, unsure);
+  check('two unconfirmed sites under one email don\'t mark the one paid service as "other account"', r3e.items['a-example.com'].status === 'signed_in' && !r3e.items['a-example.com'].otherAccount, `${r3e.items['a-example.com'].status} other=${r3e.items['a-example.com'].otherAccount}`);
   const r3b = await scan([cand('bigshop-example.com', 'https://www.bigshop-example.com/video/settings')], priced, paidNoPrice);
   check('no alt URL → no price hop, still signed_in', r3b.items['bigshop-example.com'].status === 'signed_in' && !r3b.probe('bigshop-example.com').hops.some((h) => h.why === 'price'), r3b.probe('bigshop-example.com').hops);
   // Only the catalog's own pages are opened just for a price: a URL a model guessed (merged in by discovery) is not.

@@ -513,6 +513,12 @@ for (const [name, el] of [['radio input', { type: 'radio', tag: 'input' }], ['la
   check('R9 untyped element whose checked state changed: re-read, no "no visible effect" note', /clicked/.test(note) && !/no visible effect/.test(note), note);
 }
 
+// The walk starts on the plan page when the probe kept a page it read only for the price (Netflix's payment history).
+{
+  reset(); fake.pageFor = streamly(); agent = async () => ({ state: 'other', reasoning: '', action: { type: 'back_out', reason: 'x' } });
+  await M.findOne(item({ url: `${S}/billing/history`, walkUrl: `${S}/account` }), settings, onEvent);
+  check('walk starts at walkUrl (the plan page), not the price page', fake.created[0]?.url === `${S}/account`, fake.created[0]?.url);
+}
 // R12: the item's own account host is never dropped as an identity provider.
 {
   reset(); fake.pageFor = (url) => new Page({ url, text: 'Your subscription: Premium, $15.99/month. Manage it here.', elements: [{ id: 1, text: 'Help', tag: 'a' }] });

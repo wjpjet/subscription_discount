@@ -121,7 +121,7 @@ function stripTokens(url: string): string {
 /** Where a walk starts: the page the probe landed on when that was this service's own signed-in page (not a
  *  sign-in page), so the walk doesn't redo the probe's redirects and hops; otherwise the account URL. */
 function startUrlOf(item: ScanItem): string {
-  const u = item.url || '', h = hostOf(u);
+  const u = item.walkUrl || item.url || '', h = hostOf(u);
   return h && item.siteDomain && hostMatches(h, [item.siteDomain]) && (!isIdpHost(h) || ownAccountHost(item, h)) && !isLoginUrl(u) ? stripTokens(u) : item.accountUrl;
 }
 function blockedReason(item: ScanItem, settings: Settings): string | null {

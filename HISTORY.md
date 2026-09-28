@@ -773,6 +773,25 @@ replay counts an allowed pause decline as the way forward, not a mistake.
 Free checks: unit tests (guardrails 276, walk harness 92, scan harness 80), the extension end to end (find 46,
 read-only 42, never-touch 18), the mock suite (score 41, safety 100).
 
+## The second live walk, 2026-09-27 (evening)
+
+On the model-first build: 81 seconds, about 14¢, five walks, nothing accepted or cancelled, and no rule had to stop
+the model. It backed out by itself on Claude's dialog (citing the end date and the keep-or-cancel choice, the prompt's
+own signs), on Amazon's final page and on Netflix's "Finish Cancellation". LinkedIn's trial offer was held and valued
+at about $90 against its own regular price. Netflix's price came from its payment history, and Google One and Cursor
+read as work accounts.
+
+Fixed after it:
+- The walk started on the page the probe had read only for the price (Netflix's payment history) and took three extra
+  steps to get back; it now starts where the plan was shown.
+- Two unconfirmed sites under one email outvoted the owner's paid LinkedIn and marked it "other account"; the owner
+  now comes from paid services only.
+- review-log flagged ordinary URL paths (a purchase number, course names) as 40-character tokens; it now reads a URL
+  part by part, as the log scrubs it.
+
+Still open: YouTube Premium's "Cancel" ignores the walk's click, even with pointer events first. It is a plain button,
+so either YouTube only acts on a person's click or it opens something the snapshot can't see.
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

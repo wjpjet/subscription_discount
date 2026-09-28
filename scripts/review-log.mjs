@@ -430,7 +430,10 @@ const nOf = (x, mk) => x.split(mk).length - 1;
 function scanStrings(v, path, where) {
   if (typeof v === 'string') {
     if (v.length < 6) return;
-    for (const k of secretKinds(v)) leak(SECRET_KIND[k] || k, where(path));
+    // A URL is checked part by part, as the log scrubs it: "/manage/purchases-payments/purchases/1234567890" is a path,
+    // not one 40-character token.
+    const parts = /^https?:\/\//i.test(v) ? v.split(/[/?&#]/) : [v];
+    for (const k of new Set(parts.flatMap((x) => secretKinds(x)))) leak(SECRET_KIND[k] || k, where(path));
     if (/^https?:\/\//i.test(v)) {
       // A path segment the scrubber already cut ("amzn1.dv.gti.[digits]…", a catalog id) is not a new leak when it cuts it again.
       const v2 = v.split('/').filter((seg) => !/\[[a-z]{3,10}\]/.test(seg)).join('/'), su = scrubUrl(v2);

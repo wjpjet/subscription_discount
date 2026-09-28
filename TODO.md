@@ -23,10 +23,11 @@ Current state and a handoff summary: **[STATUS.md](STATUS.md)**.
 - [x] **Never-silent alarm, trials section** (2026-09-27), and the previous review's re-read, price-hop,
       recording and flows items. The safety lock and the one-press rules that shipped with them were taken out
       the same day: the model decides which button confirms (HISTORY.md, "Trusting the model").
-- [ ] **Second live walk** on the new build, same steps (below, "Live walk run"). Then check in review-log:
-  - Every walk's final screen: did the model back out itself? (A guardrail stopping it shows as ⛔.)
-  - YouTube Premium: does "Cancel" react now (pointer events before click)? If not, look at what it opens.
-  - Flows that pass a pause or "End my plan" step now: did they reach an offer?
+- [x] **Second live walk** (2026-09-27, evening): the model backed out by itself on every final screen, nothing
+      accepted or cancelled. HISTORY.md, "The second live walk".
+- [ ] **YouTube Premium's Cancel.** It ignores the walk's click (twice, in both walks). Owner: press Cancel on
+      youtube.com/paid_memberships by hand and note what appears (a dialog on the page, a new tab, a Google page),
+      then close it without going further. That decides the fix.
   - Amazon's price, Netflix's price (the catalog now tries its payment history).
 - [ ] **Menu entries.** The last real check found the cancel link inside an account menu in 9 of 11 scenarios (the
       September runs: 11 of 11). The menu button moved down the element list with the Sep 27 page reader; list header

@@ -62,6 +62,8 @@ export interface ScanItem {
   url?: string; note?: string; before: PageClass | null;
   /** The account page already said it was cancelled when the scan read it: after an accept, that is not news. */
   pageSaidCancelled?: boolean;
+  /** Where the plan itself was shown, when the page kept was only read for its price (a payment history): the walk starts here. */
+  walkUrl?: string;
 }
 export interface ScanProgress { phase: 'discover' | 'pages' | 'find' | 'done'; done: number; total: number; current?: string; message?: string; items: ScanItem[]; totalEstSavings: number }
 export interface ScanResult { at: number; restrictedMode: boolean; domainsChecked: number; items: ScanItem[]; found: number; needsLook: number; withOffers: number; totalEstSavings: number }
@@ -295,7 +297,7 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
       return usable(u.href) ? u.href : null;   // usable() also refuses sign-in URLs and blocked hosts
     };
 
-    let url = c.accountUrl, first = true, reread = false, rereadDone = false, pricing = false, keptLast = false;
+    let url = c.accountUrl, first = true, reread = false, rereadDone = false, pricing = false, keptLast = false, planUrl: string | null = null;
     for (;;) {
       try {
         // Load, then wait until the page has actually rendered (SPAs render well after 'complete').
@@ -375,6 +377,8 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
         // clear "no paid plan" beats an unsure "paid"), unless the page fell over or now reads signed out.
         const rereadWins: boolean = loadKind === 'reread' && keptLast && !BAD_PAGE.includes(cls.pageKind as string) && !(best?.cls.signedIn === true && cls.signedIn !== true);
         const improved: boolean = rereadWins || (better(cls, best?.cls ?? null) && (!pricingNow || cls.monthlyPriceUsd != null || cls.cycleChargeUsd != null));
+        // A price page taking over keeps where the plan itself was shown: the walk starts there, not on a payment history.
+        if (improved && pricingNow && best) planUrl = best.snap.url || planUrl;
         if (improved) best = { cls, snap, ready: r };
         keptLast = improved;
         // Who pays is read on EVERY page, whichever one is kept. An employer's or team's page settles it: no hop
@@ -418,6 +422,7 @@ async function probe(item: ScanItem, c: Candidate, useApi: boolean, settings: Se
     if (best) {
       const { cls, snap } = best;
       item.url = snap.url;
+      item.walkUrl = planUrl && planUrl !== snap.url ? planUrl : undefined;
       item.pageSaidCancelled = CANCELLED_RE.test(snap.text || '');
       rec.page = snapSummary(snap); rec.ready = best.ready;
       mapStatus(item, c, cls, snap, rec, ev);
@@ -544,13 +549,14 @@ function markDuplicates(items: ScanItem[]): { merged: { site: string; kept: stri
 }
 
 /**
- * "Yours" is the personal email most paid (or unconfirmed) services are signed in with; a service signed in
+ * "Yours" is the personal email most paid services are signed in with (not unconfirmed ones: two such sites once
+ * outvoted the owner's own paid LinkedIn); a service signed in
  * with a different personal email gets an informational flag. Needs 2+ sightings and a clear lead, so one
  * household member's login can't become the owner. Work addresses are never compared.
  */
 function markOtherAccounts(items: ScanItem[]): string | null {
   const counts = new Map<string, number>();
-  for (const i of items) if ((PAYING.includes(i.status) || i.status === 'unconfirmed') && i.email && isConsumerEmail(i.email)) { const e = i.email.trim().toLowerCase(); counts.set(e, (counts.get(e) || 0) + 1); }
+  for (const i of items) if (PAYING.includes(i.status) && i.email && isConsumerEmail(i.email)) { const e = i.email.trim().toLowerCase(); counts.set(e, (counts.get(e) || 0) + 1); }
   const [top, second] = [...counts.entries()].sort((a, b) => b[1] - a[1]);
   const owner = top && top[1] >= 2 && (!second || top[1] > second[1]) ? top[0] : null;
   for (const i of items) i.otherAccount = !!(owner && i.email && isConsumerEmail(i.email) && i.email.trim().toLowerCase() !== owner);
