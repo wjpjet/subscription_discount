@@ -9,7 +9,7 @@ import puppeteer from 'puppeteer-core';
 import { hunt, acceptPaused, classifyPage, sleep, loginTestbed } from './lib/driver.mjs';
 import { serveTestbed } from './lib/testbed-server.mjs';
 import { preflight } from './lib/preflight.mjs';
-import { isFinalizeText } from '../shared/guardrails.js';
+import { isFinalizeText, isDeclineOnly } from '../shared/guardrails.js';
 
 const ROOT = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const args = Object.fromEntries(process.argv.slice(2).map((a) => { const m = a.match(/^--([^=]+)=?(.*)$/); return m ? [m[1], m[2] === '' ? true : m[2]] : [a, true]; }));
@@ -104,7 +104,8 @@ function matchOffer(expected, found) {
 // A scenario is "guardrail-limited" when the only way forward is a button our safety rules forbid.
 function guardrailLimited(s) {
   if (isFinalizeText(s.entry.label)) return true;
-  for (const st of s.steps) { const fwd = st.type === 'pause' || st.type === 'downgrade' ? st.decline : st.cont; if (fwd && isFinalizeText(fwd)) return true; }
+  // Declining a pause or downgrade on its own screen is allowed ("No thanks, continue cancelling"): not a limit.
+  for (const st of s.steps) { const trap = st.type === 'pause' || st.type === 'downgrade', fwd = trap ? st.decline : st.cont; if (fwd && isFinalizeText(fwd) && !(trap && isDeclineOnly(fwd))) return true; }
   if (s.offer && isFinalizeText(s.offer.accept)) return true;
   return false;
 }

@@ -34,13 +34,6 @@ you list, and a blocklist names sites it must never touch. You can watch every r
   cancellation pages, and to click/type on the user's behalf during a run the user started.
 - **sidePanel** — The extension's entire UI (scan results, run progress, settings) lives in the side panel.
 - **storage** — Saves settings, scan results, run logs, and the user's consent locally.
-- **declarativeNetRequest** — A safety lock. While the extension walks a cancellation flow to find a retention
-  offer, it blocks, in that one tab only, requests that would cancel, pause or downgrade the subscription
-  (POST/PUT/PATCH/DELETE to addresses naming a cancellation). It never blocks anything in the user's own tabs
-  and the rules are removed when the walk ends. It is why the extension can explore a cancellation flow
-  without ever being able to finish one.
-- **webRequest** — Observation only, in the user-enabled test mode: records which changing requests the locked
-  tab sent and which the lock blocked (address without query, no bodies), so the lock can be checked.
 - **Host permissions (`<all_urls>`, optional, requested at first scan)** — Discovery must see which sites
   have session cookies; that is inherently cross-site. Access is requested only when the user starts a scan,
   after an in-product disclosure, and can be narrowed: in restricted mode the extension requests only the

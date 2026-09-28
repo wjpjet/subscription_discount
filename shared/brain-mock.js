@@ -140,7 +140,7 @@ const BROKEN_KINDS = ['not_found', 'error', 'loading', 'bot_challenge'];
 // The extension only ever navigates to a details link (a GET), but some GETs act: sign-out, cancel, delete, checkout.
 // Whole words and phrases, as in the extension's filter (scan.ts), so a brand or section name is not an action: "My Best
 // Buy Memberships", "Nintendo Switch Online", "Subscriber Services". "buy" counts only as a verb phrase.
-const UNSAFE_LINK_RE = /\b(cancel\w*|log ?out|sign ?out|delete|remove|unsubscribe|upgrade|downgrade|pause|checkout|check out|purchase|pay now|subscribe|start (a |your |my )?(free )?trial|switch (to|plan|plans)|leave|deactivate|close (my |your )?account|join (now|free|today)|buy (now|it|this|more|gift|a|an|the))\b/i;
+const UNSAFE_LINK_RE = /\b(cancel\w*|end (my |your |the )?(subscription|membership|plan)|log ?out|sign ?out|delete|remove|unsubscribe|upgrade|downgrade|pause|checkout|check out|purchase|pay now|subscribe|start (a |your |my )?(free )?trial|switch (to|plan|plans)|leave|deactivate|close (my |your )?account|join (now|free|today)|buy (now|it|this|more|gift|a|an|the))\b/i;
 const UNSAFE_PATH_RE = /(log-?out|sign-?out|logout|signout|cancel|delete|deactivate|unsubscribe|checkout|upgrade)/i;
 const num = (v) => (typeof v === 'number' && isFinite(v) ? v : null);
 const PRICE_KEYS = ['monthlyPriceUsd', 'cycleChargeUsd', 'priceAfterTrialUsd'];

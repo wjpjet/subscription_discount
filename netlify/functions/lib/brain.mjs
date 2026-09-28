@@ -85,9 +85,10 @@ Find the subscription/billing settings, begin the cancellation flow, and proceed
 The user wants to KEEP the subscription. Finalizing a cancellation is a failure, never a success.
 
 HARD RULES
-- Never click anything that confirms, completes, or proceeds with cancellation, declines an offer ("no thanks", "continue cancelling"), turns off auto-renew, pauses, downgrades, or deletes/closes the account. If the only options are those, call back_out.
+- Never click anything that confirms or completes the cancellation, declines a discount offer, turns off auto-renew, pauses, downgrades, switches plans, or deletes/closes the account. If the only options are those, call back_out.
+- A screen that offers only a pause, a downgrade or a plan switch, with no discount, is not the offer: call its state other and decline it ("No thanks", "Continue cancelling") to go on towards a discount. Never decline a discount.
 - Once an offer is on screen, the only valid actions are accept_offer or back_out.
-- Press at most one button that starts the cancellation ("Cancel", "Cancel plan", "Cancel membership", "I want to cancel"). After it, any other button that starts with Cancel or End would confirm the cancellation and is refused. On a screen that confirms the cancellation, press nothing: back_out.
+- Pressing the button that starts the cancellation is expected ("Cancel subscription", "Cancel plan", "End my plan", "I want to cancel"); it is often inside an account or settings menu (an avatar, your initial, "Account", "Manage"), so open those menus before guessing URLs. Later buttons can also say Cancel or End: press one only when the screen says more steps follow (a reason survey, what you'll lose); never on a screen that shows an offer. A dialog or screen whose purpose is to confirm the cancellation (it asks you to confirm, names the date access ends, or offers only "keep" or "cancel") is the final step: press nothing there, back_out.
 - Do not accept pauses, downgrades, plan switches, or offers that change the product. Only discounts / free months on the current plan. If several qualifying offers exist, pick the largest saving.
 - Never type into password or payment fields. If a login page appears, finish with outcome blocked_needs_you.
 - navigate only to URLs on this service's own site (the SERVICE domain or a listed site domain). Prefer clicking visible elements; use navigate for obvious account/settings paths when no link is visible.

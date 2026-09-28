@@ -6,10 +6,12 @@ export const STATES = ['login','account_home','settings','subscription_page','ca
 export const ACTIONS = ['click','type','select','scroll','navigate','wait','accept_offer','back_out','finish'];
 export const OUTCOMES = ['discount_applied','no_offer_backed_out','blocked_needs_you','offer_found','error'];   // offer_found is assigned by the guardrail in find mode
 
-/** Text that finalizes a cancellation, declines an offer, or destroys the account. Never clickable.
- *  Deliberately absent: a bare "continue to cancel" (a common forward step before any offer) and
- *  "cancel my subscription" (the ordinary entry label). Both are refused by context instead, below. */
-export const FINALIZE_RE = /\b(confirm (my |the |your )?cancel(l)?ation|confirm (and |& )?cancel|yes,? (please )?cancel|cancel anyway|complete (my |the )?cancel(l)?ation|complete cancel(l)?ing|finish (my |the )?cancel(l)?(ing|ation)|end (my |the )?(subscription|membership|plan)|cancel (my |the |your )?(subscription|membership|plan) now|turn off (auto[- ]?renew(al)?|automatic renewal)|proceed (with|to) cancel(l)?ation|continue (to |with )?cancel(l)?ing|continue cancel(l)?ation|no thanks|no,? thanks|i still want to cancel|yes,? i('| a)m sure|i('| a)m sure|delete (my )?account|close (my )?account|deactivate|(cancel|end)( (my|your|the))?( (subscription|membership|plan|benefits|trial|prime|premium|access))? (on|by) (\d{1,2}[/.-]\d{1,2}|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? ?\d{1,2}|today|tomorrow)|(end|cancel) (my |your |the )?benefits|(cancel|end) (it )?(now|immediately))\b/i;
+/** Text that finalizes a cancellation, declines an offer, or destroys the account. Never clickable, except that a
+ *  decline ("No thanks", "Continue cancelling") may decline a pause, downgrade or plan switch (see pauseDecline).
+ *  Deliberately absent: a bare "continue to cancel" (a common forward step before any offer), "cancel my
+ *  subscription" and "end my plan" (ordinary entry labels). Which of those confirms is the model's call; they are
+ *  refused on a page that calls itself the final step or shows an offer (clickRefusal). */
+export const FINALIZE_RE = /\b(confirm (my |the |your )?cancel(l)?ation|confirm (and |& )?cancel|yes,? (please )?cancel|cancel anyway|complete (my |the )?cancel(l)?ation|complete cancel(l)?ing|finish (my |the )?cancel(l)?(ing|ation)|(cancel|end) (my |the |your )?(subscription|membership|plan) (now|immediately|today|anyway)|yes,? (please )?end\b|turn off (auto[- ]?renew(al)?|automatic renewal)|proceed (with|to) cancel(l)?ation|continue (to |with )?cancel(l)?ing|continue cancel(l)?ation|no thanks|no,? thanks|i still want to cancel|yes,? i('| a)m sure|i('| a)m sure|delete (my )?account|close (my )?account|deactivate|(cancel|end)( (my|your|the))?( (subscription|membership|plan|benefits|trial|prime|premium|access))? (on|by) (\d{1,2}[/.-]\d{1,2}|(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? ?\d{1,2}|today|tomorrow)|(end|cancel) (my |your |the )?benefits|(cancel|end) (it )?(now|immediately))\b/i;
 /** Text that looks like accepting/keeping an offer. "Save 50%" sits outside the \b group: no word boundary follows a "%". */
 export const ACCEPT_RE = /\b(accept|claim|redeem|get (the |this |my )?(offer|deal|discount)|apply (the |this )?(offer|discount)|keep (my )?(subscription|membership|plan|premium|plus)|stay|take (the |this )?(offer|deal)|yes,? (please|i('| wi)ll take)|continue with (the )?offer|activate|i('| wi)ll stay|keep it|save money|give me (the |this |that )?(offer|deal|discount)|(get|take) \d+% off|get \d+ (free )?(months?|weeks?)( free)?)\b|\bsave \d+%/i;
 /** Sensitive inputs the agent must never type into. */
@@ -32,6 +34,8 @@ export function elementText(el) {
   return [el.text, el.label, el.value, el.placeholder].filter(Boolean).join(' ').replace(/\s+/g, ' ').trim();
 }
 export function isFinalizeText(text) { return FINALIZE_RE.test(text || ''); }
+/** The label's only finalizing words are a decline ("No thanks, continue cancelling"), nothing like "cancel anyway". */
+export function isDeclineOnly(text) { const t = String(text || ''); return new RegExp(DECLINE_RE.source, 'i').test(t) && !isFinalizeText(t.replace(DECLINE_RE, 'cancel')); }
 export function isAcceptText(text) { return ACCEPT_RE.test(text || ''); }
 export function isPlanChangeText(text) { return PLAN_CHANGE_RE.test(text || ''); }
 export function isCommitText(text) { return COMMIT_VERB_RE.test(String(text || '').replace(CHOOSER_RE, ' ')); }
@@ -49,28 +53,18 @@ const KEEP_PHRASE_RE = /\b(don'?t|don’t|do not|never|not|no need to|won'?t|won
 const ENTRY_RE = /\b(cancel\w*|end|terminate) (my |the |your )?(subscription|membership|plan|premium|trial|renewal|auto[- ]?renew\w*)\b|\bi want to cancel\b|\bunsubscribe\b/i;
 // A plain dismissal ("Close", "×"), allowed on the confirmation screen after an offer was accepted.
 const DISMISS_RE = /^[×✕xX\s]*(close|dismiss)?( (this )?(dialog|window|modal|popup|message))?[×✕xX\s]*$/i;
-// A label that starts the cancellation: a cancel verb first ("Cancel", "Cancel free trial", "Unsubscribe"), "End" alone
-// or with the plan ("End membership"), or exactly "I want to cancel". Not a menu that only mentions it ("Manage, update,
-// or cancel"), a section called "Cancellation", "End of season", or a survey answer ("I want to cancel because…").
-const CANCEL_FIRST_RE = /^[^a-z0-9]*(cancel(?!lations?\b)\w*|terminate|deactivate|unsubscribe)\b|^[^a-z0-9]*end\b\s*(?:(?:my|your|the)\s+)?(?:(?:subscription|membership|plan|trial|benefits|premium|access)\b|[^a-z0-9]*$)|^[^a-z0-9]*i (want|would like|'d like|’d like) to cancel[^a-z0-9]*$/i;
-// A label that names the cancellation anywhere ("Please cancel my subscription"): after the start, it confirms.
-const CANCEL_NAMED_RE = /\b(cancel\w*|end|terminate) (my |the |your )?(subscription|membership|plan|premium|trial|renewal|auto[- ]?renew\w*)\b/i;
-// A go-ahead: on the final confirmation it finishes the cancellation without naming it.
-const GO_AHEAD_RE = /^[^a-z0-9]*(continue|confirm|yes|ok|okay|submit|next|done|proceed|finish|agree|i agree|i understand|got it)\b/i;
-// When access or the plan ends: a date after ending words, or "until the end of your billing period". The final
-// confirmation says it ("you'll keep access until October 10"); an "Are you sure?" step before the offer rarely does.
-// Not "renews on <date>": that is a plan that goes on.
+// When access or the plan ends: a date after ending words, or "until the end of your billing period". A screen that
+// says it is past the pause offer and at the end. Not "renews on <date>": that is a plan that goes on.
 const DATE = String.raw`(\b\d{1,2}[/.-]\d{1,2}\b|\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z]*\.? \d{1,2}\b|\b\d{1,2} (jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec))`;
 const END_DATE_RE = new RegExp(String.raw`\b(keep|have|lose|losing|retain)\s+(your\s+)?access\b[^.!?]{0,30}?\b(until|through|thru|on|after)\b[^.!?]{0,20}?${DATE}`
   + String.raw`|\b(access|membership|subscription|plan|benefits|trial|premium|account)\b[^.!?]{0,40}?\b(ends?|ending|expires?|expiring|terminates?|stops?)\b[^.!?]{0,20}?${DATE}`
   + String.raw`|\buntil the end of (your|the|this) (current )?(billing )?(period|cycle|term|month|year)\b`, 'i');
-// A go-ahead that names the offer it takes ("Yes, give me 50% off", "Continue with offer") accepts; with a decline
-// word ("Continue without offer") it does not.
-const NAMES_OFFER = (t) => (OFFER_TEXT_RE.test(t) || ACCEPT_RE.test(t)) && !/\b(without|no|not|decline|skip|lose|losing)\b/i.test(t);
-// A link whose address says it confirms a cancellation (/cancel/confirm, /membership/end/complete, ?confirmCancel=1).
-const CONFIRM_LINK_RE = /(cancel|terminat|unsubscri|end[-_]?(membership|subscription|plan)|(membership|subscription|plan)[-_/]end)[^#]{0,40}(confirm|complete|finali[sz]e|submit|process|execute)|(confirm|complete|finali[sz]e)[-_/]?(cancel|terminat|unsubscri)/i;
-/** How many presses a walk may make after the one that started the cancellation, without an offer appearing. */
-export const MAX_STEPS_AFTER_CANCEL = 6;
+// A decline ("No thanks", "Continue cancelling") is the way on when all it declines is a pause, a downgrade or a plan
+// switch, the screens that often stand before the discount. Declining a discount is never allowed.
+const DECLINE_RE = /\b(no,? ?thanks|continue (to |with )?cancel(l)?ing|continue cancel(l)?ation|i still want to cancel)\b/gi;
+// A discount worded without "%" or "offer": "$8.99/month for 6 months", "3 months at $4.99", "half the price", "on us".
+const DISCOUNT_HINT_RE = /\d+\s*(months?|weeks?)\s+(at|for)\s+(just |only )?[$€£]\s?\d|[$€£]\s?\d[\d.,]*\s*(\/|a |per )\s*(mo|month)\w*\s+for\b|half (the )?price|\bpercent\b|\bon us\b|\b(reduced|lower|special|loyalty|discounted) (price|rate)|\bstay for\b|\bdeal\b/i;
+const PAUSE_SCREEN_RE = /\b(pause|take a break|on hold|snooze|downgrade|switch (to|plans?)|change (to|your plan)|try [\w\s]{1,30}instead|(basic|lower|cheaper) plan)\b/i;
 /** A page saying the subscription WAS cancelled (past tense, never "will be", never right after "when", "once",
  *  "before"…: "When your membership is cancelled, you'll lose…" is a warning, not news). After one of the walk's own
  *  presses it means something went wrong, and the person must hear it at once. */
@@ -79,32 +73,10 @@ export const CANCELLED_RE = /(?<!\b(?:when|once|if|before|after|until|unless|in 
 const unkept = (text) => String(text || '').replace(KEEP_PHRASE_RE, ' ').trim();
 /** The label acts on cancellation (a cancel verb that is not negated: "Don't cancel" keeps the plan). */
 export function actsOnCancel(text) { return CANCEL_VERB_RE.test(unkept(text)); }
-/** The label starts the cancellation (see CANCEL_FIRST_RE). A chooser ("Cancel or pause") starts neither. */
-export function isCancelPress(text) { return CANCEL_FIRST_RE.test(unkept(String(text || '').replace(CHOOSER_RE, ' '))); }
 export function looksLikeConfirmPage(pageText) { return CONFIRM_PAGE_RE.test(pageText || ''); }
 /** The page says the subscription was cancelled and the page before it did not: the walk's last press may have done it. */
 export function newlyCancelled(pageText, prevText) { return CANCELLED_RE.test(pageText || '') && !CANCELLED_RE.test(prevText || ''); }
-/** Why following this address would confirm a cancellation, or null. */
-export function confirmLinkRefusal(href, base) {
-  if (!href) return null;
-  let u; try { u = new URL(href, base || undefined); } catch { return null; }
-  return CONFIRM_LINK_RE.test(u.pathname + u.search) ? `the link confirms a cancellation (${u.pathname.slice(0, 60)})` : null;
-}
 const historySteps = (history) => (Array.isArray(history) ? history : []).filter((h) => h && typeof h === 'object');
-/** A press on a label that starts the cancellation, on whatever page and whatever it seemed to do: a bare "Cancel"
- *  that only closed a popup counts, and so does one with no visible effect (a slow dialog opens after the wait, and
- *  its confirmation may carry the very same label). The cost is a walk that backs out early, or a retry refused. */
-const cancelPress = (h) => !!h.action && h.action.type === 'click' && h.ok !== false && isCancelPress(h.target || '');
-function cancelStarted(history) { return historySteps(history).some(cancelPress); }
-/** Presses (clicks, navigates, form input) since the one that started the cancellation; -1 before it. */
-function stepsSinceCancelStarted(history) {
-  let n = -1;
-  for (const h of historySteps(history)) {
-    if (n < 0) { if (cancelPress(h)) n = 0; continue; }
-    if (h.action && h.ok !== false && ['click', 'navigate', 'type', 'select'].includes(h.action.type)) n++;
-  }
-  return n;
-}
 /** Inside the cancel flow: a step the model called cancel_entry, reason_survey or save_offer_presented, a successful
  *  entry click, or an accepted offer. An offer only ever appears inside the flow, so a walk that resumes at the offer
  *  (the accept phase's continuation) counts too, whatever history the client sends. */
@@ -119,36 +91,42 @@ function offerAccepted(history) {
 /**
  * The click-time rule, shared by the server guardrail, the extension and the test driver. Returns why a
  * button must not be clicked, or null.
- * - A finalize/decline label is never clickable anywhere, nor is a commit verb (pause, downgrade, buy…).
- * - One cancel press per walk: once a press has started the cancellation, a button that starts with a cancel
- *   verb (or names the cancellation, "Please cancel my subscription") would confirm it, whatever the page
- *   says around it. The live runs met exactly that: "Cancel" then "Cancel plan" in Claude's dialog, "Cancel
- *   membership" then "Cancel on <date>" at Amazon. And once it started, a go-ahead ("Continue", "Yes") on a
- *   final confirmation that states when access ends would finish it.
+ * Only wording that is unambiguous is refused here; which "Cancel" or "Continue" on a screen leads on and which one
+ * confirms is the model's call (two full real-model runs: the model never tried a final press, and every rule that
+ * guessed from context only blocked the way forward). A page that says "cancelled" after a press raises the alarm.
+ * - A finalize/decline label is never clickable anywhere, nor is a commit verb (pause, downgrade, buy…). The one
+ *   exception: "No thanks" / "Continue cancelling" declining a pause, downgrade or plan switch on a screen with no
+ *   discount (not even one worded as a price), no "are you sure" and no end date, and never after an offer was
+ *   accepted (the way on to the discount).
  * - On a page that identifies itself as the final confirmation, any button that acts on cancellation is
  *   refused too. This closes the case where the confirm button carries an ordinary entry label such as
  *   "Cancel my subscription", which the finalize pattern must not match on a settings page.
  * - Inside the cancel flow, on a page that mentions an offer, the same holds: a "Continue to cancel" under
  *   a discount declines it even when the model did not call the screen an offer. The cost: a mid-flow page
  *   that mentions a discount for another reason ends the walk there (back out, never forward).
- * A negated verb ("Don't cancel, apply discount") keeps the plan and is not refused by the last three rules.
+ * A negated verb ("Don't cancel, apply discount") keeps the plan and is not refused by the last two rules.
  */
 export function clickRefusal(elementText, pageText, history) {
   const t = String(elementText || '');
-  if (isFinalizeText(t)) return 'finalize/decline pattern';
+  if (isFinalizeText(t) && !pauseDecline(t, pageText, history)) return 'finalize/decline pattern';
   if (isCommitText(t)) return 'pause, downgrade, plan switch or purchase';
-  if (GO_AHEAD_RE.test(t) && !NAMES_OFFER(t) && looksLikeConfirmPage(pageText) && END_DATE_RE.test(pageText || '') && cancelStarted(history))
-    return 'a go-ahead on the final confirmation (the page says when access ends)';
   if (!actsOnCancel(t)) return null;
-  if ((isCancelPress(t) || CANCEL_NAMED_RE.test(unkept(t))) && cancelStarted(history)) return 'a second cancel button: the cancellation already started, so this one would confirm it';
   if (looksLikeConfirmPage(pageText)) return 'cancel button on a final-confirmation page';
   if (inCancelFlow(history) && OFFER_TEXT_RE.test(pageText || '') && !(offerAccepted(history) && DISMISS_RE.test(t.trim())))
     return 'cancel button on an offer screen inside the cancel flow';
   return null;
 }
 export function isFinalizeClick(elementText, pageText, history) { return clickRefusal(elementText, pageText, history) != null; }
+/** Declining a pause, downgrade or plan switch on its own screen: allowed where the screen offers no discount, doesn't
+ *  call itself the final step and doesn't say when access ends. Anything else a decline declines stays refused. */
+function pauseDecline(text, pageText, history) {
+  const p = pageText || '';
+  return isDeclineOnly(text) && PAUSE_SCREEN_RE.test(p) && !OFFER_TEXT_RE.test(p) && !DISCOUNT_HINT_RE.test(p) && !looksLikeConfirmPage(p)
+    && !END_DATE_RE.test(p) && !offerAccepted(history);
+}
 /** Why a label can never be the offer to accept (or null). */
 function offerTargetRefusal(text) {
+  if (isFinalizeText(text)) return 'a decline or a final button is never the offer';
   if (isPlanChangeText(text)) return 'a pause, downgrade, plan change or purchase is not a discount';
   if (actsOnCancel(text)) return 'a cancel button is not an offer';
   return null;
@@ -242,16 +220,10 @@ export function applyGuardrails(ctx) {
   if (offerSeen && !accepted && ['click', 'type', 'select', 'navigate'].includes(a.type)) {
     setBackOut('an offer was presented: only accept_offer or back_out are allowed'); return { decision: d, notes };
   }
-  // Offers come within a few presses of starting the cancellation. Past that, every press is closer to the final one.
-  if (!accepted && ['click', 'type', 'select', 'navigate'].includes(a.type) && stepsSinceCancelStarted(history) >= MAX_STEPS_AFTER_CANCEL) {
-    setBackOut(`no offer within ${MAX_STEPS_AFTER_CANCEL} steps of starting the cancellation: going further risks the final button`); return { decision: d, notes };
-  }
   if (['click', 'accept_offer'].includes(a.type)) {
     if (!el) { setWait('target element not found in snapshot'); return { decision: d, notes }; }
     const link = linkRefusal(el, snapshot && snapshot.url);
     if (link) { setBackOut(link); return { decision: d, notes }; }
-    const confirmLink = confirmLinkRefusal(el.href, snapshot && snapshot.url);
-    if (confirmLink) { setBackOut(`refused to click "${text.slice(0, 60)}" (${confirmLink})`); return { decision: d, notes }; }
     const why = clickRefusal(text, pageText, history);
     if (why) { setBackOut(`refused to click "${text.slice(0, 60)}" (${why})`); return { decision: d, notes }; }
     if (el.disabled) { setWait(`"${text.slice(0, 40)}" is disabled`); return { decision: d, notes }; }
@@ -282,8 +254,6 @@ export function applyGuardrails(ctx) {
     const host = hostOf(a.url), sensitive = host ? sensitiveReason(host) : null;
     if (sensitive) { setBackOut(`refused to navigate to ${host} (${sensitive})`); return { decision: d, notes }; }
     if (!a.url || !sameSite(a.url, merchantDomain)) { setBackOut(`refused to navigate off-site: ${a.url}`); return { decision: d, notes }; }
-    const confirmLink = confirmLinkRefusal(a.url);
-    if (confirmLink) { setBackOut(`refused to navigate: ${confirmLink}`); return { decision: d, notes }; }
   }
   if (a.type === 'finish' && a.outcome === 'offer_found') {
     // Only the guardrail above should produce this. If the model chose it itself, allow it only in find

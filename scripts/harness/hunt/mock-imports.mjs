@@ -1,7 +1,5 @@
 // A fake Chrome for tabs.ts/hunt.ts: tabs with a load lifecycle, scripting dispatched to fake pages, storage.
-export const fake = { tabs: new Map(), nextId: 100, created: [], removed: [], updates: [], clicks: [], exec: [], fns: {}, pageFor: () => new Page({ url: 'about:blank' }), genCounter: 0, rules: new Map() };
-/** Is a safety-lock rule (declarativeNetRequest session rule) on this tab right now? */
-export const lockedTab = (tabId) => [...fake.rules.values()].some((r) => r.condition?.tabIds?.includes(tabId));
+export const fake = { tabs: new Map(), nextId: 100, created: [], removed: [], updates: [], clicks: [], exec: [], fns: {}, pageFor: () => new Page({ url: 'about:blank' }), genCounter: 0 };
 const L = { updated: new Set(), removed: new Set() };
 const fire = (set, ...a) => { for (const f of [...set]) f(...a); };
 export function navigate(tab, url, delay = 40) {
@@ -26,7 +24,7 @@ export class Page {
     // The pinned page-side rule: with `expect`, the label is re-read at the click; if it changed since readElement, nothing is pressed.
     const n = (x) => String(x ?? '').replace(/\s+/g, ' ').trim();
     if (a.expect != null && n(e.liveText ?? e.text) !== n(a.expect)) return { ok: false, note: 'page changed since it was read' };
-    fake.clicks.push({ tabId: this.tab.id, text: e.text, url: this.url, locked: lockedTab(this.tab.id), sameTab: !!a.sameTab }); if (e.onClick) e.onClick(this.tab, this); return { ok: true, note: `clicked "${e.text}"` };
+    fake.clicks.push({ tabId: this.tab.id, text: e.text, url: this.url, sameTab: !!a.sameTab }); if (e.onClick) e.onClick(this.tab, this); return { ok: true, note: `clicked "${e.text}"` };
   }
   readiness() { return { url: this.url, readyState: this.readyState, visibleTextLen: this.text.length, interactiveCount: this.elements.length, hasPassword: this.hasPassword, busy: this.busy, loadingText: this.loadingText, challenge: this.challenge, dialog: this.dialog }; }
 }
@@ -59,10 +57,6 @@ export const browser = {
     },
   },
   storage: { local: store(), session: store() },
-  declarativeNetRequest: {
-    async updateSessionRules({ removeRuleIds = [], addRules = [] }) { for (const id of removeRuleIds) fake.rules.delete(id); for (const r of addRules) fake.rules.set(r.id, JSON.parse(JSON.stringify(r))); },
-    async getSessionRules() { return [...fake.rules.values()]; },
-  },
   runtime: { getManifest: () => ({ version: 'test' }) },
 };
 export const listeners = L;

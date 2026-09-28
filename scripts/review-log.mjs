@@ -507,15 +507,6 @@ if (walks.length) {
   for (const e of of('step.sensitive_page')) flag('high', `${e.svc}: a walk reached a banking or other sensitive page and stopped`, `${short(e.url)} · ${safe(e.why, 100)}`);
   for (const e of of('step.blocked')) flag('high', `${e.svc}: a step landed on a blocklisted site`, short(e.url));
   for (const e of of('find.start').filter((e) => e.loadTimedOut)) flag('medium', `${e.svc}: account page timed out at the start of the walk`, short(e.accountUrl));
-  // The safety lock: every changing request a locked walk tab sent, and which ones Chrome refused.
-  const locks = of('netlock.on'), reqs = of('netlock.request');
-  if (locks.length || of('netlock.unavailable').length) {
-    console.log(`\nSAFETY LOCK  ${locks.length} walk tab(s) locked${of('netlock.unavailable').length ? ` · ⚠ unavailable on ${of('netlock.unavailable').length}` : ''} · ${reqs.length} changing request(s) seen · ${reqs.filter((r) => r.blocked).length} blocked`);
-    for (const r of reqs) console.log(`  ${r.blocked ? 'BLOCKED' : 'sent   '} ${pad(r.svc, 18)} ${pad(r.method, 6)} ${short(r.url)}${r.op ? ` (${r.op})` : ''} · ${r.type}`);
-    for (const r of reqs.filter((r) => r.blocked)) flag('info', `${r.svc}: the safety lock refused a ${r.method}`, `${short(r.url)}${r.op ? ` (${r.op})` : ''}: if the walk then missed an offer, this request may have been the offer's, not the cancel's`);
-    for (const e of of('netlock.unavailable')) flag('high', `${e.svc}: walked without the safety lock`, 'declarativeNetRequest unavailable: an old build, or the permission is missing');
-  }
-  for (const e of of('netlock.error')) flag('high', `${e.svc}: the safety lock failed to engage`, safe(e.error, 200));
 }
 
 // ---------------------------------------------------------------- API timing, tokens, cost

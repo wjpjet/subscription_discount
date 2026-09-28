@@ -11,7 +11,7 @@ const stub = (map) => ({ name: 'stub', setup(b) {
   });
 } });
 await build({ entryPoints: [`${SRC}scan.ts`], bundle: true, format: 'esm', platform: 'node', outfile: `${H}.build/scan.mjs`, logLevel: 'warning',
-  plugins: [stub([[/^\.\/tabs$/, 'tabs.js'], [/^\.\/hunt$/, 'hunt.js'], [/^\.\/trace$/, 'trace.js'], [/^\.\/api$/, 'api.js'], [/^\.\/discovery$/, 'discovery.js'], [/^\.\/netlock$/, 'netlock.js'], [/brain-mock\.js$/, 'brain-mock.js']])] });
+  plugins: [stub([[/^\.\/tabs$/, 'tabs.js'], [/^\.\/hunt$/, 'hunt.js'], [/^\.\/trace$/, 'trace.js'], [/^\.\/api$/, 'api.js'], [/^\.\/discovery$/, 'discovery.js'], [/brain-mock\.js$/, 'brain-mock.js']])] });
 await build({ entryPoints: [`${SRC}discovery.ts`], bundle: true, format: 'esm', platform: 'node', outfile: `${H}.build/discovery.mjs`, logLevel: 'warning',
   plugins: [stub([[/^\.\/trace$/, 'trace.js'], [/^\.\/api$/, 'api.js']])] });
 await import('./harness/scan/check.mjs');

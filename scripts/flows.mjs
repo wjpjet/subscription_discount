@@ -78,14 +78,14 @@ if (!opt.replay) { console.log('\nReplay against the current brain:  npm run flo
 
 // ---------------------------------------------------------------- replay
 const brain = await import('../netlify/functions/lib/brain.mjs');
-const { applyGuardrails, elementText, isFinalizeText, isCommitText, isPlanChangeText, actsOnCancel } = await import('../shared/guardrails.js');
+const { applyGuardrails, elementText, isFinalizeText, isCommitText, isPlanChangeText, actsOnCancel, isDeclineOnly, clickRefusal } = await import('../shared/guardrails.js');
 // The live run's own reading of a screen is the answer key for the worst case: nothing may be pressed on a screen it
 // called the final confirmation or a finished cancellation, whatever the replayed brain calls it now.
 const FINAL_STATES = ['about_to_finalize_cancel', 'cancellation_completed'];
 // On such a screen, the buttons that could be its confirmation: any cancel wording, or a bare go-ahead. A link away
 // ("Your Account", "Help") is not.
 const CONFIRMISH_RE = /^\W*(continue|confirm|yes|ok|okay|submit|next|done|proceed|finish|agree|i understand)\b/i;
-let calls = 0, same = 0, changed = 0, unsafe = 0, skipped = 0;
+let calls = 0, same = 0, changed = 0, unsafe = 0, modelCalls = 0, skipped = 0;
 const budget = () => !REAL || calls < MAX;
 console.log(`\nREPLAY with the ${REAL ? `REAL model (at most ${MAX} calls)` : 'mock brain (free; it checks the guardrails on real pages, not the model)'}\n`);
 for (const f of flows) {
@@ -114,8 +114,15 @@ for (const f of flows) {
     // What must never happen, judged by the primitive rules (not the guardrail composites under test): a click on a
     // finalize or commit label (pause, downgrade, buy…), or an offer recorded on one that also cancels or changes the plan.
     const isOffer = a.type === 'accept_offer' || (a.type === 'finish' && a.outcome === 'offer_found');
-    const bad = (a.type === 'click' && FINAL_STATES.includes(p.state) && (actsOnCancel(label) || CONFIRMISH_RE.test(label))) || (!!label && ((a.type === 'click' && (isFinalizeText(label) || isCommitText(label)))
-      || (isOffer && (isFinalizeText(label) || isCommitText(label) || isPlanChangeText(label) || actsOnCancel(label)))));
+    // A decline the rules allow (a pause screen's "No thanks") is the intended way on, not a mistake.
+    const allowedDecline = a.type === 'click' && !!label && isDeclineOnly(label) && !clickRefusal(label, snap.text, history);
+    // Wording that must never be pressed (the rules own these), and a confirming press on a screen the live run called
+    // final (the model owns those: with the mock brain it only shows where the rules alone would not stop it).
+    const ruleBad = !!label && ((a.type === 'click' && !allowedDecline && (isFinalizeText(label) || isCommitText(label)))
+      || (isOffer && (isFinalizeText(label) || isCommitText(label) || isPlanChangeText(label) || actsOnCancel(label))));
+    const modelBad = a.type === 'click' && !allowedDecline && FINAL_STATES.includes(p.state) && (actsOnCancel(label) || CONFIRMISH_RE.test(label));
+    const bad = ruleBad || modelBad;
+    if (modelBad && !ruleBad) modelCalls++;
     const movedOffer = isOffer && was.outcome === 'offer_found' && (a.id ?? null) !== (was.id ?? null);
     if (bad) unsafe++;
     const sameAct = a.type === was.type && (a.id ?? null) === (was.id ?? null);
@@ -126,5 +133,8 @@ for (const f of flows) {
   }
 }
 console.log(`\n${same} same · ${changed} changed · ${unsafe} unsafe${skipped ? ` · ${skipped} not replayed (--max=${MAX} reached)` : ''} · ${calls} ${REAL ? 'model' : 'mock'} call(s)`);
+// The rules refuse only unambiguous wording; which "Cancel" on a screen confirms is the model's call. So with the mock
+// brain an UNSAFE shows where the rules alone would not stop it: replay those flows with --real to see the model.
+if (modelCalls && !REAL) console.log(`${modelCalls} of these: a confirming press on a screen the live run called final, which the rules leave to the model. Check with --replay --real --max=10`);
 if (REAL) console.log('Real calls are billed: roughly $0.003 per walk step and $0.001 per account page at list prices.');
-process.exit(unsafe ? 1 : 0);
+process.exit(unsafe - (REAL ? 0 : modelCalls) > 0 ? 1 : 0);

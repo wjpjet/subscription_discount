@@ -144,30 +144,23 @@ exactly **one** action: click this, type that, scroll, navigate, accept the offe
 **The loop is in the extension, not the backend.** A walk is many short requests, not one long one,
 and the backend remembers nothing between them.
 
-Four things guard every step:
+What guards every step:
 
 - The model has **no tool that finalizes a cancellation**. It cannot choose that action, because the
   action doesn't exist in its vocabulary.
-- Deterministic code checks the decision anyway, on the server and again in the extension, and the
-  extension **re-reads the live button text at the moment of clicking**. If that text looks like a
-  final cancel, a pause, a downgrade, a plan switch or a purchase, or the page announces itself as the
-  final confirmation, the click is refused. **One cancel press per walk**: once a press has started the
-  cancellation, any later button that starts with Cancel or End would confirm it and is refused, whatever
-  the page says (the first live walk met "Cancel" then "Cancel plan" in Claude's dialog). A link whose
-  address confirms a cancellation is refused, and a walk that sees no offer within six presses of starting
-  the cancellation backs out. Element ids carry the snapshot they came from, so a click can never land on
-  a different element after the page changed.
-- **The safety lock** (`extension/src/netlock.ts`): while a walk is in a cancellation flow, Chrome itself
-  refuses every POST, PUT, PATCH or DELETE from that tab whose address names a cancellation, termination,
-  unsubscribe, deactivation, pause or downgrade (declarativeNetRequest session rules, scoped to the tab, on
-  any host: the plain permission blocks without host access). Pages, surveys and offers load as usual; a
-  wrong press fails on the site's side. It can't see inside request bodies (a GraphQL mutation to /graphql
-  passes), so it sits under the click rules, not instead of them. It fails closed: a tab that can't be locked
-  is not walked, and every step of the loop checks the lock is still on. Held tabs stay locked; the accept
-  lifts it for its own press only.
+- **The model reads the screen.** Which "Cancel" or "Continue" leads on and which one confirms is its call:
+  in two full real-model runs it never tried a final press, while every rule that guessed from context only
+  blocked the way forward (an "End my plan" entry, "No thanks" to a pause before the discount).
+- Deterministic code checks the decision anyway, on the server and again in the extension, but only for
+  wording that is never the way forward: "Confirm cancellation", "Finish cancellation", "Cancel anyway",
+  "Cancel on <date>", a decline of a discount, pause, downgrade, plan switch, purchase, and any cancel button
+  on a page that calls itself the final step ("Are you sure?") or shows an offer. The extension **re-reads the
+  live button text at the moment of clicking**, and element ids carry the snapshot they came from, so a click
+  can never land on a different element after the page changed.
 - **Never silent**: after any press, a page that newly says the subscription was cancelled (or that the
-  model reads as a finished cancellation) stops the walk with `may_have_cancelled`, leaves the tab open for
-  the person, and puts a red warning with how to undo it at the top of the panel.
+  model reads as a finished cancellation, or the billing page after an accept) stops the walk as
+  `may_have_cancelled`, leaves the tab open for the person, and puts a red warning with how to undo it at the
+  top of the panel.
 
 The loop stops when an offer is accepted, when there's nothing to accept, or when anything at all is
 ambiguous. No decision means no click.

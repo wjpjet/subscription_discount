@@ -22,9 +22,9 @@ minimum; under 50¢ is waived). It can never finalize a cancellation.
 
 ## Shipping
 
-Nothing is waiting: the safety release (the lock on walk tabs, one cancel press per walk, the never-silent alarm,
-the Free trials section) went live on 2026-09-27. To ship a later change (from the main checkout, after the free
-checks in "Testing" and an adversarial review):
+Nothing is waiting: the model-first release (the model judges which button confirms, the never-silent alarm, the
+Free trials section; no safety lock, no extra permissions) went live on 2026-09-27. To ship a later change (from
+the main checkout, after the free checks in "Testing" and an adversarial review):
 
 ```
 npm run cf:deploy
@@ -71,13 +71,13 @@ Then reload the extension at `chrome://extensions`.
 4. **Accept** (after payment) — only in a tab that is provably ours, on the unchanged offer screen; otherwise re-walk.
    Then verify on the billing page and settle.
 
-Safety layers: the model has no "finalize" action; deterministic guardrails on the server and again in the
-extension (finalize/decline text, pause/downgrade/plan-switch/purchase buttons, cancel buttons on offer screens,
-one cancel press per walk, confirm-cancel links, six presses without an offer, never-touch hosts); the live button
-text is re-read at click time; element ids are tied to the snapshot they came from; **the safety lock** (Chrome
-refuses any POST/PUT/PATCH/DELETE from a walk tab whose address names a cancellation; `extension/src/netlock.ts`);
-**never silent** (a page that says it was cancelled after a press stops everything and shows a red warning);
-everything is scrubbed (tokens, card data, addresses; emails masked in logs) before leaving the browser.
+Safety layers: the model has no "finalize" action and judges which button confirms (it never tried a final press
+in two full real-model runs); deterministic guardrails on the server and again in the extension refuse only
+wording that is never the way forward (final/decline text, pause/downgrade/plan-switch/purchase buttons, cancel
+buttons on "Are you sure?" and offer screens, never-touch hosts); the live button text is re-read at click time;
+element ids are tied to the snapshot they came from; **never silent** (a page that says it was cancelled after a
+press stops everything and shows a red warning); everything is scrubbed (tokens, card data, addresses; emails
+masked in logs) before leaving the browser.
 
 ## Testing (what's free and what costs money)
 
@@ -102,7 +102,8 @@ everything is scrubbed (tokens, card data, addresses; emails masked in logs) bef
 - Employer domains are still sent to discovery by name unless listed in Never-explore (TODO: a "work domains"
   setting).
 - Cookie-rule change (bare `user`/`secure` no longer count as session cookies) needs checking on the next log.
-- The safety lock can't see request bodies: a GraphQL mutation to /graphql passes it (TODO: part 2).
+- A final button the model misreads is caught only after the fact (the alarm). If real walks show that happening,
+  add a second AI check on risky presses (TODO.md).
 - YouTube Premium's "Cancel" ignored the walk's click; the fuller click (pointer events) is untested on it.
 - Google's payment pages are allowed so Google One can be walked (owner decision in TODO.md).
 - A trial's discount can't be verified until the trial converts, so accepting one charges nothing today.

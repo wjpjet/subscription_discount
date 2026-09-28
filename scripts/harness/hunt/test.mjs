@@ -21,7 +21,7 @@ globalThis.fetch = async (url, init) => {
   return { status: 200, ok: true, json: async () => res };
 };
 function reset() {
-  fake.tabs.clear(); fake.created.length = 0; fake.removed.length = 0; fake.updates.length = 0; fake.clicks.length = 0; fake.exec.length = 0; fake.rules.clear();
+  fake.tabs.clear(); fake.created.length = 0; fake.removed.length = 0; fake.updates.length = 0; fake.clicks.length = 0; fake.exec.length = 0;
   browser.storage.session.clear(); agentCalls.length = 0; classifyCalls = 0;
 }
 const S = 'https://www.streamly.example';
@@ -524,56 +524,27 @@ for (const [name, el] of [['radio input', { type: 'radio', tag: 'input' }], ['la
   check('R12 landed on an IdP host that is not the account host: still dropped', agentCalls[0]?.merchant?.siteDomains?.join(',') === 'max.example', `${agentCalls[0]?.merchant?.siteDomains}`);
 }
 
-// ------------------------------------------------------------ 8. the safety lock, one cancel press, the alarm
-{
-  reset(); fake.pageFor = streamly(); agent = walkToOffer;
-  const it = item();
-  const r = await M.findOne(it, settings, onEvent);
-  const rules = [...fake.rules.values()];
-  check('lock: the walk tab is locked while walking (the entry click happened under the lock)', fake.clicks.length === 1 && fake.clicks[0].locked, JSON.stringify(fake.clicks));
-  check('lock: one substring rule per word, this tab only, changing methods only, blocking', rules.length === M.LOCK_WORDS.length && rules.every((x) => x.condition.tabIds.join() === String(r.paused?.tabId)
-    && x.condition.requestMethods.join() === 'post,put,patch,delete' && x.condition.isUrlFilterCaseSensitive === false && x.action.type === 'block')
-    && rules.map((x) => x.condition.urlFilter).join() === M.LOCK_WORDS.join() && rules.every((x) => x.id >= 700000 && x.id <= 799999), JSON.stringify(rules[0]));
-  check('lock: the held tab stays locked', M.lockedTab(r.paused.tabId));
-  check('lock: blocks a POST to /api/subscription/cancel, not a GET or a POST to /api/survey', M.lockBlocks('POST', 'https://x.example/api/subscription/cancel') && !M.lockBlocks('GET', 'https://x.example/api/subscription/cancel')
-    && !M.lockBlocks('POST', 'https://x.example/api/survey') && M.lockBlocks('DELETE', 'https://x.example/v1/Membership/Terminate') && M.lockBlocks('patch', 'https://x.example/end-subscription'));
-  // The accept presses in the held tab with the lock lifted for that one press, then walks on locked.
-  it.hasOffer = true; it.offer = OFFER; it.paused = r.paused; it.path = r.path;
-  fake.clicks.length = 0;
-  const a = await M.acceptOne(it, settings, onEvent);
-  check('lock: the accept press happens unlocked (its request must reach the site)', fake.clicks[0]?.text === 'Keep my discount' && fake.clicks[0].locked === false, JSON.stringify(fake.clicks));
-  check('lock: gone once the accept is done and the tab closed', fake.rules.size === 0 && a.outcome === 'discount_applied', `${fake.rules.size} ${a.outcome}`);
-}
-{
-  reset(); fake.pageFor = streamly(); agent = walkToOffer;
-  const it = item();
-  const r = await M.findOne(it, settings, onEvent);
-  await M.releasePaused({ ...it, paused: r.paused });
-  check('lock: released with the held tab', fake.rules.size === 0 && !fake.tabs.has(r.paused.tabId));
-  reset(); fake.pageFor = streamly(); agent = async () => ({ state: 'subscription_page', reasoning: '', action: { type: 'back_out', reason: 'nothing here' } });
-  await M.findOne(item(), settings, onEvent);
-  check('lock: a walk that backs out leaves no rule behind', fake.rules.size === 0 && fake.tabs.size === 0);
-  fake.rules.set(700001, { id: 700001, condition: { tabIds: [1411068230] } }); fake.rules.set(700002, { id: 700002, condition: { tabIds: [998] } }); fake.rules.set(55, { id: 55, condition: { tabIds: [1411068230] } });
-  const n = await M.unlockAllExcept([998]);
-  check('lock: a panel opening drops stale locks, keeps a held tab\'s and anything not ours', n === 1 && !fake.rules.has(700001) && fake.rules.has(700002) && fake.rules.has(55), [...fake.rules.keys()].join());
-  // Three walks lock their tabs at once: ids never collide (a big tab id, as real Chrome gives, included).
-  fake.rules.clear();
-  const [tA, tB] = [await tabs.openTab(`${S}/a`, false), await tabs.openTab(`${S}/b`, false)];
-  await Promise.all([M.lockTab(tA, 'a'), M.lockTab(tB, 'b'), M.lockTab(1411068230, 'c')]);
-  const ids = [...fake.rules.keys()];
-  check('lock: concurrent locks get distinct rule ids', new Set(ids).size === ids.length && ids.length === 3 * M.LOCK_WORDS.length, String(ids.length));
-}
+// ------------------------------------------------------------ 8. never silent: the alarm
 {
   // Shaped like Claude's billing dialog in the first live walk: a bare "Cancel", then "Cancel plan" with no "are you sure".
+  // Which button confirms is the model's call now; if it ever gets the dialog wrong, the alarm must reach the person.
   reset();
   fake.pageFor = streamly({
     '/account': (url) => new Page({ url, text: 'Billing Max plan $100/month Cancellation Cancel', elements: [{ id: 1, text: 'Cancel', onClick: (tab) => navigate(tab, `${S}/billing/cancel`) }] }),
     '/billing/cancel': (url) => new Page({ url, text: 'Cancel plan Your plan stays active until Oct 9. Keep your plan Cancel plan', elements: [{ id: 1, text: 'Keep your plan' }, { id: 2, text: 'Cancel plan', onClick: (tab) => navigate(tab, `${S}/billing/cancelled`) }] }),
+    '/billing/cancelled': (url) => new Page({ url, text: 'Your subscription has been cancelled. You can resubscribe any time.', elements: [{ id: 1, text: 'Resubscribe' }] }),
   });
   agent = async (b) => (new URL(b.snapshot.url).pathname === '/account' ? { state: 'subscription_page', reasoning: '', action: { type: 'click', id: 1 } }
     : { state: 'cancel_entry', reasoning: 'mistaken', action: { type: 'click', id: 2 } });   // a model that got the dialog wrong
   const r = await M.findOne(item(), settings, onEvent);
-  check('one press: "Cancel plan" after "Cancel" is refused even when the model gets the dialog wrong', !fake.clicks.some((c) => c.text === 'Cancel plan') && r.outcome === 'no_offer_backed_out' && /second cancel button/.test(r.reason || ''), `${r.outcome} ${r.reason}`);
+  check('a model that presses "Cancel plan" by mistake: the alarm reaches the person (may_have_cancelled, tab left open)', r.outcome === 'may_have_cancelled' && fake.clicks.some((c) => c.text === 'Cancel plan'), `${r.outcome} ${r.reason}`);
+  reset(); fake.pageFor = streamly({
+    '/account': (url) => new Page({ url, text: 'Billing Max plan $100/month Cancellation Cancel', elements: [{ id: 1, text: 'Cancel', onClick: (tab) => navigate(tab, `${S}/billing/cancel`) }] }),
+    '/billing/cancel': (url) => new Page({ url, text: 'Cancel plan Your plan stays active until Oct 9. Keep your plan Cancel plan', elements: [{ id: 1, text: 'Keep your plan' }, { id: 2, text: 'Cancel plan' }] }) });
+  agent = async (b) => (new URL(b.snapshot.url).pathname === '/account' ? { state: 'subscription_page', reasoning: '', action: { type: 'click', id: 1 } }
+    : { state: 'about_to_finalize_cancel', reasoning: 'confirms the cancellation', action: { type: 'back_out', reason: 'final step' } });
+  const r2 = await M.findOne(item(), settings, onEvent);
+  check('a model that reads the dialog right backs out, nothing pressed on it', r2.outcome === 'no_offer_backed_out' && !fake.clicks.some((c) => c.text === 'Cancel plan'), r2.outcome);
 }
 {
   // Never silent: a press after which the page says the subscription was cancelled.
@@ -586,7 +557,7 @@ for (const [name, el] of [['radio input', { type: 'radio', tag: 'input' }], ['la
   const r = await M.findOne(item(), settings, onEvent);
   const tabId = fake.created[0]?.id;
   check('alarm: the page says cancelled after our press → may_have_cancelled', r.outcome === 'may_have_cancelled' && /cancelled/.test(r.reason || ''), `${r.outcome} ${r.reason}`);
-  check('alarm: the tab is left open for the person, unlocked and no longer ours', fake.tabs.has(tabId) && !M.lockedTab(tabId) && !(await tabs.registeredTabs()).some((e) => e.tabId === tabId));
+  check('alarm: the tab is left open for the person and is no longer ours', fake.tabs.has(tabId) && !(await tabs.registeredTabs()).some((e) => e.tabId === tabId));
   check('alarm: no model call on the cancelled page', agentCalls.length === 1, String(agentCalls.length));
   reset();
   fake.pageFor = streamly({
@@ -615,7 +586,7 @@ for (const [name, el] of [['radio input', { type: 'radio', tag: 'input' }], ['la
   it.hasOffer = true; it.offer = OFFER; it.paused = r.paused; it.path = r.path;
   const a = await M.acceptOne(it, settings, onEvent);
   check('alarm: an accept press that cancelled → may_have_cancelled, never a charge', a.outcome === 'may_have_cancelled' && a.savingsUsd == null, `${a.outcome} ${a.reason} ${a.savingsUsd}`);
-  check('alarm: after the accept, the tab is left open for the person', fake.tabs.has(r.paused.tabId) && !M.lockedTab(r.paused.tabId));
+  check('alarm: after the accept, the tab is left open for the person', fake.tabs.has(r.paused.tabId));
 }
 {
   // The billing page read after the run says the subscription was cancelled: that wins over the walk's own verdict.
@@ -626,41 +597,6 @@ for (const [name, el] of [['radio input', { type: 'radio', tag: 'input' }], ['la
   fake.pageFor = streamly({ '/account': (url) => new Page({ url, text: 'Your subscription has been cancelled. It ends Oct 17.', elements: [{ id: 1, text: 'Restart' }] }) });
   const a = await M.acceptOne(it, settings, onEvent);
   check('alarm: a billing page that says cancelled after the run → may_have_cancelled', a.outcome === 'may_have_cancelled' && /billing page/.test(a.reason || ''), `${a.outcome} ${a.reason}`);
-}
-{
-  // Fail closed: no lock, no walk. Chrome's rule engine refusing the rule means nothing is pressed at all.
-  reset(); fake.pageFor = streamly(); agent = walkToOffer;
-  const orig = browser.declarativeNetRequest.updateSessionRules;
-  browser.declarativeNetRequest.updateSessionRules = async () => { throw new Error('Rule with id 700000 was skipped'); };
-  const r = await M.findOne(item(), settings, onEvent);
-  browser.declarativeNetRequest.updateSessionRules = orig;
-  check('fail closed: when the tab cannot be locked, nothing is pressed and the walk says why', fake.clicks.length === 0 && agentCalls.length === 0 && r.outcome === 'error' && /safety lock/.test(r.reason || ''), `${r.outcome} ${r.reason} clicks=${fake.clicks.length}`);
-  check('fail closed: the unlockable tab is closed', fake.tabs.size === 0);
-}
-{
-  // The lock can't be put back after the accept's own press: nothing more is pressed, straight to verification.
-  reset(); fake.pageFor = streamly(); agent = walkToOffer;
-  const it = item();
-  const r = await M.findOne(it, settings, onEvent);
-  it.hasOffer = true; it.offer = OFFER; it.paused = r.paused; it.path = r.path;
-  fake.clicks.length = 0;
-  const orig = browser.declarativeNetRequest.updateSessionRules;
-  browser.declarativeNetRequest.updateSessionRules = async (o) => { if ((o.addRules || []).length) throw new Error('rule engine unavailable'); return orig(o); };
-  const a = await M.acceptOne(it, settings, onEvent);
-  browser.declarativeNetRequest.updateSessionRules = orig;
-  check('fail closed: after the accept, a lock that cannot be put back stops every later press', fake.clicks.length === 1 && fake.clicks[0].text === 'Keep my discount' && a.outcome === 'error' && /put back/.test(a.reason || ''), `${a.outcome} ${a.reason} clicks=${fake.clicks.map((c) => c.text)}`);
-}
-{
-  // The same inside a re-walk: the accept_offer press in the loop is unlocked, the relock fails, the loop presses nothing more.
-  reset(); fake.pageFor = streamly(); agent = walkToOffer;
-  const it = item({ hasOffer: true, offer: OFFER, paused: null, path: [] });
-  let adds = 0;
-  const orig = browser.declarativeNetRequest.updateSessionRules;
-  browser.declarativeNetRequest.updateSessionRules = async (o) => { if ((o.addRules || []).length && adds++ > 0) throw new Error('rule engine unavailable'); return orig(o); };
-  const a = await M.acceptOne(it, settings, onEvent);
-  browser.declarativeNetRequest.updateSessionRules = orig;
-  const after = fake.clicks.slice(fake.clicks.findIndex((c) => c.text === 'Keep my discount') + 1);
-  check('fail closed: in a re-walk, nothing is pressed after the accept once the lock could not be put back', a.phase === 'rewalk' && fake.clicks.some((c) => c.text === 'Keep my discount') && after.length === 0 && /safety lock is off/.test(a.reason || ''), `${a.phase} ${a.outcome} ${a.reason} clicks=${fake.clicks.map((c) => c.text)}`);
 }
 {
   // The billing page already said "cancelled" when the scan read it: after an accept, that is not news.

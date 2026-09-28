@@ -24,7 +24,6 @@ import { discoverCandidates, type Candidate } from './discovery';
 import { openTab, waitForPage, waitForContent, runInTab, closeTab, navigateTab, sleep, classifyTabError, closeOrphanTabs, ownedPausedTab } from './tabs';
 import { findAll, closePaused, type FindResult, type HuntStep, type PausedAt } from './hunt';
 import { trace, snapSummary, maskForLog, recordPage } from './trace';
-import { unlockAllExcept } from './netlock';
 import { hostOf, blockReason } from './lists';
 import { money } from './format';
 import type { Settings } from './settings';
@@ -74,7 +73,7 @@ const LOAD_CAP_MS = 12000, CONTENT_CAP_MS = 8000, PROBE_BUDGET_MS = 45000, MAX_H
 const BAD_PAGE = ['not_found', 'error', 'loading', 'bot_challenge'];
 /** A details link is opened by URL, never clicked, and never when it reads like an action. Whole words and
  *  phrases, as the server's guard: "Subscriber Services", "Nintendo Switch Online" and "Joined plans" are links. */
-const UNSAFE_LINK_RE = /\b(cancel\w*|(log|sign)[- ]?(out|off)|delete|remove|unsubscribe|upgrade|downgrade|pause|checkout|check out|purchase|pay now|subscribe|start (a |your |my )?(free )?trial|switch (to|plan|plans)|leave|deactivate|close (my |your )?account|join (now|free|today)|buy (now|it|this|more|gift|a|an|the))\b/i;   // same words as the server's guard (brain-mock.js)
+const UNSAFE_LINK_RE = /\b(cancel\w*|end (my |your |the )?(subscription|membership|plan)|(log|sign)[- ]?(out|off)|delete|remove|unsubscribe|upgrade|downgrade|pause|checkout|check out|purchase|pay now|subscribe|start (a |your |my )?(free )?trial|switch (to|plan|plans)|leave|deactivate|close (my |your )?account|join (now|free|today)|buy (now|it|this|more|gift|a|an|the))\b/i;   // same words as the server's guard (brain-mock.js)
 /** Action segments in the path or query (/cancel, /logout, ?do=checkout); /subscriber-center is not one. */
 const UNSAFE_PATH_RE = /[/=](cancel\w*|log-?out|logoff|sign-?out|signoff|checkout|upgrade|downgrade|delete|deactivate|unsubscribe|pause)(?=$|[-/_.?#&;=])/i;
 /** Sign-in hosts many services share (the explicit hosts and third-party IdPs of accounts.js's IDP_HOST_RE). A
@@ -175,14 +174,12 @@ export async function reconcileOnLoad(result: ScanResult | null): Promise<ScanRe
     // Paused tabs the saved result still points at are kept; any other paused tab belonged to the interrupted run.
     if (v.scanRunning) { await closeOrphanTabs({ pausedToKeep: (result?.items || []).filter((i) => i.paused).map((i) => i.paused!.tabId) }); await browser.storage.local.set({ scanRunning: false }); }
   } catch { /* storage or tabs unavailable: nothing to reconcile */ }
-  if (!result) { await unlockAllExcept([]); return result; }
+  if (!result) return result;
   for (const i of result.items) {
     // Results stored by an older version lack the newer fields; fill them so the panel can render them.
     if (upgradeItem(i)) changed = true;
     if (i.paused) { let owned = false; try { owned = await ownedPausedTab(i.paused); } catch { /* gone */ } if (!owned) { i.paused = null; changed = true; } }
   }
-  // Safety locks a closed panel left behind come off, except on the tabs still held on an offer.
-  await unlockAllExcept(result.items.filter((i) => i.paused).map((i) => i.paused!.tabId));
   if (result.needsLook == null) { result.needsLook = result.items.filter((i) => NEEDS_LOOK.includes(i.status)).length; changed = true; }
   if (changed) { try { await browser.storage.local.set({ scanResult: result }); } catch { /* keep the in-memory copy */ } }
   return result;

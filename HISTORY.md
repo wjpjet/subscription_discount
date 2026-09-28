@@ -728,6 +728,51 @@ lock proven in real Chrome: a cancel POST from the held tab blocked, a GET and a
 never-touch 18), the mock suite unchanged (score 38, safety 100, achievable 49), and replay of the 60 recorded real
 pages with no unsafe decision (the recorded Claude dialog's "Cancel plan" is now refused).
 
+## Trusting the model, 2026-09-27
+
+The owner asked whether the safety lock and the context rules were worth what they cost in wins, and whether the
+model could simply judge the final screen. Two full real-model runs on the production setup (Gemini 3.8 Flash, 100
+scenarios, about 1,000 steps) answered it: the model never tried to press a final or decline button, and every one of
+the rules' 24–26 overrides per run blocked the way forward. That meant all 11 "End my plan" entries, all 11 "Turn off
+auto-renew" entries, and every "No thanks, continue cancelling" that declined a pause before the discount: 27
+scenarios unwinnable by design. The weaker 3.5 Flash-Lite did need the rules (it once tried to click on a screen it
+had itself called the final confirmation), so rules stay for wording that is never the way forward.
+
+What changed:
+- **The safety lock is gone**, and with it the declarativeNetRequest and webRequest permissions: no "Block content
+  on any page" in the install prompt. It was blind to request bodies and could have blocked a survey or offer request
+  that happened to sit under a /cancel address.
+- **The one-cancel-press rule, the go-ahead rule, the six-press cap and the confirm-link rule are gone.** Which
+  "Cancel" leads on and which confirms is the model's call: a second "Cancel membership" can be a step forward (the
+  owner's point), not only the confirmation.
+- **"End my plan", "End membership", "End subscription" are ordinary entry labels.** "End … now / immediately / today
+  / anyway", "Yes, end …", "End my benefits" and "End on <date>" stay never-press.
+- **"No thanks" / "Continue cancelling" may decline a pause, downgrade or plan switch**, on a screen with no discount
+  (not even one worded as a price: "$8.99/month for 6 months", "half the price", "on us"), no "are you sure", no end
+  date, and never after an offer was accepted. A decline is never recorded or pressed as the offer.
+- **The prompt** says pressing the entry is expected (often inside an account menu: open those before guessing
+  URLs), that a later Cancel or End button is pressed only when the screen says more steps follow and never on a
+  screen with an offer, and that a confirming screen means back_out. It may decline a pause to go on.
+- Kept: the never-silent alarm and the wording rules.
+
+Measured, on the real model: the full suite on the change (before the last prompt wording and the review fixes) had
+safety 100 (nothing cancelled, no trap), score 79 (was 75), 67 of 88 discounts won (was 64), all 23 newly winnable
+scenarios passed, and the scenarios unwinnable by design went from 27 to 12 (the 11 "Turn off auto-renew" entries, a
+one-click toggle on real sites, and "Cancel subscription now"). Its eleven misses were all a cancel link inside the
+account menu, which the September runs found: the menu button had moved down the element list with the Sep 27 page
+reader, and the new prompt line read like a reason not to press the entry. With the prompt saying the entry is
+expected, a 16-scenario check on the final prompt passed 14 (9 of the 11 menu scenarios, all 5 representative ones)
+with safety 100. Cost $2.54 and $0.77.
+
+The adversarial review of the change found three holes in the loosening, all fixed before it shipped: a discount
+worded as a price let the pause exception decline it; "Yes, end my membership" and "End my membership now" had come off
+the never-press list with the plain entries; and "I still want to cancel now" read as a plain decline. Also: a decline
+can't be the offer, pause declines stop after an accepted offer, the read-only probe never opens an "End …" link, and
+replay counts an allowed pause decline as the way forward, not a mistake.
+
+Free checks: unit tests (guardrails 276, walk harness 92, scan harness 80), the extension end to end (find 46,
+read-only 42, never-touch 18), the mock suite (score 41, safety 100).
+
 ## Bugs fixed along the way
 
 - `thinkingBudget: 0` is rejected by Gemini 3.5 Flash-Lite, which is why a whole 20-scenario run

@@ -20,13 +20,17 @@ Current state and a handoff summary: **[STATUS.md](STATUS.md)**.
       fixes for what it showed are in HISTORY.md.
 - [x] **First live run with walks, recording on** (2026-09-27). Five walked, one real offer (a trial),
       nothing accepted or cancelled; it showed a gap in the click rules. HISTORY.md, "The first live walk".
-- [x] **Safety lock, one cancel press per walk, never-silent alarm, trials section** (2026-09-27), and the
-      previous review's re-read, price-hop, recording and flows items. HISTORY.md.
+- [x] **Never-silent alarm, trials section** (2026-09-27), and the previous review's re-read, price-hop,
+      recording and flows items. The safety lock and the one-press rules that shipped with them were taken out
+      the same day: the model decides which button confirms (HISTORY.md, "Trusting the model").
 - [ ] **Second live walk** on the new build, same steps (below, "Live walk run"). Then check in review-log:
-  - SAFETY LOCK: did it engage on every walk, and did any flow stop because it blocked the offer's own
-    request (a blocked POST just before a walk that found nothing)?
+  - Every walk's final screen: did the model back out itself? (A guardrail stopping it shows as ⛔.)
   - YouTube Premium: does "Cancel" react now (pointer events before click)? If not, look at what it opens.
+  - Flows that pass a pause or "End my plan" step now: did they reach an offer?
   - Amazon's price, Netflix's price (the catalog now tries its payment history).
+- [ ] **Menu entries.** The last real check found the cancel link inside an account menu in 9 of 11 scenarios (the
+      September runs: 11 of 11). The menu button moved down the element list with the Sep 27 page reader; list header
+      and account-menu controls earlier, then check the menu scenarios again (about $0.50 on the real model).
 - [ ] **Owner decision: Google's payment pages.** `pay.google.com` and `payments.google.com` are allowed on
       purpose (Google One, and likely YouTube Premium, cancel through them), so a Google walk can read a
       payments page (card digits scrubbed). Options: keep as is; block them and give up those walks; or allow
@@ -34,12 +38,11 @@ Current state and a handoff summary: **[STATUS.md](STATUS.md)**.
 - [ ] **Trials: the fee can't be verified until the trial converts.** After accepting a trial's offer, the
       billing page still shows $0, so verification finds no lower price and nothing is charged. Decide:
       charge nothing on trials, or verify again after the first paid bill.
-- [ ] **Known flows** (the lock's big brother, with the offer database in LOGGING_TODO.md): once a service's flow
-      is recorded, walks press only the buttons seen to lead to its offer, on screens that match, and stop if
-      the site changed. For the big services, no guessing at all.
-- [ ] **Safety lock, part 2:** request bodies. A GraphQL mutation to /graphql passes the lock today. Seeing
-      bodies needs chrome.debugger (a visible "debugging this browser" bar) or a page-level fetch hook; the
-      test-mode log (netlock.request, with GraphQL operation names) shows first whether real flows need it.
+- [ ] **Known flows** (with the offer database in LOGGING_TODO.md): once a service's flow is recorded, walks
+      press only the buttons seen to lead to its offer, on screens that match, and stop if the site changed.
+      For the big services, no guessing at all.
+- [ ] **If real walks ever show the model slipping** on a final screen: a second, independent AI check on the
+      risky presses (after the cancellation started, anything that isn't accepting an offer), not new rules.
 - [ ] **Build the realistic edge cases from those flows.** Replay them free with
       `npm run flows -- flows/<run> --replay`, and mimic the interesting ones on Streamly.
 - [ ] **Retire the Netlify function site** once the Worker has been used for a while. Keep Streamly
@@ -110,8 +113,6 @@ The scan itself is fine. What is long is everything around it.
 - [ ] Short demo video for the reviewer, recorded against Streamly.
 - [ ] Switch Stripe to live keys, which requires the account activated and the Terms and Privacy
       pages published.
-- [ ] The install prompt now also says "Block content on any page" (declarativeNetRequest, the safety lock).
-      The justification is in `store/LISTING.md`; say it on the landing page too, in plain words.
 
 ## Closed: the timeout question
 
@@ -168,14 +169,12 @@ The two read-only runs are done. This one walks each confirmed paid plan up to i
 6. `npm run review-log -- <log>` and `npm run flows -- <log>` (or send Claude the path), then replay the
    flows free with `npm run flows -- flows/<run> --replay`.
 
-What guards a walk: the click rules (never a final, decline, pause, downgrade or purchase button; one cancel
-press per walk, so no second "Cancel …" and no retry; no "Continue"/"Yes"/"Confirm" on a final confirmation
-that says when access ends; back out six presses in without an offer), the safety lock on the tab (Chrome
-refuses any changing request whose address names a cancellation; no lock, no walk), and the alarm if a page
-ever says it was cancelled. What's left: a final button with a generic label on a confirmation that doesn't
-say when access ends, whose request doesn't name the cancellation (a GraphQL call). There it relies on the
-model. Keep any service you can't risk in **Never explore**. Banks, government, health, insurance and payroll
-sites are always skipped.
+What guards a walk: the model reads each screen and backs out on the final one (it has no "finalize" action);
+fixed rules refuse only wording that is never the way forward ("Confirm cancellation", "Cancel anyway",
+"Cancel on <date>", declining a discount, pause, downgrade, purchase, a cancel button on an "Are you sure?"
+page); and if a page ever says it was cancelled after a press, the walk stops and the panel says so in red.
+Keep any service you can't risk in **Never explore**. Banks, government, health, insurance and payroll sites are
+always skipped.
 
 ## Testing by hand
 
