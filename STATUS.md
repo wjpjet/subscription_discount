@@ -14,8 +14,8 @@ minimum; under 50¢ is waived). It can never finalize a cancellation.
 
 | Piece | Where | State |
 |---|---|---|
-| Backend + landing page | One Cloudflare Worker, https://walkaway.willem-jeffrey-prins.workers.dev (Workers Paid plan) | Deployed from main with `5331254` (trust the model), 2026-09-27, version `681a8cf5`. Matches main |
-| Extension | `landing/downloads/walkaway-extension.zip`, served by the Worker; load unpacked from `extension/.output/chrome-mv3` | Built from `5331254`. Permissions back to cookies, scripting, sidePanel, storage (no new install warning) |
+| Backend + landing page | One Cloudflare Worker, https://walkaway.willem-jeffrey-prins.workers.dev (Workers Paid plan) | Deployed from main with `1354ee9` (second-walk fixes), 2026-09-28, version `686a416f`. Matches main |
+| Extension | `landing/downloads/walkaway-extension.zip`, served by the Worker; load unpacked from `extension/.output/chrome-mv3` | Built from `1354ee9`. Permissions: cookies, scripting, sidePanel, storage |
 | Test site "Streamly" | https://streamly-testbed.netlify.app (Netlify, rebuilds on every push to main) | Current |
 | Payments | Stripe **test mode** (setup mode: card saved, charged after the run) | Test keys only |
 | Model | Gemini 3.8 Flash for walk steps, 3.1 Flash-Lite for classify/discover; `AI_PROVIDER=gemini` pinned in `wrangler.jsonc` | GLM-5.3 and DeepSeek V4.1 were tested and rejected (HISTORY.md) |
@@ -43,6 +43,9 @@ Then reload the extension at `chrome://extensions`.
     review of the fix.
   - Run 2 (`walkaway-test-log-2026-09-27T16-29-55.json`): 5 real paid plans found, nothing false under Paying, no
     secrets in the log. Remaining issues fixed in the unshipped commit.
+- **Second live walk done** (`walkaway-test-log-2026-09-28T04-22-29.json`): on the model-first build the model backed
+  out by itself on every final screen; nothing accepted or cancelled. Its fixes shipped. A run like it costs about
+  14¢ of Gemini (HISTORY.md, "The second live walk"). Open: YouTube's Cancel (TODO.md).
 - **First live walk done** (`walkaway-test-log-2026-09-27T20-53-52.json`, flows in `flows/2026-09-27T20-53-52/`):
   five services walked, LinkedIn's trial made a real offer, nothing accepted or cancelled. It showed that no fixed
   rule would have refused Claude's "Cancel plan" confirmation (only the model did), which led to the safety
